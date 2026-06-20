@@ -301,13 +301,17 @@ async def proxy_ts(request: Request, url: str, sid: str = "default"):
     
     # 1. Kiểm tra cache trên đĩa
     if os.path.exists(cache_path):
-        return FileResponse(cache_path, media_type="video/MP2T", headers={"X-Cache": "HIT"})
+        size = os.path.getsize(cache_path)
+        media_type = "application/octet-stream" if size == 16 else "video/MP2T"
+        return FileResponse(cache_path, media_type=media_type, headers={"X-Cache": "HIT"})
     
     # 2. Cơ chế Single Flight: Kiểm tra xem có ai đang tải đoạn này chưa
     if lock_id in download_locks:
         await download_locks[lock_id].wait()
         if os.path.exists(cache_path):
-            return FileResponse(cache_path, media_type="video/MP2T", headers={"X-Cache": "HIT-QUEUED"})
+            size = os.path.getsize(cache_path)
+            media_type = "application/octet-stream" if size == 16 else "video/MP2T"
+            return FileResponse(cache_path, media_type=media_type, headers={"X-Cache": "HIT-QUEUED"})
 
     # 3. Tạo Lock và tải xuống
     event = asyncio.Event()
@@ -318,9 +322,10 @@ async def proxy_ts(request: Request, url: str, sid: str = "default"):
         if lock_id in download_locks:
             del download_locks[lock_id]
 
+    media_type = "application/octet-stream" if len(data) == 16 else "video/MP2T"
     return Response(
         content=data,
-        media_type="video/MP2T",
+        media_type=media_type,
         headers={
             "X-Cache": "MISS",
             "Content-Length": str(len(data))
