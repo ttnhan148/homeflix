@@ -16,6 +16,23 @@ echo "      CẬP NHẬT HOMEFLIX PROXY PLAYER   "
 echo "======================================="
 
 
+# 1. Kiểm tra và cài đặt ffmpeg nếu thiếu
+echo "Đang kiểm tra và cập nhật dependencies..."
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "Không tìm thấy ffmpeg. Đang tự động cài đặt..."
+    if command -v apt-get >/dev/null; then
+        apt-get update && apt-get install -y ffmpeg
+    elif command -v dnf >/dev/null; then
+        dnf install -y ffmpeg
+    elif command -v yum >/dev/null; then
+        yum install -y ffmpeg
+    elif command -v pacman >/dev/null; then
+        pacman -Sy --noconfirm ffmpeg
+    else
+        echo "Không thể tự động cài đặt ffmpeg. Vui lòng cài đặt thủ công."
+    fi
+fi
+
 # 2. Dừng và gỡ bỏ service m3u8player cũ nếu đang chạy
 if systemctl is-active --quiet "$OLD_SERVICE_NAME"; then
     echo "Đang dừng dịch vụ $OLD_SERVICE_NAME cũ..."
@@ -36,6 +53,7 @@ if [ ! -d "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
     mkdir -p "$INSTALL_DIR/templates"
     mkdir -p "$INSTALL_DIR/cache"
+    mkdir -p "$INSTALL_DIR/downloads"
 fi
 
 # 4. Tạo môi trường ảo venv nếu chưa có (khi nâng cấp từ phiên bản cũ không đầy đủ)
@@ -47,6 +65,7 @@ fi
 # 5. Sao chép các tệp mới đè lên thư mục cài đặt
 echo "[1/4] Đang cập nhật mã nguồn mới..."
 cp app.py "$INSTALL_DIR/"
+cp migrate_json_to_sqlite.py "$INSTALL_DIR/"
 cp -r templates/index.html "$INSTALL_DIR/templates/"
 cp -r static "$INSTALL_DIR/"
 cp requirements.txt "$INSTALL_DIR/"
@@ -77,12 +96,19 @@ echo "[2/4] Thiết lập lại phân quyền..."
 chown -R root:root "$INSTALL_DIR"
 chmod -R 755 "$INSTALL_DIR"
 chmod -R 777 "$INSTALL_DIR/cache"
+chmod -R 777 "$INSTALL_DIR/downloads" 2>/dev/null || true
 
 # 4. Cập nhật các dependencies từ requirements.txt mới
 echo "[3/4] Cập nhật thư viện Python (pip)..."
 if [ -f "$INSTALL_DIR/venv/bin/pip" ]; then
     "$INSTALL_DIR/venv/bin/pip" install --upgrade pip
     "$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
+    
+    # Chạy script di chuyển dữ liệu nếu còn file saved_movies.json cũ
+    if [ -f "$INSTALL_DIR/saved_movies.json" ]; then
+        echo "Phát hiện tệp saved_movies.json cũ. Tiến hành chuyển đổi sang SQLite..."
+        "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/migrate_json_to_sqlite.py"
+    fi
 else
     echo "Cảnh báo: Không tìm thấy môi trường ảo venv tại $INSTALL_DIR/venv. Bỏ qua bước pip install."
 fi
