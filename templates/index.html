@@ -1271,6 +1271,7 @@
         // --- EXIT PLAYER (QUAY LẠI TRANG CHỦ) ---
         function exitPlayer() {
             video.pause();
+            video.onerror = null; // Gỡ bắt lỗi tạm thời để tránh thông báo lỗi giả khi reset nguồn phát
             if (hlsObj) {
                 hlsObj.destroy();
                 hlsObj = null;

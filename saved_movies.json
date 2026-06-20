@@ -6,8 +6,8 @@
         "year": "2026",
         "episode_current": "Hoàn Tất (10/10)",
         "total_episodes": 20,
-        "last_watched_episode": "Tập 02",
-        "last_watched_url": "https://v7.kkphimplayer7.com/20260605/w5MC5FiW/index.m3u8",
+        "last_watched_episode": "Tập 03",
+        "last_watched_url": "https://v7.kkphimplayer7.com/20260605/ZWTl9ApV/index.m3u8",
         "episodes": [
             {
                 "name": "Tập 01",
@@ -51,8 +51,9 @@
             }
         ],
         "episode_states": {
-            "https://v7.kkphimplayer7.com/20260605/w5MC5FiW/index.m3u8": "watching",
-            "https://v7.kkphimplayer7.com/20260605/ZWTl9ApV/index.m3u8": "watched"
+            "https://v7.kkphimplayer7.com/20260605/w5MC5FiW/index.m3u8": "watched",
+            "https://v7.kkphimplayer7.com/20260605/ZWTl9ApV/index.m3u8": "watching",
+            "https://v7.kkphimplayer7.com/20260605/mMUnxegG/index.m3u8": "watched"
         }
     }
 }
