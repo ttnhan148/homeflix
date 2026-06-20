@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HomeFlix</title>
-    <!-- Thêm phông chữ hiện đại của Google (Outfit - tương tự Netflix Sans) -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Thêm phông chữ tiếng Việt hiện đại Be Vietnam Pro -->
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <!-- PWA / IOS Add to Homescreen -->
     <link rel="manifest" href="/static/manifest.json">
@@ -40,7 +40,7 @@
         }
 
         body, input, button, textarea, select {
-            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
         body {
@@ -838,6 +838,33 @@
             height: 120px;
             align-self: flex-start;
         }
+
+        /* Recommendations Section UI Styling */
+        .reco-theme-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-main);
+            border-left: 4px solid var(--accent-color);
+            padding-left: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .device-tv .reco-theme-title {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .reco-scroll-grid {
+            display: flex;
+            overflow-x: auto;
+            gap: 1rem;
+            padding-bottom: 0.5rem;
+            scrollbar-width: thin;
+            -webkit-overflow-scrolling: touch;
+            align-items: stretch;
+        }
     </style>
 </head>
 
@@ -894,18 +921,12 @@
                     </div>
                 </div>
                 <textarea id="m3u8InputRaw" placeholder="Nhấp vào đây để dán link M3U8..." style="height: 40px; transition: var(--transition);"></textarea>
-                <div id="manualInputFooter" style="display: none; animation: netflixFadeIn 0.3s ease-out; margin-top: 0.5rem; gap: 0.5rem;">
-                    <button class="btn-main" id="btnMainPlay" style="flex: 1;">
+                <div id="manualInputFooter" style="display: none; animation: netflixFadeIn 0.3s ease-out; margin-top: 0.5rem;">
+                    <button class="btn-main" id="btnMainPlay" style="width: 100%;">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M8 5v14l11-7z" />
                         </svg>
                         PHÁT LINK
-                    </button>
-                    <button class="btn-sec" id="btnMainStream" style="flex: 1;" onclick="streamManualLink()">
-                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style="margin-right: 0.35rem;">
-                            <path d="M5 4v16h5v-6h4v6h5V4H5zm12 7H7V6h10v5z"/>
-                        </svg>
-                        STREAM HLS
                     </button>
                 </div>
             </div>
@@ -919,6 +940,9 @@
                     <button class="btn-main" onclick="searchMovies()">TÌM KIẾM</button>
                 </div>
                 
+                <!-- Recommendations Section -->
+                <div id="recommendationsContainer" style="display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem;"></div>
+
                 <!-- Search Results -->
                 <div id="searchResults" class="movies-grid"></div>
 
@@ -1045,7 +1069,16 @@
             document.getElementById(tabId).classList.add('active');
             
             if (tabId === 'player-tab') document.getElementById('tabBtnPlayer').classList.add('active');
-            if (tabId === 'search-tab') document.getElementById('tabBtnSearch').classList.add('active');
+            if (tabId === 'search-tab') {
+                document.getElementById('tabBtnSearch').classList.add('active');
+                const q = document.getElementById('searchInput').value.trim();
+                if (!q) {
+                    const recoDiv = document.getElementById('recommendationsContainer');
+                    if (recoDiv) recoDiv.style.display = 'flex';
+                    document.getElementById('searchResults').style.display = 'none';
+                    document.getElementById('movieDetailContainer').style.display = 'none';
+                }
+            }
             if (tabId === 'saved-tab') {
                 document.getElementById('tabBtnSaved').classList.add('active');
                 renderSavedMovies();
@@ -1070,17 +1103,6 @@
             inputFooter.style.display = 'none';
         }
 
-        function streamManualLink() {
-            const text = inputArea.value.trim();
-            const regex = /(https?:\/\/[^\s|]+\.m3u8[^\s|]*)/i;
-            const match = text.match(regex);
-            if (match) {
-                const url = match[0];
-                window.open(`https://www.hlsplayer.org/play?url=${encodeURIComponent(url)}`, '_blank');
-            } else {
-                alert("Vui lòng dán link M3U8 hợp lệ trước.");
-            }
-        }
 
         inputArea.addEventListener('focus', expandManualInput);
         inputArea.addEventListener('click', expandManualInput);
@@ -1188,7 +1210,7 @@
             setTimeout(initTabbing, 100);
         }
 
-        function play(url, title, idx) {
+        async function play(url, title, idx) {
             currentPlaybackIndex = idx;
             const btns = gridEp.querySelectorAll('.ep-btn');
             btns.forEach((b, i) => b.classList.toggle('active', i === idx));
@@ -1202,9 +1224,6 @@
                     btnNext.style.display = 'none';
                 }
             }
-
-            const proxy = `/proxy/m3u8?url=${encodeURIComponent(url)}`;
-            status.textContent = `ĐANG PHÁT: ${title.toUpperCase()}`;
 
             // Gửi báo cáo tiến trình xem phim về Server (nếu phim đã được lưu)
             if (currentMovie && currentMovie.slug) {
@@ -1239,6 +1258,22 @@
 
             if (hlsObj) { hlsObj.destroy(); hlsObj = null; }
 
+            // Kiểm tra xem tập phim này đã được tải về đĩa MP4 chưa
+            let useMp4 = false;
+            let mp4Url = "";
+            if (currentMovie && currentMovie.slug) {
+                try {
+                    const statusRes = await fetch(`/api/download/status/${currentMovie.slug}/${encodeURIComponent(title)}`);
+                    const statusData = await statusRes.json();
+                    if (statusData.status === "completed") {
+                        useMp4 = true;
+                        mp4Url = `/media/${currentMovie.slug}/${encodeURIComponent(title)}.mp4`;
+                    }
+                } catch (e) {
+                    console.error("Lỗi kiểm tra trạng thái tải MP4:", e);
+                }
+            }
+
             video.onerror = () => {
                 const errorMap = {
                     1: "Người dùng đã hủy tải video.",
@@ -1251,40 +1286,49 @@
                 status.innerHTML = `<span style="color:#ff453a">LỖI: ${msg.toUpperCase()}</span>`;
             };
 
-            if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = proxy;
+            if (useMp4) {
+                status.textContent = `ĐANG PHÁT MP4 TRỰC TIẾP: ${title.toUpperCase()}`;
+                video.src = mp4Url;
                 video.play().catch(() => {});
-            } else if (Hls.isSupported()) {
-                const isTVMode = document.body.classList.contains('device-tv');
-                hlsObj = new Hls({
-                    maxBufferLength: isTVMode ? 20 : 30,
-                    maxMaxBufferLength: isTVMode ? 120 : 600,
-                    manifestLoadingMaxRetry: 5,
-                    lowLatencyMode: !isTVMode
-                });
-                hlsObj.loadSource(proxy);
-                hlsObj.attachMedia(video);
-                hlsObj.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
-                
-                hlsObj.on(Hls.Events.ERROR, (event, data) => {
-                    if (data.fatal) {
-                        let errorMsg = "";
-                        switch (data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                errorMsg = "Lỗi kết nối mạng (Network Error)";
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                errorMsg = "Lỗi định dạng phim (Media Error)";
-                                break;
-                            default:
-                                errorMsg = "Lỗi hệ thống khởi tạo (System Error)";
-                                break;
+            } else {
+                const proxy = `/proxy/m3u8?url=${encodeURIComponent(url)}`;
+                status.textContent = `ĐANG PHÁT HLS-PROXY: ${title.toUpperCase()}`;
+
+                if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = proxy;
+                    video.play().catch(() => {});
+                } else if (Hls.isSupported()) {
+                    const isTVMode = document.body.classList.contains('device-tv');
+                    hlsObj = new Hls({
+                        maxBufferLength: isTVMode ? 20 : 30,
+                        maxMaxBufferLength: isTVMode ? 120 : 600,
+                        manifestLoadingMaxRetry: 5,
+                        lowLatencyMode: !isTVMode
+                    });
+                    hlsObj.loadSource(proxy);
+                    hlsObj.attachMedia(video);
+                    hlsObj.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+                    
+                    hlsObj.on(Hls.Events.ERROR, (event, data) => {
+                        if (data.fatal) {
+                            let errorMsg = "";
+                            switch (data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    errorMsg = "Lỗi kết nối mạng (Network Error)";
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    errorMsg = "Lỗi định dạng phim (Media Error)";
+                                    break;
+                                default:
+                                    errorMsg = "Lỗi hệ thống khởi tạo (System Error)";
+                                    break;
+                            }
+                            alert(`[HLS Error]: ${errorMsg}\nChi tiết: ${data.details}\nTên tập: ${title}`);
+                            status.innerHTML = `<span style="color:#ff453a">LỖI: ${errorMsg.toUpperCase()}</span>`;
+                            hlsObj.destroy();
                         }
-                        alert(`[HLS Error]: ${errorMsg}\nChi tiết: ${data.details}\nTên tập: ${title}`);
-                        status.innerHTML = `<span style="color:#ff453a">LỖI: ${errorMsg.toUpperCase()}</span>`;
-                        hlsObj.destroy();
-                    }
-                });
+                    });
+                }
             }
         }
 
@@ -1318,7 +1362,9 @@
             
             const resultsDiv = document.getElementById('searchResults');
             const detailDiv = document.getElementById('movieDetailContainer');
+            const recoDiv = document.getElementById('recommendationsContainer');
             
+            if (recoDiv) recoDiv.style.display = 'none';
             resultsDiv.style.display = 'grid';
             resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim);">Đang tìm kiếm...</div>';
             detailDiv.style.display = 'none';
@@ -1379,7 +1425,7 @@
                     currentDetailEpisodes = episodesList;
                     
                     const isSaved = checkIsSaved(m.slug);
-                    const saveBtnText = isSaved ? "Xóa khỏi tủ phim" : "Lưu vào tủ phim";
+                    const saveBtnText = isSaved ? "Hủy lưu" : "Lưu phim";
                     const saveBtnClass = isSaved ? "btn-sec btn-delete-movie" : "btn-sec btn-save-movie";
                     
                     const safeName = m.name.replace(/`/g, '\\`').replace(/\$/g, '\\$');
@@ -1407,12 +1453,6 @@
                                             <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                                             PHÁT NGAY
                                         </button>
-                                        <button class="btn-sec" onclick="streamSelectedMovieDirect(\`${safeName}\`, \`${m.slug}\`)" style="border-color: var(--accent-color); color: var(--accent-color);">
-                                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style="margin-right: 0.2rem;">
-                                                <path d="M5 4v16h5v-6h4v6h5V4H5zm12 7H7V6h10v5z"/>
-                                            </svg>
-                                            STREAM
-                                        </button>
                                         <button id="btnSaveDetail" class="${saveBtnClass}" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesList.length})">
                                             <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
                                             <span id="saveBtnText">${saveBtnText}</span>
@@ -1433,7 +1473,14 @@
 
         function backToSearchResults() {
             document.getElementById('movieDetailContainer').style.display = 'none';
-            document.getElementById('searchResults').style.display = 'grid';
+            const q = document.getElementById('searchInput').value.trim();
+            if (q) {
+                document.getElementById('searchResults').style.display = 'grid';
+            } else {
+                const recoDiv = document.getElementById('recommendationsContainer');
+                if (recoDiv) recoDiv.style.display = 'flex';
+                document.getElementById('searchResults').style.display = 'none';
+            }
             setTimeout(initTabbing, 100);
         }
 
@@ -1444,18 +1491,6 @@
             playEpisodesListDirect(currentDetailEpisodes, targetUrl);
         }
 
-        function streamSelectedMovieDirect(name, slug) {
-            const savedMovie = savedMoviesList.find(item => item.slug === slug);
-            let targetUrl = savedMovie ? savedMovie.last_watched_url : null;
-            if (!targetUrl && currentDetailEpisodes && currentDetailEpisodes.length > 0) {
-                targetUrl = currentDetailEpisodes[0].link_m3u8;
-            }
-            if (targetUrl) {
-                window.open(`https://www.hlsplayer.org/play?url=${encodeURIComponent(targetUrl)}`, '_blank');
-            } else {
-                alert("Không tìm thấy link tập phim để stream.");
-            }
-        }
 
         // --- SERVER SAVED MOVIES FUNCTIONS ---
         async function fetchSavedMovies() {
@@ -1484,7 +1519,7 @@
                         savedMoviesList = savedMoviesList.filter(item => item.slug !== slug);
                         if (btn) {
                             btn.className = "btn-sec btn-save-movie";
-                            txt.textContent = "Lưu vào tủ phim";
+                            txt.textContent = "Lưu phim";
                         }
                     }
                 } catch(e) { alert("Không thể xóa phim: " + e.message); }
@@ -1508,7 +1543,7 @@
                         savedMoviesList.push(data.movie);
                         if (btn) {
                             btn.className = "btn-sec btn-delete-movie";
-                            txt.textContent = "Xóa khỏi tủ phim";
+                            txt.textContent = "Hủy lưu";
                         }
                     }
                 } catch(e) { alert("Không thể lưu phim: " + e.message); }
@@ -1600,9 +1635,14 @@
                             ${epsHtml}
                         </div>
                         <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                            <button class="btn-main" style="padding: 0.5rem 1rem; font-size: 0.9rem;" onclick="event.stopPropagation(); playResumeSavedMovie(\`${m.slug}\`)">XEM TIẾP</button>
-                            <button class="btn-sec" style="padding: 0.5rem 1rem; font-size: 0.9rem; margin: 0; border-color: var(--accent-color); color: var(--accent-color);" onclick="event.stopPropagation(); streamResumeSavedMovie(\`${m.slug}\`)">STREAM</button>
-                            <button class="btn-sec" style="padding: 0.5rem 1rem; font-size: 0.9rem; margin: 0; border-color: #555;" onclick="event.stopPropagation(); deleteSavedMovie(\`${m.slug}\`)">XÓA</button>
+                            <button class="btn-main" style="padding: 0.5rem 1.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.25rem;" onclick="event.stopPropagation(); playResumeSavedMovie(\`${m.slug}\`)">
+                                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                                Xem tiếp
+                            </button>
+                            <button class="btn-sec" style="padding: 0.5rem 1.25rem; font-size: 0.85rem; margin: 0; border-color: #555; display: flex; align-items: center; gap: 0.25rem;" onclick="event.stopPropagation(); deleteSavedMovie(\`${m.slug}\`)">
+                                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                Xóa phim
+                            </button>
                         </div>
                     </div>
                 `;
@@ -1645,26 +1685,6 @@
             playEpisodesListDirect(savedMovie.episodes, targetUrl);
         }
 
-        async function streamResumeSavedMovie(slug) {
-            const savedMovie = savedMoviesList.find(item => item.slug === slug);
-            if (!savedMovie) return;
-            
-            if (!savedMovie.episodes || savedMovie.episodes.length === 0) {
-                await syncEpisodesForMovie(slug);
-                streamResumeSavedMovie(slug);
-                return;
-            }
-            
-            let targetUrl = savedMovie.last_watched_url;
-            
-            if (!targetUrl && savedMovie.episodes.length > 0) {
-                targetUrl = savedMovie.episodes[0].link_m3u8;
-            }
-            
-            if (!targetUrl) return alert("Không tìm thấy tập phim nào.");
-            
-            window.open(`https://www.hlsplayer.org/play?url=${encodeURIComponent(targetUrl)}`, '_blank');
-        }
 
         async function loadAndPlayMovie(slug) {
             try {
@@ -1698,8 +1718,71 @@
             }
         };
 
+        async function loadRecommendations() {
+            const container = document.getElementById('recommendationsContainer');
+            if (!container) return;
+            container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Đang tải đề xuất hôm nay...</div>';
+            try {
+                const res = await fetch('/api/recommendations');
+                const data = await res.json();
+                container.innerHTML = '';
+                
+                const themes = Object.keys(data);
+                if (themes.length === 0) {
+                    container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Không có đề xuất cho hôm nay.</div>';
+                    return;
+                }
+                
+                themes.forEach(themeName => {
+                    const section = document.createElement('div');
+                    section.style.display = 'flex';
+                    section.style.flexDirection = 'column';
+                    section.style.gap = '0.5rem';
+                    
+                    const title = document.createElement('div');
+                    title.className = 'reco-theme-title';
+                    title.textContent = `Đề xuất: ${themeName}`;
+                    section.appendChild(title);
+                    
+                    const grid = document.createElement('div');
+                    grid.className = 'reco-scroll-grid';
+                    
+                    data[themeName].forEach(movie => {
+                        const card = document.createElement('div');
+                        card.className = 'movie-card';
+                        card.style.flex = '0 0 150px';
+                        if (!document.body.classList.contains('device-mobile')) {
+                            card.setAttribute('tabindex', '0');
+                        }
+                        
+                        card.innerHTML = `
+                            <img class="movie-poster" src="${movie.poster_url}" alt="${movie.name}" style="height: 220px; object-fit: cover;">
+                            <div class="movie-info">
+                                <div class="movie-title" style="font-size: 0.8rem; height: 2.2rem;">${movie.name}</div>
+                                <div class="movie-meta">
+                                    <span>Năm: ${movie.year}</span>
+                                </div>
+                            </div>
+                        `;
+                        card.onclick = () => {
+                            container.style.display = 'none';
+                            showMovieDetail(movie.slug);
+                        };
+                        grid.appendChild(card);
+                    });
+                    
+                    section.appendChild(grid);
+                    container.appendChild(section);
+                });
+                setTimeout(initTabbing, 100);
+            } catch (err) {
+                container.innerHTML = `<div style="text-align: center; color: var(--accent-color);">Lỗi tải đề xuất: ${err.message}</div>`;
+            }
+        }
+
         detectDevice();
         fetchSavedMovies();
+        loadRecommendations();
         window.addEventListener('DOMContentLoaded', () => {
             initTabbing();
         });

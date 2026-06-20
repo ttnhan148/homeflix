@@ -9,7 +9,11 @@ env/
 
 # App Specific
 cache/
-*.tmp
+downloads/
+*.db
+*.json.bak
+downloads.json
+saved_movies.json
 
 # OS
 .DS_Store

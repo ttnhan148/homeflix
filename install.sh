@@ -21,16 +21,16 @@ echo "[1/6] Đang kiểm tra hệ điều hành và cài đặt dependencies..."
 if command -v apt-get >/dev/null; then
     PKG_MANAGER="apt-get"
     $PKG_MANAGER update
-    $PKG_MANAGER install -y python3 python3-pip python3-venv curl
+    $PKG_MANAGER install -y python3 python3-pip python3-venv curl ffmpeg
 elif command -v dnf >/dev/null; then
     PKG_MANAGER="dnf"
-    $PKG_MANAGER install -y python3 python3-pip curl
+    $PKG_MANAGER install -y python3 python3-pip curl ffmpeg
 elif command -v yum >/dev/null; then
     PKG_MANAGER="yum"
-    $PKG_MANAGER install -y python3 python3-pip curl
+    $PKG_MANAGER install -y python3 python3-pip curl ffmpeg
 elif command -v pacman >/dev/null; then
     PKG_MANAGER="pacman"
-    $PKG_MANAGER -Sy --noconfirm python python-pip curl
+    $PKG_MANAGER -Sy --noconfirm python python-pip curl ffmpeg
 else
     echo "Không tìm thấy trình quản lý gói hỗ trợ (apt, dnf, yum, pacman). Vui lòng cài đặt Python 3 thủ công."
     exit 1
