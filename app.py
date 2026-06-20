@@ -419,6 +419,8 @@ async def refresh_recommendations():
                         m_slug = item.get("slug")
                         m_name = item.get("name")
                         poster_url = item.get("poster_url")
+                        if poster_url and not poster_url.startswith("http"):
+                            poster_url = f"https://phimimg.com/{poster_url.lstrip('/')}"
                         year = item.get("year", 0)
                         try:
                             year = int(year)
@@ -824,7 +826,7 @@ async def get_movie_detail(slug: str):
             "name": movie_raw.get("name"),
             "slug": movie_raw.get("slug"),
             "origin_name": movie_raw.get("origin_name"),
-            "poster_url": movie_raw.get("poster_url"),
+            "poster_url": movie_raw.get("poster_url") if movie_raw.get("poster_url", "").startswith("http") else f"https://phimimg.com/{movie_raw.get('poster_url', '').lstrip('/')}",
             "year": str(movie_raw.get("year")),
             "episode_current": movie_raw.get("episode_current"),
             "time": movie_raw.get("time"),
