@@ -296,6 +296,7 @@ async def download_worker():
                 "-user_agent", ua_str,
                 "-i", ep_url,
                 "-c", "copy",
+                "-f", "mp4",
                 part_path
             ]
             
@@ -328,6 +329,7 @@ async def download_worker():
                     "-i", ep_url,
                     "-c:v", "copy",
                     "-c:a", "aac",
+                    "-f", "mp4",
                     part_path
                 ]
                 try:
