@@ -289,14 +289,13 @@ async def download_worker():
             part_path = output_path + ".part"
             
             logger.info(f"[Download Worker] Bắt đầu tải {key} -> {output_path}")
-            headers_str = "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ua_str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             
             cmd = [
                 "ffmpeg", "-y",
-                "-headers", f"{headers_str}\r\n",
+                "-user_agent", ua_str,
                 "-i", ep_url,
                 "-c", "copy",
-                "-bsf:a", "aac_adtstoasc",
                 part_path
             ]
             
@@ -325,7 +324,7 @@ async def download_worker():
                 logger.warning(f"[Download Worker] Thất bại -c copy, đang thử lại bằng re-encoding audio...")
                 cmd_retry = [
                     "ffmpeg", "-y",
-                    "-headers", f"{headers_str}\r\n",
+                    "-user_agent", ua_str,
                     "-i", ep_url,
                     "-c:v", "copy",
                     "-c:a", "aac",
