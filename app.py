@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
+import json
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ async def prune_cache():
             
         await asyncio.sleep(3600)  # Chạy mỗi giờ một lần
 
-app = FastAPI(title="M3U8 Proxy Player")
+app = FastAPI(title="HomeFlix Proxy Player")
 
 # Phục vụ các file tĩnh (manifest, icons)
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
@@ -293,6 +294,110 @@ async def clear_cache_endpoint():
         return {"status": "success", "message": "Đã dọn sạch cache."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/search")
+async def search_movies(q: str):
+    """Proxy tìm kiếm phim từ PhimAPI"""
+    try:
+        url = f"https://phimapi.com/v1/api/tim-kiem?keyword={urllib.parse.quote(q)}&limit=30"
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Error searching movies: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/movie/{slug}")
+async def get_movie_detail(slug: str):
+    """Proxy lấy thông tin chi tiết phim từ PhimAPI"""
+    try:
+        url = f"https://phimapi.com/phim/{slug}"
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Error getting movie detail '{slug}': {e}")
+        return {"status": "error", "message": str(e)}
+
+SAVED_MOVIES_FILE = os.path.join(BASE_DIR, "saved_movies.json")
+
+def _load_saved_movies():
+    if not os.path.exists(SAVED_MOVIES_FILE):
+        return {}
+    try:
+        with open(SAVED_MOVIES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_saved_movies(data):
+    try:
+        with open(SAVED_MOVIES_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"Error saving movies json: {e}")
+
+@app.get("/api/saved")
+async def get_saved_movies_api():
+    data = await asyncio.to_thread(_load_saved_movies)
+    return list(data.values())
+
+@app.post("/api/saved")
+async def save_movie_api(movie: dict):
+    slug = movie.get("slug")
+    if not slug:
+        return {"status": "error", "message": "Missing slug"}
+    
+    data = await asyncio.to_thread(_load_saved_movies)
+    if slug in data:
+        data[slug].update(movie)
+    else:
+        data[slug] = movie
+        if "last_watched_episode" not in data[slug]:
+            data[slug]["last_watched_episode"] = ""
+        if "last_watched_url" not in data[slug]:
+            data[slug]["last_watched_url"] = ""
+            
+    await asyncio.to_thread(_save_saved_movies, data)
+    return {"status": "success", "movie": data[slug]}
+
+@app.post("/api/saved/progress")
+async def save_movie_progress_api(progress: dict):
+    slug = progress.get("slug")
+    last_ep = progress.get("last_watched_episode")
+    last_url = progress.get("last_watched_url")
+    if not slug:
+        return {"status": "error", "message": "Missing slug"}
+        
+    data = await asyncio.to_thread(_load_saved_movies)
+    if slug in data:
+        data[slug]["last_watched_episode"] = last_ep
+        data[slug]["last_watched_url"] = last_url
+        
+        # Khởi tạo episode_states nếu chưa có
+        if "episode_states" not in data[slug]:
+            data[slug]["episode_states"] = {}
+            
+        # Đổi trạng thái từ "watching" thành "watched" cho các tập trước đó
+        for ep_url, state in list(data[slug]["episode_states"].items()):
+            if state == "watching":
+                data[slug]["episode_states"][ep_url] = "watched"
+                
+        # Lưu tập hiện tại ở trạng thái "watching"
+        data[slug]["episode_states"][last_url] = "watching"
+        
+        await asyncio.to_thread(_save_saved_movies, data)
+        return {"status": "success", "movie": data[slug]}
+    return {"status": "error", "message": "Movie not in saved list"}
+
+@app.delete("/api/saved/{slug}")
+async def delete_saved_movie_api(slug: str):
+    data = await asyncio.to_thread(_load_saved_movies)
+    if slug in data:
+        del data[slug]
+        await asyncio.to_thread(_save_saved_movies, data)
+        return {"status": "success"}
+    return {"status": "error", "message": "Movie not found"}
 
 @app.on_event("shutdown")
 async def shutdown_event():

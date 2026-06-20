@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ M3U8 Turbo Proxy Player</title>
+    <title>HomeFlix</title>
     <!-- Thêm phông chữ hiện đại của Google -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="M3U8 PLAYER">
-    <link rel="apple-touch-icon" href="/static/logo.png">
+    <link class="favicon" rel="apple-touch-icon" href="/static/logo.png">
     <meta name="theme-color" content="#000000">
 
     <!-- HLS.js cho thiết bị không Apple -->
@@ -28,7 +28,8 @@
             --text-main: #ffffff;
             --text-dim: #b3b3b3;
             --glass-border: rgba(255, 255, 255, 0.1);
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --focus-ring: #FFD700; /* Màu vàng nổi bật cho điều khiển remote (D-pad) */
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         * {
@@ -39,7 +40,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-main);
             min-height: 100vh;
@@ -48,34 +49,27 @@
             align-items: center;
         }
 
+        /* --- 1. DEFAULT DESKTOP LAYOUT --- */
         .container {
             width: 100%;
-            max-width: 1100px;
-            padding: 4rem 1.5rem;
+            max-width: 1000px;
+            padding: 1.5rem;
             display: flex;
             flex-direction: column;
-            gap: 3rem;
-            animation: netflixFadeIn 0.8s ease-out;
-        }
-
-        @keyframes netflixFadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            gap: 1.5rem;
         }
 
         header {
-            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #222;
+            padding-bottom: 0.5rem;
+            width: 100%;
         }
 
         h1 {
-            font-size: 2.8rem;
+            font-size: 1.8rem;
             font-weight: 800;
             letter-spacing: -0.04em;
             color: var(--accent-color);
@@ -84,20 +78,79 @@
 
         .subtitle {
             color: var(--text-dim);
-            font-size: 1rem;
+            font-size: 0.85rem;
             font-weight: 500;
-            margin-top: 0.5rem;
+        }
+
+        /* --- TAB SYSTEM --- */
+        .tabs-nav {
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            border-bottom: 1px solid #222;
+            padding-bottom: 0.75rem;
+            width: 100%;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0.6rem 1.2rem;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: var(--transition);
+        }
+
+        .tab-btn:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab-btn.active {
+            color: white;
+            background: var(--accent-color);
+        }
+
+        .tab-content {
+            display: none;
+            width: 100%;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        /* --- SMOOTH MANUAL INPUT --- */
+        .input-card-wrapper {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.2s ease;
+            opacity: 0;
+        }
+
+        .input-card-wrapper.expanded {
+            max-height: 400px;
+            opacity: 1;
         }
 
         /* --- INPUT SECTION --- */
         .input-card {
             background: var(--card-bg);
             border-radius: 8px;
-            padding: 1.5rem;
+            padding: 1.25rem;
             display: flex;
             flex-direction: column;
-            gap: 1.25rem;
+            gap: 1rem;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--glass-border);
         }
 
         .input-header {
@@ -116,16 +169,17 @@
 
         textarea {
             width: 100%;
-            min-height: 80px;
+            min-height: 90px;
             background: #2b2b2b;
             border: none;
             border-radius: 4px;
             color: white;
-            padding: 1rem;
-            font-size: 1rem;
+            padding: 0.8rem;
+            font-size: 0.95rem;
             resize: none;
             outline: none;
             transition: var(--transition);
+            font-family: monospace;
         }
 
         textarea:focus {
@@ -136,17 +190,17 @@
             background-color: var(--accent-color);
             color: white;
             border: none;
-            padding: 0.8rem 2rem;
+            padding: 0.7rem 1.5rem;
             border-radius: 4px;
             font-weight: 700;
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
             text-transform: uppercase;
             transition: var(--transition);
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.75rem;
+            gap: 0.5rem;
         }
 
         .btn-main:hover {
@@ -158,21 +212,29 @@
             background: transparent;
             color: var(--text-dim);
             border: 1px solid var(--text-dim);
-            padding: 0.4rem 0.8rem;
-            font-size: 0.75rem;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.7rem;
             font-weight: 700;
             border-radius: 4px;
             cursor: pointer;
             text-transform: uppercase;
+            transition: var(--transition);
+        }
+
+        .btn-paste:hover {
+            color: white;
+            border-color: white;
+            background: rgba(255, 255, 255, 0.05);
         }
 
         /* --- PLAYER SECTION --- */
         .player-wrapper {
             width: 100%;
             background: #000;
-            border-radius: 4px;
+            border-radius: 6px;
             overflow: hidden;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+            border: 1px solid var(--glass-border);
         }
 
         video {
@@ -182,158 +244,715 @@
         }
 
         .status-msg {
-            margin-top: 1rem;
             font-size: 0.9rem;
             color: var(--text-dim);
-            font-weight: 500;
+            font-weight: 600;
             text-align: center;
+            background: var(--card-bg);
+            padding: 0.6rem;
+            border-radius: 4px;
+            border: 1px solid var(--glass-border);
         }
 
         /* --- EPISODES SECTION --- */
         .episodes-section {
             display: none;
             flex-direction: column;
-            gap: 1.5rem;
+            gap: 0.75rem;
+            background: var(--card-bg);
+            padding: 1.25rem;
+            border-radius: 8px;
+            border: 1px solid var(--glass-border);
         }
 
         .episodes-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.6rem;
+            max-height: 240px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .episodes-grid::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .episodes-grid::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
         }
 
         .ep-btn {
-            background: #181818;
-            border: none;
-            padding: 1.25rem 1rem;
+            background: #222;
+            border: 1px solid var(--glass-border);
+            padding: 0.7rem 0.9rem;
             color: var(--text-dim);
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             font-weight: 600;
-            text-align: left;
+            text-align: center;
             cursor: pointer;
             border-radius: 4px;
             transition: var(--transition);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .ep-btn:hover {
-            background: #2b2b2b;
+            background: #333;
             color: white;
+            border-color: #555;
         }
 
         .ep-btn.active {
-            background: #333;
+            background: var(--accent-color);
             color: white;
-            border-left: 4px solid var(--accent-color);
+            border-color: var(--accent-color);
         }
 
-        /* --- CACHE FOOTER --- */
-        .cache-footer {
-            margin-top: 2rem;
-            padding: 2rem 0;
-            border-top: 1px solid #222;
-            width: 100%;
+        /* --- SEARCH TAB --- */
+        .search-container {
             display: flex;
             flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .search-bar {
+            display: flex;
             gap: 0.5rem;
         }
 
-        .cache-header {
+        .search-bar input {
+            flex: 1;
+            background: #2b2b2b;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            padding: 0.7rem 0.9rem;
+            font-size: 0.95rem;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .search-bar input:focus {
+            background: #333333;
+        }
+
+        .movies-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .movie-card {
+            background: var(--card-bg);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--glass-border);
+        }
+
+        .movie-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-color);
+        }
+
+        .movie-poster {
+            width: 100%;
+            aspect-ratio: 2/3;
+            object-fit: cover;
+            background: #222;
+        }
+
+        .movie-info {
+            padding: 0.6rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            flex-grow: 1;
+        }
+
+        .movie-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: white;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            height: 2.4rem;
+        }
+
+        .movie-meta {
+            font-size: 0.7rem;
+            color: var(--text-dim);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
-        .progress-bar-bg {
-            width: 100%;
-            height: 2px;
-            background: #333;
-        }
-
-        #cacheProgressFill {
-            height: 100%;
-            background: var(--accent-color);
-            width: 0%;
-            transition: width 1s ease;
-        }
-
-        .btn-clear-all {
-            background: #2b2b2b;
-            border: 1px solid var(--glass-border);
-            color: #ff453a;
-            padding: 0.5rem 1rem;
-            font-size: 0.75rem;
+        .badge-type {
+            background: #222;
+            color: var(--text-main);
+            padding: 0.1rem 0.3rem;
+            border-radius: 2px;
+            font-size: 0.6rem;
             font-weight: 700;
-            cursor: pointer;
-            border-radius: 4px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            border: 1px solid var(--glass-border);
+        }
+
+        /* Movie Detail Panel */
+        .movie-detail-panel {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        .detail-header {
+            display: flex;
+            gap: 1.25rem;
+        }
+
+        .detail-poster {
+            width: 150px;
+            aspect-ratio: 2/3;
+            object-fit: cover;
+            border-radius: 4px;
+            background: #222;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            border: 1px solid var(--glass-border);
+        }
+
+        .detail-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            flex: 1;
+        }
+
+        .detail-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: white;
+        }
+
+        .detail-origin-title {
+            font-size: 0.95rem;
+            color: var(--text-dim);
+            font-style: italic;
+        }
+
+        .detail-meta-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.25rem;
+        }
+
+        .meta-item {
+            background: #222;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            border: 1px solid var(--glass-border);
+        }
+
+        .detail-description {
+            font-size: 0.85rem;
+            color: #ccc;
+            line-height: 1.4;
+            margin-top: 0.25rem;
+            background: #000;
+            padding: 0.75rem;
+            border-radius: 4px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .action-row {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+
+        .btn-sec {
+            background: #222;
+            color: white;
+            border: 1px solid var(--glass-border);
+            padding: 0.7rem 1.2rem;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+
+        .btn-sec:hover {
+            background: #333333;
+            border-color: white;
+        }
+
+        .btn-save-movie {
+            border-color: #28a745;
+            color: #28a745;
+        }
+
+        .btn-save-movie:hover {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-delete-movie {
+            border-color: #dc3545;
+            color: #dc3545;
+        }
+
+        .btn-delete-movie:hover {
+            background: #dc3545;
+            color: white;
+        }
+
+
+        /* ==========================================================================
+           📺 2. SMART TV & PROJECTOR OPTIMIZED LAYOUT (10-foot UI)
+           ========================================================================== */
+        .device-tv .container {
+            max-width: 1300px;
+            padding: 2.5rem;
+            gap: 2.5rem;
+        }
+
+        .device-tv h1 {
+            font-size: 2.5rem;
+        }
+
+        .device-tv .subtitle {
+            font-size: 1.1rem;
+        }
+
+        .device-tv .tab-btn {
+            font-size: 1.15rem;
+            padding: 0.8rem 1.8rem;
+            border-radius: 6px;
+        }
+
+        .device-tv textarea {
+            font-size: 1.2rem;
+            min-height: 110px;
+        }
+
+        .device-tv .btn-main {
+            font-size: 1.25rem;
+            padding: 0.95rem 2.2rem;
+            border-radius: 6px;
+        }
+
+        .device-tv .status-msg {
+            font-size: 1.2rem;
+            padding: 1rem;
+        }
+
+        .device-tv .ep-btn {
+            font-size: 1.05rem;
+            padding: 1rem 1.2rem;
+            border-radius: 6px;
+        }
+
+        .device-tv .movies-grid {
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 1.75rem;
+        }
+
+        .device-tv .movie-title {
+            font-size: 1.1rem;
+            height: 3rem;
+        }
+
+        .device-tv .detail-poster {
+            width: 180px;
+        }
+
+        .device-tv .detail-title {
+            font-size: 1.8rem;
+        }
+
+        .device-tv .detail-description {
+            font-size: 0.95rem;
+        }
+
+        /* Hộp viền tập trung (focus ring) cực kỳ nổi bật khi duyệt remote trên TV/Projector */
+        .device-tv input:focus, 
+        .device-tv textarea:focus, 
+        .device-tv button:focus, 
+        .device-tv .tab-btn:focus, 
+        .device-tv .movie-card:focus, 
+        .device-tv .ep-btn:focus {
+            outline: 4px solid var(--focus-ring) !important;
+            outline-offset: 3px;
+            transform: scale(1.05);
+            z-index: 10;
+        }
+
+        .device-tv .movie-card:hover {
+            transform: none; /* Bỏ hover máy chiếu tránh lag */
+        }
+
+
+        /* ==========================================================================
+           📱 3. IPHONE & IPAD & MOBILE TOUCH OPTIMIZED LAYOUT (Compact & Touch friendly)
+           ========================================================================== */
+        .device-mobile .container {
+            padding: 1rem;
+            gap: 1rem;
+        }
+
+        .device-mobile h1 {
+            font-size: 1.6rem;
+        }
+
+        .device-mobile .subtitle {
+            font-size: 0.8rem;
+        }
+
+        /* Cuộn ngang các tab menu mượt mà trên màn hình nhỏ */
+        .device-mobile .tabs-nav {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            justify-content: flex-start;
+            padding-bottom: 0.5rem;
+            -webkit-overflow-scrolling: touch;
+            gap: 0.5rem;
+        }
+
+        .device-mobile .tab-btn {
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+            flex: 0 0 auto;
+        }
+
+        .device-mobile .movies-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        .device-mobile .movie-title {
+            font-size: 0.85rem;
+            height: 2.2rem;
+        }
+
+        .device-mobile .ep-btn {
+            font-size: 0.9rem;
+            padding: 0.6rem 0.8rem;
+        }
+
+        .device-mobile .detail-poster {
+            width: 110px;
+        }
+
+        .device-mobile .detail-title {
+            font-size: 1.3rem;
+        }
+
+        .device-mobile .detail-description {
+            font-size: 0.8rem;
+            padding: 0.6rem;
+        }
+
+        .device-mobile .action-row {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .device-mobile .action-row button {
+            width: 100%;
+        }
+
+        /* Tắt viền focus màu vàng xấu xí trên thiết bị di động chạm tay */
+        .device-mobile *:focus {
+            outline: none !important;
+            transform: none !important;
+        }
+
+        /* --- SAVED MOVIES LIST & EPISODES COLOR-CODING --- */
+        .saved-movies-list-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            width: 100%;
+        }
+
+        .saved-movie-row {
+            display: flex;
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 1.25rem;
+            gap: 1.25rem;
+            border: 1px solid var(--glass-border);
+            align-items: flex-start;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
             transition: var(--transition);
         }
 
-        .btn-clear-all:hover {
-            background: #ff453a;
-            color: white;
-            border-color: #ff453a;
+        .saved-movie-row:hover {
+            border-color: var(--accent-color);
         }
 
-        @media (max-width: 768px) {
-            .container {
-                padding: 2rem 1rem;
-            }
+        .saved-movie-row .movie-poster {
+            width: 110px;
+            height: 165px;
+            object-fit: cover;
+            border-radius: 4px;
+            flex-shrink: 0;
+            border: 1px solid var(--glass-border);
+        }
 
-            h1 {
-                font-size: 2rem;
-            }
+        .saved-movie-row .movie-info-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            flex-grow: 1;
+            min-width: 0;
+        }
 
-            .episodes-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
+        .saved-movie-row .movie-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: white;
+            height: auto;
+            display: block;
+        }
+
+        .saved-movie-row .movie-meta {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .saved-movie-row .episodes-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            max-height: 130px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+            width: 100%;
+        }
+
+        .saved-movie-row .episodes-container::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .saved-movie-row .episodes-container::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 2px;
+        }
+
+        .saved-ep-btn {
+            padding: 0.4rem 0.7rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: var(--transition);
+            background: #2b2b2b;
+            color: var(--text-dim);
+            min-width: 70px;
+            text-align: center;
+        }
+
+        /* Watched: Green */
+        .saved-ep-btn.watched {
+            background: rgba(40, 167, 69, 0.12);
+            border-color: rgba(40, 167, 69, 0.4);
+            color: #2cd054;
+        }
+
+        .saved-ep-btn.watched:hover {
+            background: rgba(40, 167, 69, 0.25);
+            color: #2cd054;
+        }
+
+        /* Watching: Yellow/Orange pulse */
+        .saved-ep-btn.watching {
+            background: rgba(255, 193, 7, 0.15);
+            border-color: #ffc107;
+            color: #ffc107;
+            box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4);
+            animation: pulse-border-yellow 2s infinite;
+        }
+
+        .saved-ep-btn.watching:hover {
+            background: rgba(255, 193, 7, 0.3);
+        }
+
+        /* Unwatched: Dim Gray */
+        .saved-ep-btn.unwatched {
+            background: #181818;
+            border-color: var(--glass-border);
+            color: var(--text-dim);
+        }
+
+        .saved-ep-btn.unwatched:hover {
+            background: #2b2b2b;
+            color: white;
+            border-color: #666;
+        }
+
+        @keyframes pulse-border-yellow {
+            0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+            70% { box-shadow: 0 0 0 5px rgba(255, 193, 7, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+        }
+
+        /* Responsive styling for Mobile */
+        .device-mobile .saved-movie-row {
+            flex-direction: column;
+            align-items: stretch;
+            padding: 0.85rem;
+            gap: 0.85rem;
+        }
+
+        .device-mobile .saved-movie-row .movie-poster {
+            width: 80px;
+            height: 120px;
+            align-self: flex-start;
         }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <header>
-            <h1>M3U8 PLAYER</h1>
-            <p class="subtitle">Trải nghiệm điện ảnh đỉnh cao.</p>
+        <!-- COMPACT HEADER WITH CACHE STATS -->
+        <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding-bottom: 0.5rem; width: 100%;">
+            <h1>HomeFlix</h1>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
+                    <span id="cacheLabel" style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Cache: 0 GB / 10 GB</span>
+                    <div style="width: 80px; height: 3px; background: #222; border-radius: 1.5px; overflow: hidden;">
+                        <div id="cacheProgressFill" style="height: 100%; background: var(--accent-color); width: 0%; transition: width 1s ease;"></div>
+                    </div>
+                </div>
+                <button id="btnClearStorage" title="Xóa toàn bộ Cache" style="background: transparent; border: 1px solid var(--glass-border); color: #ff453a; padding: 0.4rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition);">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                    </svg>
+                </button>
+            </div>
         </header>
 
-        <!-- INPUT SECTION -->
-        <div class="input-card">
-            <div class="input-header">
-                <span class="label-text">Dán danh sách tập phim</span>
-                <button class="btn-paste" id="btnQuickActionPaste">Dán nhanh</button>
-            </div>
-            <textarea id="m3u8InputRaw" placeholder="Ví dụ: Tập 01|https://..."></textarea>
-            <button class="btn-main" id="btnMainPlay">
-                <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
+        <!-- 3 OPTIONS MENU -->
+        <div class="tabs-nav" id="appTabsNav">
+            <button class="tab-btn active" id="tabBtnSearch" onclick="switchTab('search-tab')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                 </svg>
-                PHÁT
+                Tìm Kiếm
+            </button>
+            <button class="tab-btn" id="tabBtnSaved" onclick="switchTab('saved-tab')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                </svg>
+                Đã Lưu
+            </button>
+            <button class="tab-btn" id="tabBtnPlayer" onclick="switchTab('player-tab')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                </svg>
+                Nhập URL
             </button>
         </div>
 
-        <!-- PLAYER SECTION -->
-        <div class="player-wrapper">
-            <video id="videoPlayer" controls playsinline></video>
-        </div>
-        <div class="status-msg" id="statusMessage">Sẵn sàng phát.</div>
-
-        <!-- EPISODES SECTION -->
-        <div class="episodes-section" id="epListSection">
-            <div class="label-text" style="font-size: 1rem; margin-bottom: 1rem;">Danh sách tập phim</div>
-            <div class="episodes-grid" id="epGridContent"></div>
-        </div>
-
-        <!-- CACHE FOOTER -->
-        <div class="cache-footer">
-            <div class="cache-header">
-                <span class="label-text" id="cacheLabel">BỘ NHỚ CACHE: 0 GB / 10 GB</span>
-                <button class="btn-clear-all" id="btnClearStorage">Xóa Cache</button>
+        <!-- TAB CONTENT 1: MANUAL LINK -->
+        <div id="player-tab" class="tab-content">
+            <div class="input-card" id="manualInputCard">
+                <div class="input-header" id="manualInputHeader" style="display: none; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                    <span class="label-text">Dán danh sách tập phim</span>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn-paste" id="btnQuickActionPaste">Dán nhanh</button>
+                        <button class="btn-paste" onclick="collapseManualInput(event)" style="border-color: #555; color: var(--text-dim);">Thu nhỏ</button>
+                    </div>
+                </div>
+                <textarea id="m3u8InputRaw" placeholder="Nhấp vào đây để dán link M3U8..." style="height: 40px; transition: var(--transition);"></textarea>
+                <div id="manualInputFooter" style="display: none; animation: netflixFadeIn 0.3s ease-out; margin-top: 0.5rem;">
+                    <button class="btn-main" id="btnMainPlay" style="width: 100%;">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                        </svg>
+                        PHÁT LINK
+                    </button>
+                </div>
             </div>
-            <div class="progress-bar-bg">
-                <div id="cacheProgressFill"></div>
+        </div>
+
+        <!-- TAB CONTENT 2: SEARCH -->
+        <div id="search-tab" class="tab-content active">
+            <div class="search-container">
+                <div class="search-bar">
+                    <input type="text" id="searchInput" placeholder="Nhập tên phim..." onkeydown="if(event.key==='Enter') searchMovies()">
+                    <button class="btn-main" onclick="searchMovies()">TÌM KIẾM</button>
+                </div>
+                
+                <!-- Search Results -->
+                <div id="searchResults" class="movies-grid"></div>
+
+                <!-- Movie Detail Container -->
+                <div id="movieDetailContainer" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- TAB CONTENT 3: SAVED -->
+        <div id="saved-tab" class="tab-content">
+            <div class="search-container">
+                <div id="savedMoviesGrid" class="saved-movies-list-container"></div>
+            </div>
+        </div>
+
+        <!-- GLOBAL PLAYER CONTAINER (Theatre mode - only visible when media is active) -->
+        <div id="globalPlayerContainer" style="display: none; flex-direction: column; gap: 1.25rem; width: 100%; animation: netflixFadeIn 0.5s ease-out; padding-top: 0.5rem;">
+            <!-- Control Row -->
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <button class="btn-sec" onclick="exitPlayer()" style="padding: 0.5rem 0.8rem; font-size: 0.85rem; gap: 0.3rem;">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    Quay lại
+                </button>
+                <button id="btnNextEpisode" class="btn-main" style="display: none; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 700; gap: 0.35rem;" onclick="playNextEpisode()">
+                    Tập tiếp theo
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="player-wrapper">
+                <video id="videoPlayer" controls playsinline></video>
+            </div>
+            <div class="status-msg" id="statusMessage">Sẵn sàng phát.</div>
+
+            <!-- EPISODES GRID -->
+            <div class="episodes-section" id="epListSection">
+                <div class="label-text" style="font-size: 0.95rem; margin-bottom: 0.25rem;">Tập phim</div>
+                <div class="episodes-grid" id="epGridContent"></div>
             </div>
         </div>
     </div>
@@ -349,7 +968,102 @@
         const cacheLabel = document.getElementById('cacheLabel');
         const cacheBar = document.getElementById('cacheProgressFill');
         const btnClear = document.getElementById('btnClearStorage');
+        const globalPlayer = document.getElementById('globalPlayerContainer');
+        const appHeader = document.getElementById('appHeader');
+        const appTabsNav = document.getElementById('appTabsNav');
         let hlsObj = null;
+
+        // Trạng thái phim đang phát hiện tại (dùng để lưu tiến độ xem)
+        let currentMovie = null;
+        // Danh sách phim lưu trên server
+        let savedMoviesList = [];
+        // Danh sách tập phim đang xem ở phần chi tiết
+        let currentDetailEpisodes = [];
+        // Theo dõi danh sách tập đang phát và vị trí hiện tại
+        let playbackEpisodes = [];
+        let currentPlaybackIndex = -1;
+
+        // --- 1. DYNAMIC DEVICE DETECTION ---
+        function detectDevice() {
+            const ua = navigator.userAgent.toLowerCase();
+            const body = document.body;
+            
+            const isTV = /tv|smarttv|googletv|appletv|hbbtv|netcast|webos|tizen|rokutv|ctv|box|playstation|xbox|nintendo|large-screen/i.test(ua)
+                         || (window.screen.width >= 1920 && !('ontouchstart' in window));
+            
+            const isMobile = /iphone|ipad|ipod|android/i.test(ua)
+                             || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /macintosh/i.test(ua));
+                             
+            if (isTV) {
+                body.className = 'device-tv';
+                console.log("HomeFlix Mode: Smart TV / Projector (D-Pad support enabled)");
+            } else if (isMobile) {
+                body.className = 'device-mobile';
+                console.log("HomeFlix Mode: iOS / Android Mobile (Touch optimized)");
+            } else {
+                body.className = 'device-desktop';
+                console.log("HomeFlix Mode: Desktop (Hover & mouse optimized)");
+            }
+        }
+
+        // --- 2. D-PAD & KEYBOARD NAVIGATION (TV/Projector only) ---
+        function initTabbing() {
+            if (document.body.classList.contains('device-mobile')) return;
+
+            document.querySelectorAll('.tab-btn, input, textarea, .btn-main, .btn-paste, .btn-sec, #btnClearStorage').forEach(el => {
+                if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (document.body.classList.contains('device-mobile')) return;
+
+            if (e.key === 'Enter') {
+                const activeEl = document.activeElement;
+                if (activeEl && activeEl.classList.contains('movie-card')) {
+                    activeEl.click();
+                }
+            }
+        });
+
+        // --- TAB SYSTEM ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+                tab.style.display = ''; // Reset display style
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            
+            if (tabId === 'player-tab') document.getElementById('tabBtnPlayer').classList.add('active');
+            if (tabId === 'search-tab') document.getElementById('tabBtnSearch').classList.add('active');
+            if (tabId === 'saved-tab') {
+                document.getElementById('tabBtnSaved').classList.add('active');
+                renderSavedMovies();
+            }
+            setTimeout(initTabbing, 100);
+        }
+
+        // --- TOGGLE MANUAL INPUT AUTO-EXPAND ---
+        const inputHeader = document.getElementById('manualInputHeader');
+        const inputFooter = document.getElementById('manualInputFooter');
+
+        function expandManualInput() {
+            inputArea.style.height = '120px';
+            inputHeader.style.display = 'flex';
+            inputFooter.style.display = 'block';
+        }
+
+        function collapseManualInput(e) {
+            if (e) e.stopPropagation();
+            inputArea.style.height = '40px';
+            inputHeader.style.display = 'none';
+            inputFooter.style.display = 'none';
+        }
+
+        inputArea.addEventListener('focus', expandManualInput);
+        inputArea.addEventListener('click', expandManualInput);
 
         // --- CACHE ---
         async function refreshCache() {
@@ -357,7 +1071,7 @@
                 const res = await fetch('/api/cache/status');
                 const data = await res.json();
                 if (data.size_gb !== undefined) {
-                    cacheLabel.textContent = `BỘ NHỚ TẢI XUỐNG: ${data.size_gb} GB / ${data.max_gb} GB`;
+                    cacheLabel.textContent = `Cache: ${data.size_gb} GB / ${data.max_gb} GB`;
                     cacheBar.style.width = `${data.percent}%`;
                 }
             } catch { }
@@ -368,29 +1082,28 @@
                 refreshCache();
             }
         };
-        setInterval(refreshCache, 10000);
+        setInterval(refreshCache, 15000);
         refreshCache();
 
         // --- CLIPBOARD ---
         async function tryManualPaste() {
             try {
-                // Lệnh DUY NHẤT để yêu cầu OS Browser hiện hộp thoại xin quyền
                 const text = await navigator.clipboard.readText();
-                
                 if (text && text.trim()) {
                     inputArea.value = text;
                     execute(text);
                 }
             } catch (err) {
-                // Để OS Browser tự quản lý, không hiện thông báo rác
                 console.log("OS Browser Handled Permission.");
             }
         }
-
         btnPaste.onclick = tryManualPaste;
 
-        // --- MAIN ---
-        btnPlay.onclick = () => execute(inputArea.value);
+        // --- MAIN PLAYER CONTROLS ---
+        btnPlay.onclick = () => {
+            currentMovie = null; // Phát thủ công không lưu tiến độ
+            execute(inputArea.value);
+        };
 
         function execute(text) {
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -411,6 +1124,13 @@
             });
 
             if (episodes.length > 0) {
+                playbackEpisodes = episodes;
+                appHeader.style.display = 'none';
+                appTabsNav.style.display = 'none';
+                document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+
+                globalPlayer.style.display = 'flex';
+                
                 gridEp.innerHTML = '';
                 episodes.forEach((ep, i) => {
                     const btn = document.createElement('button');
@@ -421,21 +1141,102 @@
                 });
                 sectionEp.style.display = 'flex';
                 play(episodes[0].url, episodes[0].title, 0);
+                setTimeout(initTabbing, 100);
+            } else {
+                status.innerHTML = '<span style="color:#E50914">KHÔNG TÌM THẤY VIDEO</span>';
+            }
+        }
+
+        // Tải tập phim với tuỳ chọn vị trí phát
+        function executeFromDetail(text, lastWatchedUrl) {
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            const episodes = [];
+            const regex = /(https?:\/\/[^\s|]+\.m3u8[^\s|]*)/i;
+
+            lines.forEach(line => {
+                const match = line.match(regex);
+                if (match) {
+                    const url = match[0];
+                    let title = line.includes('|') ? line.split('|')[0].trim() : "";
+                    if (!title) {
+                        const clean = line.replace(url, '').replace('|', '').trim();
+                        title = clean || `Tập ${String(episodes.length + 1).padStart(2, '0')}`;
+                    }
+                    episodes.push({ title, url });
+                }
+            });
+
+            if (episodes.length > 0) {
+                playbackEpisodes = episodes;
+                appHeader.style.display = 'none';
+                appTabsNav.style.display = 'none';
+                document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+
+                globalPlayer.style.display = 'flex';
+                
+                gridEp.innerHTML = '';
+                let playIdx = 0;
+                
+                episodes.forEach((ep, i) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'ep-btn';
+                    btn.textContent = ep.title;
+                    btn.onclick = () => play(ep.url, ep.title, i);
+                    gridEp.appendChild(btn);
+                    
+                    if (lastWatchedUrl && ep.url === lastWatchedUrl) {
+                        playIdx = i;
+                    }
+                });
+                sectionEp.style.display = 'flex';
+                play(episodes[playIdx].url, episodes[playIdx].title, playIdx);
+                setTimeout(initTabbing, 100);
             } else {
                 status.innerHTML = '<span style="color:#E50914">KHÔNG TÌM THẤY VIDEO</span>';
             }
         }
 
         function play(url, title, idx) {
+            currentPlaybackIndex = idx;
             const btns = gridEp.querySelectorAll('.ep-btn');
             btns.forEach((b, i) => b.classList.toggle('active', i === idx));
+
+            // Hiển thị/Ẩn nút "Tập tiếp theo"
+            const btnNext = document.getElementById('btnNextEpisode');
+            if (btnNext) {
+                if (playbackEpisodes.length > 1 && currentPlaybackIndex < playbackEpisodes.length - 1) {
+                    btnNext.style.display = 'flex';
+                } else {
+                    btnNext.style.display = 'none';
+                }
+            }
 
             const proxy = `/proxy/m3u8?url=${encodeURIComponent(url)}`;
             status.textContent = `ĐANG PHÁT: ${title.toUpperCase()}`;
 
+            // Gửi báo cáo tiến trình xem phim về Server (nếu phim đã được lưu)
+            if (currentMovie && currentMovie.slug) {
+                fetch('/api/saved/progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        slug: currentMovie.slug,
+                        last_watched_episode: title,
+                        last_watched_url: url
+                    })
+                }).then(res => res.json()).then(data => {
+                    if (data.status === 'success') {
+                        const sIdx = savedMoviesList.findIndex(item => item.slug === currentMovie.slug);
+                        if (sIdx > -1) {
+                            savedMoviesList[sIdx].last_watched_episode = title;
+                            savedMoviesList[sIdx].last_watched_url = url;
+                        }
+                    }
+                }).catch(err => console.error("Error saving progress:", err));
+            }
+
             if (hlsObj) { hlsObj.destroy(); hlsObj = null; }
 
-            // Lắng nghe lỗi trên thẻ video (dành cho Native Player/Safari)
             video.onerror = () => {
                 const errorMap = {
                     1: "Người dùng đã hủy tải video.",
@@ -452,10 +1253,12 @@
                 video.src = proxy;
                 video.play().catch(() => {});
             } else if (Hls.isSupported()) {
+                const isTVMode = document.body.classList.contains('device-tv');
                 hlsObj = new Hls({
-                    maxBufferLength: 30,
-                    maxMaxBufferLength: 600,
-                    manifestLoadingMaxRetry: 3
+                    maxBufferLength: isTVMode ? 20 : 30,
+                    maxMaxBufferLength: isTVMode ? 120 : 600,
+                    manifestLoadingMaxRetry: 5,
+                    lowLatencyMode: !isTVMode
                 });
                 hlsObj.loadSource(proxy);
                 hlsObj.attachMedia(video);
@@ -482,6 +1285,437 @@
                 });
             }
         }
+
+        // --- EXIT PLAYER (QUAY LẠI TRANG CHỦ) ---
+        function exitPlayer() {
+            video.pause();
+            if (hlsObj) {
+                hlsObj.destroy();
+                hlsObj = null;
+            }
+            video.src = '';
+            
+            globalPlayer.style.display = 'none';
+            
+            appHeader.style.display = 'flex';
+            appTabsNav.style.display = 'flex';
+            
+            const activeTabBtn = document.querySelector('.tab-btn.active');
+            if (activeTabBtn) {
+                activeTabBtn.click();
+            } else {
+                switchTab('player-tab');
+            }
+        }
+
+        // --- SEARCH FUNCTIONS ---
+        async function searchMovies() {
+            const q = document.getElementById('searchInput').value.trim();
+            if (!q) return alert("Vui lòng nhập từ khóa tìm kiếm.");
+            
+            const resultsDiv = document.getElementById('searchResults');
+            const detailDiv = document.getElementById('movieDetailContainer');
+            
+            resultsDiv.style.display = 'grid';
+            resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim);">Đang tìm kiếm...</div>';
+            detailDiv.style.display = 'none';
+            
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                
+                if (data.status === 'success' && data.data && data.data.items.length > 0) {
+                    resultsDiv.innerHTML = '';
+                    const cdnDomain = data.data.APP_DOMAIN_CDN_IMAGE || 'https://phimimg.com';
+                    data.data.items.forEach(item => {
+                        const card = document.createElement('div');
+                        card.className = 'movie-card';
+                        if (!document.body.classList.contains('device-mobile')) {
+                            card.setAttribute('tabindex', '0');
+                        }
+                        
+                        const posterPath = item.poster_url.startsWith('http') ? item.poster_url : `${cdnDomain}/${item.poster_url}`;
+                        
+                        card.innerHTML = `
+                            <img class="movie-poster" src="${posterPath}" alt="${item.name}">
+                            <div class="movie-info">
+                                <div class="movie-title">${item.name}</div>
+                                <div class="movie-meta">
+                                    <span>Năm: ${item.year}</span>
+                                    <span class="badge-type">${item.type === 'single' ? 'Phim Lẻ' : 'Phim Bộ'}</span>
+                                </div>
+                            </div>
+                        `;
+                        card.onclick = () => showMovieDetail(item.slug);
+                        resultsDiv.appendChild(card);
+                    });
+                    setTimeout(initTabbing, 100);
+                } else {
+                    resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--accent-color);">Không tìm thấy phim nào phù hợp.</div>';
+                }
+            } catch (err) {
+                resultsDiv.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--accent-color);">Lỗi kết nối: ${err.message}</div>`;
+            }
+        }
+
+        async function showMovieDetail(slug) {
+            const detailDiv = document.getElementById('movieDetailContainer');
+            const resultsDiv = document.getElementById('searchResults');
+            
+            resultsDiv.style.display = 'none';
+            detailDiv.style.display = 'block';
+            detailDiv.innerHTML = '<div style="text-align: center; color: var(--text-dim);">Đang tải chi tiết phim...</div>';
+            
+            try {
+                const res = await fetch(`/api/movie/${slug}`);
+                const data = await res.json();
+                
+                if (data.status && data.movie) {
+                    const m = data.movie;
+                    const eps = data.episodes || [];
+                    
+                    let formattedEpisodes = "";
+                    let episodesCount = 0;
+                    const episodesList = [];
+                    
+                    const mainServer = eps.find(srv => srv.server_data && srv.server_data.length > 0);
+                    if (mainServer) {
+                        mainServer.server_data.forEach(ep => {
+                            if (ep.link_m3u8) {
+                                episodesList.push({ name: ep.name, link_m3u8: ep.link_m3u8 });
+                                formattedEpisodes += `${ep.name} | ${ep.link_m3u8}\n`;
+                                episodesCount++;
+                            }
+                        });
+                    }
+                    currentDetailEpisodes = episodesList;
+                    
+                    const isSaved = checkIsSaved(m.slug);
+                    const saveBtnText = isSaved ? "Xóa khỏi tủ phim" : "Lưu vào tủ phim";
+                    const saveBtnClass = isSaved ? "btn-sec btn-delete-movie" : "btn-sec btn-save-movie";
+                    
+                    const safeName = m.name.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+                    const safePoster = m.poster_url.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+                    const safeEpText = formattedEpisodes.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+                    
+                    detailDiv.innerHTML = `
+                        <button class="btn-sec" onclick="backToSearchResults()" style="margin-bottom: 1.25rem;">
+                            ← Quay lại kết quả tìm kiếm
+                        </button>
+                        <div class="movie-detail-panel">
+                            <div class="detail-header">
+                                <img class="detail-poster" src="${m.poster_url}" alt="${m.name}">
+                                <div class="detail-info">
+                                    <div class="detail-title">${m.name}</div>
+                                    <div class="detail-origin-title">${m.origin_name} (${m.year})</div>
+                                    <div class="detail-meta-list">
+                                        <span class="meta-item">Trạng thái: ${m.episode_current}</span>
+                                        <span class="meta-item">Thời lượng: ${m.time}</span>
+                                        <span class="meta-item">Chất lượng: ${m.quality} / ${m.lang}</span>
+                                    </div>
+                                    <div class="detail-description">${m.content || 'Chưa có mô tả cho phim này.'}</div>
+                                    
+                                    <div class="action-row">
+                                        <button class="btn-main" onclick="playSelectedMovie(\`${safeName}\`, \`${safeEpText}\`, \`${m.slug}\`)">
+                                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                                            PHÁT NGAY
+                                        </button>
+                                        <button id="btnSaveDetail" class="${saveBtnClass}" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesCount})">
+                                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
+                                            <span id="saveBtnText">${saveBtnText}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    setTimeout(initTabbing, 100);
+                } else {
+                    detailDiv.innerHTML = '<div style="text-align: center; color: var(--accent-color);">Không thể tải thông tin chi tiết phim.</div>';
+                }
+            } catch (err) {
+                detailDiv.innerHTML = `<div style="text-align: center; color: var(--accent-color);">Lỗi kết nối: ${err.message}</div>`;
+            }
+        }
+
+        function backToSearchResults() {
+            document.getElementById('movieDetailContainer').style.display = 'none';
+            document.getElementById('searchResults').style.display = 'grid';
+            setTimeout(initTabbing, 100);
+        }
+
+        function playSelectedMovie(name, episodesText, slug) {
+            currentMovie = { slug, name };
+            const savedMovie = savedMoviesList.find(item => item.slug === slug);
+            inputArea.value = episodesText;
+            executeFromDetail(episodesText, savedMovie ? savedMovie.last_watched_url : null);
+        }
+
+        // --- SERVER SAVED MOVIES FUNCTIONS ---
+        async function fetchSavedMovies() {
+            try {
+                const res = await fetch('/api/saved');
+                savedMoviesList = await res.json();
+            } catch(e) {
+                console.error("Lỗi lấy danh sách tủ phim:", e);
+            }
+        }
+
+        function checkIsSaved(slug) {
+            return savedMoviesList.some(item => item.slug === slug);
+        }
+
+        async function toggleSaveMovie(slug, name, poster_url, year, episode_current, total_episodes) {
+            const btn = document.getElementById('btnSaveDetail');
+            const txt = document.getElementById('saveBtnText');
+            const isSaved = checkIsSaved(slug);
+            
+            if (isSaved) {
+                try {
+                    const res = await fetch(`/api/saved/${slug}`, { method: 'DELETE' });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        savedMoviesList = savedMoviesList.filter(item => item.slug !== slug);
+                        if (btn) {
+                            btn.className = "btn-sec btn-save-movie";
+                            txt.textContent = "Lưu vào tủ phim";
+                        }
+                    }
+                } catch(e) { alert("Không thể xóa phim: " + e.message); }
+            } else {
+                try {
+                    const res = await fetch('/api/saved', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            slug, 
+                            name, 
+                            poster_url, 
+                            year, 
+                            episode_current, 
+                            total_episodes,
+                            episodes: currentDetailEpisodes
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        savedMoviesList.push(data.movie);
+                        if (btn) {
+                            btn.className = "btn-sec btn-delete-movie";
+                            txt.textContent = "Xóa khỏi tủ phim";
+                        }
+                    }
+                } catch(e) { alert("Không thể lưu phim: " + e.message); }
+            }
+        }
+
+        async function deleteSavedMovie(slug) {
+            try {
+                const res = await fetch(`/api/saved/${slug}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    savedMoviesList = savedMoviesList.filter(item => item.slug !== slug);
+                    renderSavedMovies();
+                }
+            } catch(e) { alert("Lỗi xóa phim: " + e.message); }
+        }
+
+        async function syncEpisodesForMovie(slug) {
+            try {
+                const res = await fetch(`/api/movie/${slug}`);
+                const data = await res.json();
+                if (data.status && data.movie) {
+                    const m = data.movie;
+                    const eps = data.episodes || [];
+                    const episodesList = [];
+                    const mainServer = eps.find(srv => srv.server_data && srv.server_data.length > 0);
+                    if (mainServer) {
+                        mainServer.server_data.forEach(ep => {
+                            if (ep.link_m3u8) {
+                                episodesList.push({ name: ep.name, link_m3u8: ep.link_m3u8 });
+                            }
+                        });
+                    }
+                    
+                    const saved = savedMoviesList.find(item => item.slug === slug);
+                    if (saved) {
+                        saved.episodes = episodesList;
+                        await fetch('/api/saved', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(saved)
+                        });
+                        renderSavedMovies();
+                    }
+                }
+            } catch(e) {
+                alert("Lỗi đồng bộ tập phim: " + e.message);
+            }
+        }
+
+        async function renderSavedMovies() {
+            const grid = document.getElementById('savedMoviesGrid');
+            grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 3rem 0;">Đang tải tủ phim từ máy chủ...</div>';
+            
+            await fetchSavedMovies();
+            
+            if (savedMoviesList.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 3rem 0; font-size: 1.1rem;">Tủ phim trống. Hãy tìm phim và nhấn Lưu nhé!</div>';
+                return;
+            }
+            
+            grid.innerHTML = '';
+            savedMoviesList.forEach(m => {
+                const card = document.createElement('div');
+                card.className = 'saved-movie-row';
+                if (!document.body.classList.contains('device-mobile')) {
+                    card.setAttribute('tabindex', '0');
+                }
+                
+                const progressText = m.last_watched_episode ? `Đang xem: ${m.last_watched_episode}` : 'Chưa xem';
+                const totalEpsText = m.total_episodes ? `${m.total_episodes} tập` : m.episode_current;
+                
+                let epsHtml = "";
+                if (m.episodes && m.episodes.length > 0) {
+                    m.episodes.forEach((ep, idx) => {
+                        let epClass = "saved-ep-btn unwatched";
+                        
+                        if (m.episode_states) {
+                            if (m.episode_states[ep.link_m3u8] === "watching") {
+                                epClass = "saved-ep-btn watching";
+                            } else if (m.episode_states[ep.link_m3u8] === "watched") {
+                                epClass = "saved-ep-btn watched";
+                            }
+                        } else if (m.last_watched_url === ep.link_m3u8) {
+                            epClass = "saved-ep-btn watching";
+                        }
+                        
+                        epsHtml += `<button class="${epClass}" onclick="event.stopPropagation(); playEpisodeFromSaved(\`${m.slug}\`, ${idx})">${ep.name}</button>`;
+                    });
+                } else {
+                    epsHtml = `<span style="font-size: 0.85rem; color: var(--text-dim);">Chưa có danh sách tập phim. <a href="#" style="color: var(--accent-color); text-decoration: underline;" onclick="event.stopPropagation(); syncEpisodesForMovie(\`${m.slug}\`)">Đồng bộ ngay</a></span>`;
+                }
+
+                card.innerHTML = `
+                    <img class="movie-poster" src="${m.poster_url}" alt="${m.name}">
+                    <div class="movie-info-row">
+                        <div class="movie-title">${m.name}</div>
+                        <div class="movie-meta">
+                            <span>Năm: ${m.year} (${totalEpsText})</span>
+                            <span style="color: #ffc107; font-weight: bold;">${progressText}</span>
+                        </div>
+                        <div class="episodes-container">
+                            ${epsHtml}
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <button class="btn-main" style="padding: 0.5rem 1rem; font-size: 0.9rem;" onclick="event.stopPropagation(); playResumeSavedMovie(\`${m.slug}\`)">XEM TIẾP</button>
+                            <button class="btn-sec" style="padding: 0.5rem 1rem; font-size: 0.9rem; margin: 0; border-color: #555;" onclick="event.stopPropagation(); deleteSavedMovie(\`${m.slug}\`)">XÓA</button>
+                        </div>
+                    </div>
+                `;
+                card.onclick = () => {
+                    switchTab('search-tab');
+                    showMovieDetail(m.slug);
+                };
+                grid.appendChild(card);
+            });
+            setTimeout(initTabbing, 100);
+        }
+
+        function playEpisodeFromSaved(slug, epIdx) {
+            const savedMovie = savedMoviesList.find(item => item.slug === slug);
+            if (!savedMovie || !savedMovie.episodes || savedMovie.episodes.length === 0) return;
+            
+            currentMovie = { slug: savedMovie.slug, name: savedMovie.name };
+            
+            let formattedEpisodes = "";
+            savedMovie.episodes.forEach(ep => {
+                formattedEpisodes += `${ep.name} | ${ep.link_m3u8}\n`;
+            });
+            
+            const targetEp = savedMovie.episodes[epIdx];
+            inputArea.value = formattedEpisodes;
+            executeFromDetail(formattedEpisodes, targetEp.link_m3u8);
+        }
+
+        async function playResumeSavedMovie(slug) {
+            const savedMovie = savedMoviesList.find(item => item.slug === slug);
+            if (!savedMovie) return;
+            
+            if (!savedMovie.episodes || savedMovie.episodes.length === 0) {
+                await syncEpisodesForMovie(slug);
+                playResumeSavedMovie(slug);
+                return;
+            }
+            
+            let targetUrl = savedMovie.last_watched_url;
+            
+            if (!targetUrl && savedMovie.episodes.length > 0) {
+                targetUrl = savedMovie.episodes[0].link_m3u8;
+            }
+            
+            if (!targetUrl) return alert("Không tìm thấy tập phim nào.");
+            
+            currentMovie = { slug: savedMovie.slug, name: savedMovie.name };
+            
+            let formattedEpisodes = "";
+            savedMovie.episodes.forEach(ep => {
+                formattedEpisodes += `${ep.name} | ${ep.link_m3u8}\n`;
+            });
+            
+            inputArea.value = formattedEpisodes;
+            executeFromDetail(formattedEpisodes, targetUrl);
+        }
+
+        async function loadAndPlayMovie(slug) {
+            try {
+                const res = await fetch(`/api/movie/${slug}`);
+                const data = await res.json();
+                if (data.status && data.movie) {
+                    const m = data.movie;
+                    const eps = data.episodes || [];
+                    let formattedEpisodes = "";
+                    const mainServer = eps.find(srv => srv.server_data && srv.server_data.length > 0);
+                    if (mainServer) {
+                        mainServer.server_data.forEach(ep => {
+                            if (ep.link_m3u8) {
+                                formattedEpisodes += `${ep.name} | ${ep.link_m3u8}\n`;
+                            }
+                        });
+                    }
+                    
+                    const savedMovie = savedMoviesList.find(item => item.slug === slug);
+                    currentMovie = { slug: m.slug, name: m.name };
+                    executeFromDetail(formattedEpisodes, savedMovie ? savedMovie.last_watched_url : null);
+                } else {
+                    alert("Không thể tải thông tin phim.");
+                }
+            } catch (err) {
+                alert("Lỗi kết nối: " + err.message);
+            }
+        }
+
+        function playNextEpisode() {
+            if (playbackEpisodes.length > 1 && currentPlaybackIndex < playbackEpisodes.length - 1) {
+                const nextIdx = currentPlaybackIndex + 1;
+                const nextEp = playbackEpisodes[nextIdx];
+                play(nextEp.url, nextEp.title, nextIdx);
+            }
+        }
+
+        // Tự động chuyển tập khi xem hết phim
+        video.onended = () => {
+            if (playbackEpisodes.length > 1 && currentPlaybackIndex < playbackEpisodes.length - 1) {
+                console.log("Video ended. Auto playing next episode.");
+                playNextEpisode();
+            }
+        };
+
+        detectDevice();
+        fetchSavedMovies();
+        window.addEventListener('DOMContentLoaded', () => {
+            initTabbing();
+        });
     </script>
 </body>
 

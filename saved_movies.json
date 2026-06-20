@@ -1,0 +1,58 @@
+{
+    "bai-hoc-dang-doi": {
+        "slug": "bai-hoc-dang-doi",
+        "name": "Bài Học Đáng Đời",
+        "poster_url": "https://phimimg.com/upload/vod/20260605-1/660b623033d81ce1c8cc931250bd6939.jpg",
+        "year": "2026",
+        "episode_current": "Hoàn Tất (10/10)",
+        "total_episodes": 20,
+        "last_watched_episode": "Tập 02",
+        "last_watched_url": "https://v7.kkphimplayer7.com/20260605/w5MC5FiW/index.m3u8",
+        "episodes": [
+            {
+                "name": "Tập 01",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/mMUnxegG/index.m3u8"
+            },
+            {
+                "name": "Tập 02",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/w5MC5FiW/index.m3u8"
+            },
+            {
+                "name": "Tập 03",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/ZWTl9ApV/index.m3u8"
+            },
+            {
+                "name": "Tập 04",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/3qEvMe1v/index.m3u8"
+            },
+            {
+                "name": "Tập 05",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/T3huUqe8/index.m3u8"
+            },
+            {
+                "name": "Tập 06",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/v39JEjCN/index.m3u8"
+            },
+            {
+                "name": "Tập 07",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/OqbIsdK4/index.m3u8"
+            },
+            {
+                "name": "Tập 08",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/PJYAMXy4/index.m3u8"
+            },
+            {
+                "name": "Tập 09",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/IMVcU4ID/index.m3u8"
+            },
+            {
+                "name": "Tập 10",
+                "link_m3u8": "https://v7.kkphimplayer7.com/20260605/dF3A4SlV/index.m3u8"
+            }
+        ],
+        "episode_states": {
+            "https://v7.kkphimplayer7.com/20260605/w5MC5FiW/index.m3u8": "watching",
+            "https://v7.kkphimplayer7.com/20260605/ZWTl9ApV/index.m3u8": "watched"
+        }
+    }
+}

@@ -7,12 +7,12 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo "======================================="
-echo "   CÀI ĐẶT M3U8 TURBO PROXY PLAYER    "
+echo "      CÀI ĐẶT HOMEFLIX PROXY PLAYER    "
 echo "======================================="
 
 # Đường dẫn cài đặt chuẩn
-INSTALL_DIR="/var/www/m3u8player"
-SERVICE_NAME="m3u8player"
+INSTALL_DIR="/var/www/homeflix"
+SERVICE_NAME="homeflix"
 PORT="6969"  #
 
 # 1. Phát hiện hệ điều hành và trình quản lý gói
@@ -63,7 +63,7 @@ python3 -m venv venv
 echo "[5/6] Cấu hình Systemd Service..."
 cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service
 [Unit]
-Description=M3U8 Proxy Player FastAPI Service
+Description=HomeFlix Proxy Player FastAPI Service
 After=network.target
 
 [Service]
