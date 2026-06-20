@@ -951,9 +951,12 @@ async def get_episode_download_status_api(movie_slug: str, episode_name: str):
 
 @app.get("/media/{movie_slug}/{episode_name}.mp4")
 async def get_media_file_api(movie_slug: str, episode_name: str):
+    logger.info(f"[Media API] Yêu cầu: movie_slug={movie_slug}, episode_name={episode_name}")
     clean_ep = clean_filename(episode_name)
     file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
-    if not os.path.exists(file_path):
+    exists = os.path.exists(file_path)
+    logger.info(f"[Media API] Đường dẫn file: {file_path}, Tồn tại: {exists}")
+    if not exists:
         raise HTTPException(status_code=404, detail="File video chưa sẵn sàng hoặc không tồn tại.")
     return FileResponse(file_path, media_type="video/mp4")
 
