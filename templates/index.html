@@ -1527,7 +1527,6 @@
                     card.setAttribute('tabindex', '0');
                 }
                 
-                const progressText = m.last_watched_episode ? `Đang xem: ${m.last_watched_episode}` : 'Chưa xem';
                 const totalEpsText = m.total_episodes ? `${m.total_episodes} tập` : m.episode_current;
                 
                 let epsHtml = "";
@@ -1557,7 +1556,6 @@
                         <div class="movie-title">${m.name}</div>
                         <div class="movie-meta">
                             <span>Năm: ${m.year} (${totalEpsText})</span>
-                            <span style="color: #ffc107; font-weight: bold;">${progressText}</span>
                         </div>
                         <div class="episodes-container">
                             ${epsHtml}
