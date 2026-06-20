@@ -1407,6 +1407,12 @@
                                             <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                                             PHÁT NGAY
                                         </button>
+                                        <button class="btn-sec" onclick="streamSelectedMovieDirect(\`${safeName}\`, \`${m.slug}\`)" style="border-color: var(--accent-color); color: var(--accent-color);">
+                                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style="margin-right: 0.2rem;">
+                                                <path d="M5 4v16h5v-6h4v6h5V4H5zm12 7H7V6h10v5z"/>
+                                            </svg>
+                                            STREAM
+                                        </button>
                                         <button id="btnSaveDetail" class="${saveBtnClass}" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesList.length})">
                                             <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
                                             <span id="saveBtnText">${saveBtnText}</span>
@@ -1436,6 +1442,19 @@
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
             const targetUrl = savedMovie ? savedMovie.last_watched_url : null;
             playEpisodesListDirect(currentDetailEpisodes, targetUrl);
+        }
+
+        function streamSelectedMovieDirect(name, slug) {
+            const savedMovie = savedMoviesList.find(item => item.slug === slug);
+            let targetUrl = savedMovie ? savedMovie.last_watched_url : null;
+            if (!targetUrl && currentDetailEpisodes && currentDetailEpisodes.length > 0) {
+                targetUrl = currentDetailEpisodes[0].link_m3u8;
+            }
+            if (targetUrl) {
+                window.open(`https://www.hlsplayer.org/play?url=${encodeURIComponent(targetUrl)}`, '_blank');
+            } else {
+                alert("Không tìm thấy link tập phim để stream.");
+            }
         }
 
         // --- SERVER SAVED MOVIES FUNCTIONS ---
@@ -1582,6 +1601,7 @@
                         </div>
                         <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                             <button class="btn-main" style="padding: 0.5rem 1rem; font-size: 0.9rem;" onclick="event.stopPropagation(); playResumeSavedMovie(\`${m.slug}\`)">XEM TIẾP</button>
+                            <button class="btn-sec" style="padding: 0.5rem 1rem; font-size: 0.9rem; margin: 0; border-color: var(--accent-color); color: var(--accent-color);" onclick="event.stopPropagation(); streamResumeSavedMovie(\`${m.slug}\`)">STREAM</button>
                             <button class="btn-sec" style="padding: 0.5rem 1rem; font-size: 0.9rem; margin: 0; border-color: #555;" onclick="event.stopPropagation(); deleteSavedMovie(\`${m.slug}\`)">XÓA</button>
                         </div>
                     </div>
@@ -1623,6 +1643,27 @@
             
             currentMovie = { slug: savedMovie.slug, name: savedMovie.name };
             playEpisodesListDirect(savedMovie.episodes, targetUrl);
+        }
+
+        async function streamResumeSavedMovie(slug) {
+            const savedMovie = savedMoviesList.find(item => item.slug === slug);
+            if (!savedMovie) return;
+            
+            if (!savedMovie.episodes || savedMovie.episodes.length === 0) {
+                await syncEpisodesForMovie(slug);
+                streamResumeSavedMovie(slug);
+                return;
+            }
+            
+            let targetUrl = savedMovie.last_watched_url;
+            
+            if (!targetUrl && savedMovie.episodes.length > 0) {
+                targetUrl = savedMovie.episodes[0].link_m3u8;
+            }
+            
+            if (!targetUrl) return alert("Không tìm thấy tập phim nào.");
+            
+            window.open(`https://www.hlsplayer.org/play?url=${encodeURIComponent(targetUrl)}`, '_blank');
         }
 
         async function loadAndPlayMovie(slug) {
