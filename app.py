@@ -8,6 +8,7 @@ import time
 import asyncio
 import sqlite3
 import re
+import unicodedata
 from datetime import datetime, date
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import PlainTextResponse, FileResponse
@@ -169,7 +170,12 @@ async def delete_movie_from_db(slug):
 
 # Tải xuống MP4 qua ffmpeg
 def clean_filename(name: str) -> str:
-    s = re.sub(r'[\\/*?:"<>|]', "", name)
+    # Bỏ dấu tiếng Việt để tránh lỗi filesystem/locale khi truyền vào subprocess ffmpeg
+    nfkd_form = unicodedata.normalize('NFKD', name)
+    no_accent = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    no_accent = no_accent.replace('đ', 'd').replace('Đ', 'D')
+    
+    s = re.sub(r'[\\/*?:"<>|]', "", no_accent)
     s = re.sub(r'\s+', '-', s).strip()
     if not s:
         s = hashlib.md5(name.encode()).hexdigest()
