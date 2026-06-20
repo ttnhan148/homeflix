@@ -48,6 +48,7 @@ fi
 echo "[1/4] Đang cập nhật mã nguồn mới..."
 cp app.py "$INSTALL_DIR/"
 cp -r templates/index.html "$INSTALL_DIR/templates/"
+cp -r static "$INSTALL_DIR/"
 cp requirements.txt "$INSTALL_DIR/"
 
 # 6. Đảm bảo cấu hình systemd cho homeflix.service tồn tại

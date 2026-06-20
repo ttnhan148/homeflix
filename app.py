@@ -362,7 +362,22 @@ def _load_saved_movies():
         return {}
     try:
         with open(SAVED_MOVIES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            
+            # Tự động sửa lỗi total_episodes dựa trên độ dài thực tế của danh sách tập phim
+            updated = False
+            for slug, movie in data.items():
+                if "episodes" in movie and isinstance(movie["episodes"], list) and len(movie["episodes"]) > 0:
+                    real_len = len(movie["episodes"])
+                    if movie.get("total_episodes") != real_len:
+                        movie["total_episodes"] = real_len
+                        updated = True
+            if updated:
+                # Ghi đè cập nhật lại file
+                with open(SAVED_MOVIES_FILE, "w", encoding="utf-8") as wf:
+                    json.dump(data, wf, ensure_ascii=False, indent=4)
+                    
+            return data
     except Exception:
         return {}
 

@@ -63,6 +63,7 @@ mkdir -p "$INSTALL_DIR/cache"
 echo "[3/6] Đang copy mã nguồn..."
 cp -r app.py requirements.txt "$INSTALL_DIR/" 2>/dev/null || cp app.py requirements.txt "$INSTALL_DIR/"
 cp -r templates/index.html "$INSTALL_DIR/templates/" 2>/dev/null || cp templates/index.html "$INSTALL_DIR/templates/"
+cp -r static "$INSTALL_DIR/" 2>/dev/null || cp -r static "$INSTALL_DIR/"
 
 # Set quyền cho thư mục cache để app có thể ghi
 chown -R root:root "$INSTALL_DIR"
