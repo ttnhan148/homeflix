@@ -1211,6 +1211,7 @@
         }
 
         async function play(url, title, idx) {
+            console.log("[Play] Bắt đầu phát tập:", title, "URL:", url, "currentMovie:", currentMovie);
             currentPlaybackIndex = idx;
             const btns = gridEp.querySelectorAll('.ep-btn');
             btns.forEach((b, i) => b.classList.toggle('active', i === idx));
@@ -1227,6 +1228,7 @@
 
             // Gửi báo cáo tiến trình xem phim về Server (nếu phim đã được lưu)
             if (currentMovie && currentMovie.slug) {
+                console.log("[Play] Gửi tiến trình xem cho:", currentMovie.slug);
                 fetch('/api/saved/progress', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1236,6 +1238,7 @@
                         last_watched_url: url
                     })
                 }).then(res => res.json()).then(data => {
+                    console.log("[Play] Lưu tiến trình xem thành công:", data);
                     if (data.status === 'success') {
                         const sIdx = savedMoviesList.findIndex(item => item.slug === currentMovie.slug);
                         if (sIdx > -1) {
@@ -1256,15 +1259,22 @@
                 }).catch(err => console.error("Error saving progress:", err));
             }
 
-            if (hlsObj) { hlsObj.destroy(); hlsObj = null; }
+            if (hlsObj) {
+                console.log("[Play] Hủy hlsObj cũ");
+                hlsObj.destroy();
+                hlsObj = null;
+            }
 
             // Kiểm tra xem tập phim này đã được tải về đĩa MP4 chưa
             let useMp4 = false;
             let mp4Url = "";
             if (currentMovie && currentMovie.slug) {
                 try {
-                    const statusRes = await fetch(`/api/download/status/${currentMovie.slug}/${encodeURIComponent(title)}`);
+                    const checkUrl = `/api/download/status/${currentMovie.slug}/${encodeURIComponent(title)}`;
+                    console.log("[Play] Kiểm tra trạng thái tải MP4:", checkUrl);
+                    const statusRes = await fetch(checkUrl);
                     const statusData = await statusRes.json();
+                    console.log("[Play] Kết quả trạng thái tải MP4:", statusData);
                     if (statusData.status === "completed") {
                         useMp4 = true;
                         mp4Url = `/media/${currentMovie.slug}/${encodeURIComponent(title)}.mp4`;
@@ -1282,22 +1292,29 @@
                     4: "Không tìm thấy phim hoặc link không hợp lệ."
                 };
                 const msg = errorMap[video.error ? video.error.code : 4] || "Lỗi không xác định.";
+                console.error("[Play] Video Error Event:", video.error, "Msg:", msg);
                 alert(`[Native Player Error]: ${msg}\nTên tập: ${title}`);
                 status.innerHTML = `<span style="color:#ff453a">LỖI: ${msg.toUpperCase()}</span>`;
             };
 
+            console.log("[Play] useMp4 =", useMp4, "mp4Url =", mp4Url);
+
             if (useMp4) {
                 status.textContent = `ĐANG PHÁT MP4 TRỰC TIẾP: ${title.toUpperCase()}`;
                 video.src = mp4Url;
-                video.play().catch(() => {});
+                console.log("[Play] Phát MP4 qua src");
+                video.play().catch(err => console.error("[Play] Lỗi video.play() MP4:", err));
             } else {
                 const proxy = `/proxy/m3u8?url=${encodeURIComponent(url)}`;
                 status.textContent = `ĐANG PHÁT HLS-PROXY: ${title.toUpperCase()}`;
+                console.log("[Play] Phát HLS qua Proxy:", proxy);
 
                 if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    console.log("[Play] Trình duyệt hỗ trợ mpegurl gốc (Native HLS)");
                     video.src = proxy;
-                    video.play().catch(() => {});
-                } else if (Hls.isSupported()) {
+                    video.play().catch(err => console.error("[Play] Lỗi video.play() Native HLS:", err));
+                } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                    console.log("[Play] Sử dụng Hls.js");
                     const isTVMode = document.body.classList.contains('device-tv');
                     hlsObj = new Hls({
                         maxBufferLength: isTVMode ? 20 : 30,
@@ -1307,9 +1324,13 @@
                     });
                     hlsObj.loadSource(proxy);
                     hlsObj.attachMedia(video);
-                    hlsObj.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+                    hlsObj.on(Hls.Events.MANIFEST_PARSED, () => {
+                        console.log("[Play] MANIFEST_PARSED, gọi video.play()");
+                        video.play().catch(err => console.error("[Play] Lỗi video.play() Hls.js:", err));
+                    });
                     
                     hlsObj.on(Hls.Events.ERROR, (event, data) => {
+                        console.warn("[Play] Hls.js error event:", data);
                         if (data.fatal) {
                             let errorMsg = "";
                             switch (data.type) {
@@ -1328,6 +1349,9 @@
                             hlsObj.destroy();
                         }
                     });
+                } else {
+                    console.error("[Play] Trình duyệt không hỗ trợ phát HLS (không có Hls.js và không có Native HLS)");
+                    status.innerHTML = `<span style="color:#ff453a">LỖI: TRÌNH DUYỆT KHÔNG HỖ TRỢ HLS</span>`;
                 }
             }
         }
