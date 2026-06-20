@@ -1,6 +1,6 @@
 # Project Index: M3U8 Turbo Proxy Player (HomeFlix)
 
-Dự án **M3U8 Turbo Proxy Player** là một ứng dụng phát video và proxy các luồng HLS (M3U8) tích hợp cơ chế cache phân đoạn `.ts` thông minh theo phiên làm việc (session), giúp tối ưu hóa băng thông truyền tải và chống nghẽn tải trùng (Single Flight pattern).
+Dự án **M3U8 Turbo Proxy Player** là một ứng dụng phát video và proxy các luồng HLS (M3U8) tích hợp cơ chế cache phân đoạn `.ts` thông minh theo phiên làm việc (session) kết hợp cơ chế tải trước dưới nền (background prefetching), giúp tối ưu hóa băng thông truyền tải, chống nghẽn tải trùng (Single Flight pattern) và mang lại trải nghiệm xem mượt mà, đồng bộ trên nhiều thiết bị.
 
 ---
 
@@ -8,13 +8,13 @@ Dự án **M3U8 Turbo Proxy Player** là một ứng dụng phát video và prox
 
 ```text
 HomeFlix/
-├── app.py                # Điểm khởi chạy FastAPI & chứa logic proxy, cache, API dọn dẹp
+├── app.py                # Điểm khởi chạy FastAPI & chứa logic proxy, cache, prefetch, API dọn dẹp
 ├── requirements.txt      # Các thư viện Python phụ thuộc
 ├── install.sh            # Script tự động cài đặt và cấu hình Systemd trên Linux
 ├── update.sh             # Script tự động cập nhật phiên bản mới trên Linux
 ├── .gitignore            # Cấu hình bỏ qua các file tạm, cache và môi trường ảo
 ├── templates/
-│   └── index.html        # Giao diện xem phim (HTML5 Video + HLS.js, giao diện Dark Theme)
+│   └── index.html        # Giao diện xem phim (HTML5 Video + HLS.js, phông chữ Outfit tối ưu TV/Mobile)
 └── static/
     ├── logo.png          # Logo ứng dụng & Apple Touch Icon
     └── manifest.json     # Cấu hình PWA (Progressive Web App)
@@ -26,11 +26,16 @@ HomeFlix/
 
 ### 1. Backend (`app.py`)
 Sử dụng **FastAPI** không đồng bộ (asyncio) để xử lý các yêu cầu:
-- **Proxy luồng M3U8 (`/proxy/m3u8`)**: Tải danh sách phát M3U8, phân tích cú pháp (Master hoặc Media Playlist) và viết lại (rewrite) tất cả các đường dẫn nội bộ (sub-playlists, segments `.ts`, key giải mã) hướng về phía Proxy của chúng ta.
+- **Proxy luồng M3U8 (`/proxy/m3u8`)**: Tải danh sách phát M3U8, phân tích cấu trúc HLS và viết lại (rewrite) tất cả các đường dẫn nội bộ (sub-playlists, segments `.ts`, key giải mã) hướng về phía Proxy của chúng ta. Đồng thời, tự động khởi chạy một tác vụ ngầm (background task) để **tải trước toàn bộ các segment và key giải mã** của tập phim đó về cache.
+- **Tải trước dưới nền (Background Prefetching)**:
+  - Giới hạn tối đa tải song song `PREFETCH_CONCURRENCY = 4` qua `asyncio.Semaphore` để tránh làm nghẽn CPU/băng thông của máy chủ.
+  - Tự động ưu tiên tải trước Key giải mã trước khi tải các segment `.ts`.
+  - Tích hợp cơ chế Single Flight, không tải trùng các segment đang được người dùng thật tải trực tiếp.
 - **Proxy đoạn TS (`/proxy/ts`)**:
   - Quản lý cache cục bộ tại thư mục `/cache/{session_id}/`.
   - **Single Flight Lock**: Khi nhiều yêu cầu cùng tải chung một segment `.ts`, hệ thống chỉ thực hiện 1 luồng tải từ nguồn chính và phân phối (Stream) tới các luồng khác đang đợi.
   - **Pass-through Stream**: Vừa tải từ nguồn vừa stream trực tiếp dữ liệu cho Client mà không cần đợi tải xong hoàn chỉnh.
+  - **Truyền lỗi minh bạch**: Khi tải thất bại hoặc máy chủ nguồn trả về mã lỗi khác 200, hệ thống dọn dẹp các tệp tải dở dang (`.part`) và phản hồi lỗi **502 Bad Gateway** về phía client thay vì trả về response trống.
 - **Quản lý & Dọn dẹp Cache**:
   - Tự động chạy tác vụ ngầm định kỳ mỗi giờ để dọn dẹp cache quá hạn (> 6 giờ).
   - Giới hạn tổng dung lượng cache tối đa 10GB (nếu vượt quá sẽ xóa các tệp cũ nhất trước).

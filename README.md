@@ -1,15 +1,15 @@
 # 🎬 HomeFlix: M3U8 Turbo Proxy Player
 
-Dự án **M3U8 Turbo Proxy Player (HomeFlix)** là một ứng dụng phát video và proxy các luồng HLS (M3U8) tích hợp cơ chế cache phân đoạn `.ts` thông minh theo phiên làm việc (session) và cache playlist M3U8. Hệ thống giúp tối ưu hóa băng thông truyền tải, chống nghẽn tải trùng (Single Flight pattern) và vượt tường lửa/hạn chế anti-leech từ máy chủ nguồn.
+Dự án **M3U8 Turbo Proxy Player (HomeFlix)** là một ứng dụng phát video và proxy các luồng HLS (M3U8) tích hợp cơ chế cache phân đoạn `.ts` thông minh theo phiên làm việc (session) và tự động tải trước dưới nền (background prefetching). Hệ thống giúp tối ưu hóa băng thông truyền tải, chống nghẽn tải trùng (Single Flight pattern) và xem video mượt mà, ổn định khi đổi thiết bị (từ điện thoại sang Smart TV/máy chiếu).
 
 ---
 
 ## ⚙️ Tính Năng Nổi Bật
 
 - **Proxy & Rewrite M3U8/TS**: Tải danh sách phát, phân tích cú pháp và viết lại tất cả đường dẫn nội bộ (sub-playlists, key giải mã, segment `.ts`) hướng về Proxy Server.
+- **Tải trước dưới nền (Background Prefetching)**: Tự động phát hiện và tải trước toàn bộ segment `.ts` và Key giải mã (nếu có) của tập phim với hàng chờ song song `PREFETCH_CONCURRENCY = 4` để tối ưu hóa mượt mà cho trải nghiệm xem tiếp theo.
 - **Single Flight Lock**: Khi nhiều yêu cầu cùng tải chung một segment `.ts`, hệ thống chỉ tải 1 luồng duy nhất từ nguồn chính và phân phối trực tiếp tới các luồng khác đang đợi.
 - **Pass-through Stream**: Vừa tải từ nguồn vừa truyền dữ liệu trực tiếp cho Client mà không cần đợi tải xong hoàn chỉnh.
-- **Playlist Cache (VOD)**: Cache danh sách phát M3U8 trong vòng 60 phút giúp nhiều thiết bị khác nhau mở cùng 1 bộ phim sử dụng chung 1 tập hợp Token đã xác thực thành công, tránh bị từ chối truy cập (anti-leech).
 - **Tự động Dọn dẹp Cache**: Cơ chế dọn dẹp chạy ngầm định kỳ để duy trì tổng dung lượng cache dưới 10GB và xóa sạch các session cũ quá 6 giờ.
 - **Giao diện Modern & Cinema (Outfit Font)**: Giao diện tối hiện đại, đồng bộ phông chữ Outfit (tương tự Netflix Sans), tối ưu hóa riêng cho Smart TV/Máy chiếu (10-foot UI với Remote D-Pad) và Điện thoại di động.
 
