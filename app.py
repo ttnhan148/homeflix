@@ -114,10 +114,10 @@ async def _prefetch_one(target_url: str, sid: str):
 
         event = asyncio.Event()
         download_locks[lock_id] = event
-
         try:
             logger.info(f"[Prefetch] Tải: {target_url}")
-            async with client.stream("GET", target_url) as resp:
+            headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+            async with client.stream("GET", target_url, headers=headers) as resp:
                 if resp.status_code != 200:
                     raise httpx.HTTPStatusError(
                         f"Origin trả {resp.status_code}", request=resp.request, response=resp
@@ -251,7 +251,8 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
 
 async def fetch_and_cache_full(url: str, cache_path: str, part_path: str, event: asyncio.Event) -> bytes:
     try:
-        async with client.stream("GET", url) as resp:
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+        async with client.stream("GET", url, headers=headers) as resp:
             if resp.status_code != 200:
                 event.set()
                 raise HTTPException(
