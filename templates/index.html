@@ -894,12 +894,18 @@
                     </div>
                 </div>
                 <textarea id="m3u8InputRaw" placeholder="Nhấp vào đây để dán link M3U8..." style="height: 40px; transition: var(--transition);"></textarea>
-                <div id="manualInputFooter" style="display: none; animation: netflixFadeIn 0.3s ease-out; margin-top: 0.5rem;">
-                    <button class="btn-main" id="btnMainPlay" style="width: 100%;">
+                <div id="manualInputFooter" style="display: none; animation: netflixFadeIn 0.3s ease-out; margin-top: 0.5rem; gap: 0.5rem;">
+                    <button class="btn-main" id="btnMainPlay" style="flex: 1;">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M8 5v14l11-7z" />
                         </svg>
                         PHÁT LINK
+                    </button>
+                    <button class="btn-sec" id="btnMainStream" style="flex: 1;" onclick="streamManualLink()">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style="margin-right: 0.35rem;">
+                            <path d="M5 4v16h5v-6h4v6h5V4H5zm12 7H7V6h10v5z"/>
+                        </svg>
+                        STREAM HLS
                     </button>
                 </div>
             </div>
@@ -932,12 +938,20 @@
         <div id="globalPlayerContainer" style="display: none; flex-direction: column; gap: 1.25rem; width: 100%; animation: netflixFadeIn 0.5s ease-out; padding-top: 0.5rem;">
             <!-- Control Row -->
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <button class="btn-sec" onclick="exitPlayer()" style="padding: 0.5rem 0.8rem; font-size: 0.85rem; gap: 0.3rem;">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                    </svg>
-                    Quay lại
-                </button>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn-sec" onclick="exitPlayer()" style="padding: 0.5rem 0.8rem; font-size: 0.85rem; gap: 0.3rem;">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                        </svg>
+                        Quay lại
+                    </button>
+                    <button class="btn-sec" id="btnStreamCurrent" style="padding: 0.5rem 0.8rem; font-size: 0.85rem; gap: 0.3rem;" onclick="streamCurrentEpisode()">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" style="margin-right: 0.2rem;">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                        </svg>
+                        Mở HLS Player
+                    </button>
+                </div>
                 <button id="btnNextEpisode" class="btn-main" style="display: none; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 700; gap: 0.35rem;" onclick="playNextEpisode()">
                     Tập tiếp theo
                     <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
@@ -984,6 +998,7 @@
         // Theo dõi danh sách tập đang phát và vị trí hiện tại
         let playbackEpisodes = [];
         let currentPlaybackIndex = -1;
+        let currentPlaybackUrl = "";
 
         // --- 1. DYNAMIC DEVICE DETECTION ---
         function detectDevice() {
@@ -1054,7 +1069,7 @@
         function expandManualInput() {
             inputArea.style.height = '120px';
             inputHeader.style.display = 'flex';
-            inputFooter.style.display = 'block';
+            inputFooter.style.display = 'flex';
         }
 
         function collapseManualInput(e) {
@@ -1062,6 +1077,28 @@
             inputArea.style.height = '40px';
             inputHeader.style.display = 'none';
             inputFooter.style.display = 'none';
+        }
+
+        function streamManualLink() {
+            const text = inputArea.value.trim();
+            const regex = /(https?:\/\/[^\s|]+\.m3u8[^\s|]*)/i;
+            const match = text.match(regex);
+            if (match) {
+                const url = match[0];
+                const proxyUrl = `${window.location.origin}/proxy/m3u8?url=${encodeURIComponent(url)}`;
+                window.open(`https://www.hlsplayer.org/play?url=${encodeURIComponent(proxyUrl)}`, '_blank');
+            } else {
+                alert("Vui lòng dán link M3U8 hợp lệ trước.");
+            }
+        }
+
+        function streamCurrentEpisode() {
+            if (currentPlaybackUrl) {
+                const proxyUrl = `${window.location.origin}/proxy/m3u8?url=${encodeURIComponent(currentPlaybackUrl)}`;
+                window.open(`https://www.hlsplayer.org/play?url=${encodeURIComponent(proxyUrl)}`, '_blank');
+            } else {
+                alert("Không có video đang phát.");
+            }
         }
 
         inputArea.addEventListener('focus', expandManualInput);
@@ -1172,6 +1209,7 @@
 
         function play(url, title, idx) {
             currentPlaybackIndex = idx;
+            currentPlaybackUrl = url;
             const btns = gridEp.querySelectorAll('.ep-btn');
             btns.forEach((b, i) => b.classList.toggle('active', i === idx));
 
