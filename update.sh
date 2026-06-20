@@ -15,11 +15,6 @@ echo "======================================="
 echo "      CẬP NHẬT HOMEFLIX PROXY PLAYER   "
 echo "======================================="
 
-# 1. Hỗ trợ di chuyển thư mục cũ nếu tồn tại
-if [ -d "$OLD_INSTALL_DIR" ] && [ ! -d "$INSTALL_DIR" ]; then
-    echo "Đang di chuyển thư mục m3u8player cũ sang $INSTALL_DIR..."
-    mv "$OLD_INSTALL_DIR" "$INSTALL_DIR"
-fi
 
 # 2. Dừng và gỡ bỏ service m3u8player cũ nếu đang chạy
 if systemctl is-active --quiet "$OLD_SERVICE_NAME"; then

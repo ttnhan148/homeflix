@@ -54,11 +54,6 @@ if [ -f "/etc/systemd/system/${OLD_SERVICE_NAME}.service" ]; then
     rm -f "/etc/systemd/system/${OLD_SERVICE_NAME}.service"
 fi
 
-# Di chuyển thư mục cũ nếu có dữ liệu để giữ lại cache/tiến độ xem phim
-if [ -d "$OLD_INSTALL_DIR" ] && [ ! -d "$INSTALL_DIR" ]; then
-    echo "Đang di chuyển thư mục $OLD_INSTALL_DIR cũ sang $INSTALL_DIR..."
-    mv "$OLD_INSTALL_DIR" "$INSTALL_DIR"
-fi
 
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/templates"
