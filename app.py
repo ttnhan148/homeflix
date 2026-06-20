@@ -597,9 +597,8 @@ client = httpx.AsyncClient(timeout=httpx.Timeout(10.0), follow_redirects=True)
 
 def make_proxy_url(request: Request, path: str, target_url: str, sid: str = None) -> str:
     """Tạo URL đi qua proxy của chúng ta"""
-    proxy_base = str(request.base_url).rstrip("/")
     encoded_target = urllib.parse.quote(target_url, safe="")
-    res = f"{proxy_base}{path}?url={encoded_target}"
+    res = f"{path}?url={encoded_target}"
     if sid:
         res += f"&sid={sid}"
     return res
