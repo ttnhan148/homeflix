@@ -7,7 +7,7 @@ import aiofiles
 import shutil
 import time
 import asyncio
-from fastapi import FastAPI, Request, BackgroundTasks, Response
+from fastapi import FastAPI, Request, BackgroundTasks, Response, HTTPException
 from fastapi.responses import StreamingResponse, PlainTextResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,13 +26,12 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 MAX_CACHE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB
 MAX_CACHE_AGE = 6 * 60 * 60              # 6 giờ (giây)
-PLAYLIST_CACHE_TTL = 3600                # 60 phút (giây)
-PLAYLIST_CACHE_DIR = os.path.join(CACHE_DIR, "_playlists")
+
+PREFETCH_CONCURRENCY = 4
+prefetch_semaphore = asyncio.Semaphore(PREFETCH_CONCURRENCY)
 
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR, exist_ok=True)
-if not os.path.exists(PLAYLIST_CACHE_DIR):
-    os.makedirs(PLAYLIST_CACHE_DIR, exist_ok=True)
 
 def _cleanup_disk():
     now = time.time()
@@ -43,16 +42,6 @@ def _cleanup_disk():
     for item in os.listdir(CACHE_DIR):
         item_path = os.path.join(CACHE_DIR, item)
         if os.path.isdir(item_path):
-            if item == "_playlists":
-                for f in os.listdir(item_path):
-                    fpath = os.path.join(item_path, f)
-                    if os.path.isfile(fpath):
-                        fstats = os.stat(fpath)
-                        if now - fstats.st_mtime > PLAYLIST_CACHE_TTL:
-                            try: os.remove(fpath)
-                            except: pass
-                continue
-
             stats = os.stat(item_path)
             if now - stats.st_mtime > MAX_CACHE_AGE:
                 try:
@@ -102,6 +91,66 @@ async def prune_cache():
             
         await asyncio.sleep(3600)  # Chạy mỗi giờ một lần
 
+async def _prefetch_one(target_url: str, sid: str):
+    session_dir = os.path.join(CACHE_DIR, sid)
+    if not os.path.exists(session_dir):
+        os.makedirs(session_dir, exist_ok=True)
+
+    url_hash = hashlib.md5(target_url.encode()).hexdigest()
+    cache_path = os.path.join(session_dir, f"{url_hash}.ts")
+    part_path = os.path.join(session_dir, f"{url_hash}.ts.part")
+    lock_id = f"{sid}_{url_hash}"
+
+    if os.path.exists(cache_path):
+        return
+
+    if lock_id in download_locks:
+        return
+
+    async with prefetch_semaphore:
+        # Re-check to avoid race condition
+        if os.path.exists(cache_path) or lock_id in download_locks:
+            return
+
+        event = asyncio.Event()
+        download_locks[lock_id] = event
+
+        try:
+            logger.info(f"[Prefetch] Tải: {target_url}")
+            async with client.stream("GET", target_url) as resp:
+                if resp.status_code != 200:
+                    raise httpx.HTTPStatusError(
+                        f"Origin trả {resp.status_code}", request=resp.request, response=resp
+                    )
+
+                async with aiofiles.open(part_path, "wb") as f:
+                    async for chunk in resp.aiter_bytes():
+                        await f.write(chunk)
+
+                if os.path.exists(part_path):
+                    os.rename(part_path, cache_path)
+            logger.info(f"[Prefetch] Hoàn thành: {target_url}")
+        except Exception as e:
+            logger.warning(f"[Prefetch] Thất bại cho {target_url}: {e}")
+            if os.path.exists(part_path):
+                try: os.remove(part_path)
+                except Exception: pass
+        finally:
+            event.set()
+            if lock_id in download_locks:
+                del download_locks[lock_id]
+
+async def prefetch_episode(segment_urls: list[str], key_url: str | None, sid: str):
+    if key_url:
+        logger.info(f"[Prefetch] Bắt đầu tải Key giải mã trước: {key_url}")
+        await _prefetch_one(key_url, sid)
+
+    if segment_urls:
+        logger.info(f"[Prefetch] Bắt đầu tải {len(segment_urls)} segment của tập phim...")
+        tasks = [asyncio.create_task(_prefetch_one(url, sid)) for url in segment_urls]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info(f"[Prefetch] Hoàn thành toàn bộ prefetch cho tập phim: {sid}")
+
 app = FastAPI(title="HomeFlix Proxy Player")
 
 # Phục vụ các file tĩnh (manifest, icons)
@@ -147,23 +196,6 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
     """Proxy phân tích m3u8 và viết lại các URL bên trong"""
     if not sid:
         sid = hashlib.md5(url.encode()).hexdigest()
-        
-    url_hash = hashlib.md5(url.encode()).hexdigest()
-    playlist_cache_path = os.path.join(PLAYLIST_CACHE_DIR, f"{url_hash}.m3u8")
-    
-    if os.path.exists(playlist_cache_path):
-        age = time.time() - os.path.getmtime(playlist_cache_path)
-        if age < PLAYLIST_CACHE_TTL:
-            try:
-                async with aiofiles.open(playlist_cache_path, "r", encoding="utf-8") as f:
-                    cached_text = await f.read()
-                return PlainTextResponse(
-                    cached_text,
-                    media_type="application/vnd.apple.mpegurl",
-                    headers={"Cache-Control": "no-cache", "X-Playlist-Cache": "HIT"}
-                )
-            except Exception as e:
-                logger.error(f"Error reading playlist cache: {e}")
 
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
@@ -190,26 +222,27 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
                         
         # Phân nhánh 2: Nếu là luồng MEDIA
         else:
+            original_segment_urls = []
+            original_key_url = None
+
             for segment in playlist.segments:
                 abs_uri = segment.absolute_uri
+                original_segment_urls.append(abs_uri)
                 segment.uri = make_proxy_url(request, "/proxy/ts", abs_uri, sid)
                 
             for key in playlist.keys:
                 if key and key.uri:
                     abs_uri = key.absolute_uri
+                    original_key_url = abs_uri
                     key.uri = make_proxy_url(request, "/proxy/ts", abs_uri, sid)
+            
+            # Khởi chạy prefetch toàn bộ tập phim dưới nền
+            asyncio.create_task(prefetch_episode(original_segment_urls, original_key_url, sid))
                     
-        final_text = playlist.dumps()
-        try:
-            async with aiofiles.open(playlist_cache_path, "w", encoding="utf-8") as f:
-                await f.write(final_text)
-        except Exception as e:
-            logger.error(f"Error writing playlist cache: {e}")
-
         return PlainTextResponse(
-            final_text, 
+            playlist.dumps(), 
             media_type="application/vnd.apple.mpegurl",
-            headers={"Cache-Control": "no-cache", "X-Playlist-Cache": "MISS"}
+            headers={"Cache-Control": "no-cache"}
         )
         
     except Exception as e:
@@ -250,8 +283,9 @@ async def proxy_ts(request: Request, url: str, sid: str = "default"):
                     if os.path.exists(part_path):
                         try: os.remove(part_path)
                         except: pass
-                    raise httpx.HTTPStatusError(
-                        f"Origin trả {resp.status_code}", request=resp.request, response=resp
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Origin trả status code {resp.status_code} cho segment: {url}"
                     )
 
                 async with aiofiles.open(part_path, "wb") as f:
@@ -263,6 +297,9 @@ async def proxy_ts(request: Request, url: str, sid: str = "default"):
                 if os.path.exists(part_path):
                     os.rename(part_path, cache_path)
                 event.set()
+
+        except HTTPException as he:
+            raise he
 
         except asyncio.CancelledError:
             # Khách nhấn tua phim hoặc tắt trình duyệt, hủy luồng ngay lập tức
@@ -282,7 +319,7 @@ async def proxy_ts(request: Request, url: str, sid: str = "default"):
                     os.remove(part_path)
                 except Exception:
                     pass
-            raise e
+            raise HTTPException(status_code=502, detail=f"Lỗi tải segment từ nguồn: {str(e)}")
             
         finally:
             if lock_id in download_locks:
