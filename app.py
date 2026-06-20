@@ -249,6 +249,44 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
         logger.error(f"Error fetching proxy m3u8 '{url}': {e}")
         return PlainTextResponse(f"Proxy Error: {str(e)}", status_code=500)
 
+async def fetch_and_cache_full(url: str, cache_path: str, part_path: str, event: asyncio.Event) -> bytes:
+    try:
+        async with client.stream("GET", url) as resp:
+            if resp.status_code != 200:
+                event.set()
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Origin trả status code {resp.status_code} cho segment: {url}"
+                )
+            chunks = []
+            async with aiofiles.open(part_path, "wb") as f:
+                async for chunk in resp.aiter_bytes():
+                    await f.write(chunk)
+                    chunks.append(chunk)
+        if os.path.exists(part_path):
+            os.rename(part_path, cache_path)
+        event.set()
+        return b"".join(chunks)
+    except HTTPException as he:
+        event.set()
+        if os.path.exists(part_path):
+            try: os.remove(part_path)
+            except Exception: pass
+        raise he
+    except asyncio.CancelledError:
+        event.set()
+        if os.path.exists(part_path):
+            try: os.remove(part_path)
+            except Exception: pass
+        raise
+    except Exception as e:
+        logger.error(f"Lỗi tải segment: {e}")
+        event.set()
+        if os.path.exists(part_path):
+            try: os.remove(part_path)
+            except Exception: pass
+        raise HTTPException(status_code=502, detail=f"Lỗi tải segment từ nguồn: {str(e)}")
+
 @app.get("/proxy/ts")
 async def proxy_ts(request: Request, url: str, sid: str = "default"):
     """Proxy và cache .ts với cơ chế Pass-through Stream và Part-files theo Session"""
@@ -271,64 +309,22 @@ async def proxy_ts(request: Request, url: str, sid: str = "default"):
         if os.path.exists(cache_path):
             return FileResponse(cache_path, media_type="video/MP2T", headers={"X-Cache": "HIT-QUEUED"})
 
-    # 3. Tạo Lock và mở Stream tải xuống
+    # 3. Tạo Lock và tải xuống
     event = asyncio.Event()
     download_locks[lock_id] = event
-    
-    async def stream_and_cache():
-        try:
-            async with client.stream("GET", url) as resp:
-                if resp.status_code != 200:
-                    event.set()
-                    if os.path.exists(part_path):
-                        try: os.remove(part_path)
-                        except: pass
-                    raise HTTPException(
-                        status_code=502,
-                        detail=f"Origin trả status code {resp.status_code} cho segment: {url}"
-                    )
+    try:
+        data = await fetch_and_cache_full(url, cache_path, part_path, event)
+    finally:
+        if lock_id in download_locks:
+            del download_locks[lock_id]
 
-                async with aiofiles.open(part_path, "wb") as f:
-                    async for chunk in resp.aiter_bytes():
-                        await f.write(chunk)
-                        yield chunk
-                
-                # Ghi xong hoàn chỉnh, đổi tên file part thành ts
-                if os.path.exists(part_path):
-                    os.rename(part_path, cache_path)
-                event.set()
-
-        except HTTPException as he:
-            raise he
-
-        except asyncio.CancelledError:
-            # Khách nhấn tua phim hoặc tắt trình duyệt, hủy luồng ngay lập tức
-            event.set()
-            if os.path.exists(part_path):
-                try:
-                    os.remove(part_path)
-                except Exception:
-                    pass
-            raise
-
-        except Exception as e:
-            logger.error(f"Lỗi tải segment: {e}")
-            event.set()
-            if os.path.exists(part_path):
-                try:
-                    os.remove(part_path)
-                except Exception:
-                    pass
-            raise HTTPException(status_code=502, detail=f"Lỗi tải segment từ nguồn: {str(e)}")
-            
-        finally:
-            if lock_id in download_locks:
-                del download_locks[lock_id]
-
-    return StreamingResponse(
-        stream_and_cache(),
+    return Response(
+        content=data,
         media_type="video/MP2T",
-        headers={"X-Cache": "MISS"}
+        headers={
+            "X-Cache": "MISS",
+            "Content-Length": str(len(data))
+        }
     )
 
 def _calculate_cache_size():
