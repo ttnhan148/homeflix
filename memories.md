@@ -95,27 +95,21 @@ Script sẽ tự động:
 - Tự động cấu hình mở cổng tường lửa `6969`.
 
 ### 🔄 Hướng dẫn Cập nhật Phiên bản (trên Ubuntu/Linux)
-Khi bạn cập nhật code mới cho ứng dụng đang chạy trên Ubuntu, hãy thực hiện các bước sau:
+Khi bạn cập nhật code mới cho ứng dụng đang chạy trên Ubuntu, hãy chạy tập lệnh cập nhật tự động có sẵn để đơn giản hóa quá trình:
 
-1. **Chuẩn bị mã nguồn mới**: Tải hoặc copy các file mới (`app.py`, `templates/index.html`, `requirements.txt`) lên server.
-2. **Sao chép các file vào thư mục chạy dịch vụ**:
+1. **Chuẩn bị mã nguồn mới**: Tải hoặc copy các tệp mới (`app.py`, `templates/index.html`, `requirements.txt`, `update.sh`) vào thư mục tạm thời trên server.
+2. **Cấp quyền và chạy script cập nhật**:
    ```bash
-   # Di chuyển vào thư mục chứa code mới cập nhật, sau đó copy đè vào thư mục cài đặt
-   sudo cp app.py /var/www/homeflix/
-   sudo cp -r templates/index.html /var/www/homeflix/templates/
-   sudo cp requirements.txt /var/www/homeflix/
+   sudo chmod +x update.sh
+   sudo ./update.sh
    ```
-3. **Cập nhật các thư viện mới (nếu có)**:
-   Nếu file `requirements.txt` có sự thay đổi (thêm thư viện mới), hãy cài đặt bổ sung vào môi trường ảo (virtual environment):
-   ```bash
-   sudo /var/www/homeflix/venv/bin/pip install -r /var/www/homeflix/requirements.txt
-   ```
-4. **Khởi động lại Dịch vụ Systemd**:
-   Khởi động lại dịch vụ để FastAPI nhận code mới:
-   ```bash
-   sudo systemctl restart homeflix
-   ```
-5. **Kiểm tra trạng thái hoạt động**:
+   Tập lệnh `update.sh` sẽ tự động:
+   - Dừng dịch vụ `m3u8player` cũ (nếu có).
+   - Sao chép các tệp mã nguồn mới vào thư mục `/var/www/homeflix`.
+   - Cài đặt/cập nhật các dependencies mới vào môi trường ảo `venv`.
+   - Cấu hình và khởi chạy lại dịch vụ với systemd dưới tên dịch vụ mới là `homeflix.service`.
+
+3. **Kiểm tra logs và trạng thái dịch vụ**:
    ```bash
    # Kiểm tra trạng thái dịch vụ
    sudo systemctl status homeflix
