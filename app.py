@@ -26,9 +26,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 MAX_CACHE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB
 MAX_CACHE_AGE = 6 * 60 * 60              # 6 giờ (giây)
+PLAYLIST_CACHE_TTL = 3600                # 60 phút (giây)
+PLAYLIST_CACHE_DIR = os.path.join(CACHE_DIR, "_playlists")
 
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR, exist_ok=True)
+if not os.path.exists(PLAYLIST_CACHE_DIR):
+    os.makedirs(PLAYLIST_CACHE_DIR, exist_ok=True)
 
 def _cleanup_disk():
     now = time.time()
@@ -39,6 +43,16 @@ def _cleanup_disk():
     for item in os.listdir(CACHE_DIR):
         item_path = os.path.join(CACHE_DIR, item)
         if os.path.isdir(item_path):
+            if item == "_playlists":
+                for f in os.listdir(item_path):
+                    fpath = os.path.join(item_path, f)
+                    if os.path.isfile(fpath):
+                        fstats = os.stat(fpath)
+                        if now - fstats.st_mtime > PLAYLIST_CACHE_TTL:
+                            try: os.remove(fpath)
+                            except: pass
+                continue
+
             stats = os.stat(item_path)
             if now - stats.st_mtime > MAX_CACHE_AGE:
                 try:
@@ -133,6 +147,24 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
     """Proxy phân tích m3u8 và viết lại các URL bên trong"""
     if not sid:
         sid = hashlib.md5(url.encode()).hexdigest()
+        
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    playlist_cache_path = os.path.join(PLAYLIST_CACHE_DIR, f"{url_hash}.m3u8")
+    
+    if os.path.exists(playlist_cache_path):
+        age = time.time() - os.path.getmtime(playlist_cache_path)
+        if age < PLAYLIST_CACHE_TTL:
+            try:
+                async with aiofiles.open(playlist_cache_path, "r", encoding="utf-8") as f:
+                    cached_text = await f.read()
+                return PlainTextResponse(
+                    cached_text,
+                    media_type="application/vnd.apple.mpegurl",
+                    headers={"Cache-Control": "no-cache", "X-Playlist-Cache": "HIT"}
+                )
+            except Exception as e:
+                logger.error(f"Error reading playlist cache: {e}")
+
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
         response = await client.get(url, headers=headers, follow_redirects=True)
@@ -167,10 +199,17 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
                     abs_uri = key.absolute_uri
                     key.uri = make_proxy_url(request, "/proxy/ts", abs_uri, sid)
                     
+        final_text = playlist.dumps()
+        try:
+            async with aiofiles.open(playlist_cache_path, "w", encoding="utf-8") as f:
+                await f.write(final_text)
+        except Exception as e:
+            logger.error(f"Error writing playlist cache: {e}")
+
         return PlainTextResponse(
-            playlist.dumps(), 
+            final_text, 
             media_type="application/vnd.apple.mpegurl",
-            headers={"Cache-Control": "no-cache"}
+            headers={"Cache-Control": "no-cache", "X-Playlist-Cache": "MISS"}
         )
         
     except Exception as e:
@@ -208,8 +247,12 @@ async def proxy_ts(request: Request, url: str, sid: str = "default"):
             async with client.stream("GET", url) as resp:
                 if resp.status_code != 200:
                     event.set()
-                    yield b""
-                    return
+                    if os.path.exists(part_path):
+                        try: os.remove(part_path)
+                        except: pass
+                    raise httpx.HTTPStatusError(
+                        f"Origin trả {resp.status_code}", request=resp.request, response=resp
+                    )
 
                 async with aiofiles.open(part_path, "wb") as f:
                     async for chunk in resp.aiter_bytes():
@@ -239,7 +282,7 @@ async def proxy_ts(request: Request, url: str, sid: str = "default"):
                     os.remove(part_path)
                 except Exception:
                     pass
-            yield b""
+            raise e
             
         finally:
             if lock_id in download_locks:
