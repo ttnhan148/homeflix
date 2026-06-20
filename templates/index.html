@@ -1119,81 +1119,53 @@
                         const clean = line.replace(url, '').replace('|', '').trim();
                         title = clean || `Tập ${String(episodes.length + 1).padStart(2, '0')}`;
                     }
-                    episodes.push({ title, url });
+                    episodes.push({ name: title, link_m3u8: url });
                 }
             });
 
             if (episodes.length > 0) {
-                playbackEpisodes = episodes;
-                appHeader.style.display = 'none';
-                appTabsNav.style.display = 'none';
-                document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
-
-                globalPlayer.style.display = 'flex';
-                
-                gridEp.innerHTML = '';
-                episodes.forEach((ep, i) => {
-                    const btn = document.createElement('button');
-                    btn.className = 'ep-btn';
-                    btn.textContent = ep.title;
-                    btn.onclick = () => play(ep.url, ep.title, i);
-                    gridEp.appendChild(btn);
-                });
-                sectionEp.style.display = 'flex';
-                play(episodes[0].url, episodes[0].title, 0);
-                setTimeout(initTabbing, 100);
+                playEpisodesListDirect(episodes, episodes[0].link_m3u8);
             } else {
                 status.innerHTML = '<span style="color:#E50914">KHÔNG TÌM THẤY VIDEO</span>';
             }
         }
 
-        // Tải tập phim với tuỳ chọn vị trí phát
-        function executeFromDetail(text, lastWatchedUrl) {
-            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            const episodes = [];
-            const regex = /(https?:\/\/[^\s|]+\.m3u8[^\s|]*)/i;
+        // Tải tập phim với tuỳ chọn vị trí phát bằng mảng tập phim đã chuẩn hóa
+        function playEpisodesListDirect(episodesArray, targetUrlOrIdx) {
+            if (!episodesArray || episodesArray.length === 0) {
+                status.innerHTML = '<span style="color:#E50914">KHÔNG TÌM THẤY VIDEO</span>';
+                return;
+            }
+            
+            playbackEpisodes = episodesArray;
+            
+            appHeader.style.display = 'none';
+            appTabsNav.style.display = 'none';
+            document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
 
-            lines.forEach(line => {
-                const match = line.match(regex);
-                if (match) {
-                    const url = match[0];
-                    let title = line.includes('|') ? line.split('|')[0].trim() : "";
-                    if (!title) {
-                        const clean = line.replace(url, '').replace('|', '').trim();
-                        title = clean || `Tập ${String(episodes.length + 1).padStart(2, '0')}`;
-                    }
-                    episodes.push({ title, url });
+            globalPlayer.style.display = 'flex';
+            
+            gridEp.innerHTML = '';
+            let playIdx = 0;
+            
+            episodesArray.forEach((ep, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'ep-btn';
+                btn.textContent = ep.name;
+                btn.onclick = () => play(ep.link_m3u8, ep.name, i);
+                gridEp.appendChild(btn);
+                
+                if (typeof targetUrlOrIdx === 'number') {
+                    if (i === targetUrlOrIdx) playIdx = i;
+                } else if (targetUrlOrIdx) {
+                    if (ep.link_m3u8 === targetUrlOrIdx) playIdx = i;
                 }
             });
-
-            if (episodes.length > 0) {
-                playbackEpisodes = episodes;
-                appHeader.style.display = 'none';
-                appTabsNav.style.display = 'none';
-                document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
-
-                globalPlayer.style.display = 'flex';
-                
-                gridEp.innerHTML = '';
-                let playIdx = 0;
-                
-                episodes.forEach((ep, i) => {
-                    const btn = document.createElement('button');
-                    btn.className = 'ep-btn';
-                    btn.textContent = ep.title;
-                    btn.onclick = () => play(ep.url, ep.title, i);
-                    gridEp.appendChild(btn);
-                    
-                    if (lastWatchedUrl && ep.url === lastWatchedUrl) {
-                        playIdx = i;
-                    }
-                });
-                sectionEp.style.display = 'flex';
-                play(episodes[playIdx].url, episodes[playIdx].title, playIdx);
-                setTimeout(initTabbing, 100);
-            } else {
-                status.innerHTML = '<span style="color:#E50914">KHÔNG TÌM THẤY VIDEO</span>';
-            }
+            
+            sectionEp.style.display = 'flex';
+            const startEp = episodesArray[playIdx];
+            play(startEp.link_m3u8, startEp.name, playIdx);
+            setTimeout(initTabbing, 100);
         }
 
         function play(url, title, idx) {
@@ -1230,6 +1202,16 @@
                         if (sIdx > -1) {
                             savedMoviesList[sIdx].last_watched_episode = title;
                             savedMoviesList[sIdx].last_watched_url = url;
+                            // Cập nhật state trực tiếp để render màu sắc động tức thời
+                            if (!savedMoviesList[sIdx].episode_states) {
+                                savedMoviesList[sIdx].episode_states = {};
+                            }
+                            for (let key in savedMoviesList[sIdx].episode_states) {
+                                if (savedMoviesList[sIdx].episode_states[key] === "watching") {
+                                    savedMoviesList[sIdx].episode_states[key] = "watched";
+                                }
+                            }
+                            savedMoviesList[sIdx].episode_states[url] = "watching";
                         }
                     }
                 }).catch(err => console.error("Error saving progress:", err));
@@ -1370,24 +1352,9 @@
                 const res = await fetch(`/api/movie/${slug}`);
                 const data = await res.json();
                 
-                if (data.status && data.movie) {
+                if (data.status === 'success' && data.movie) {
                     const m = data.movie;
-                    const eps = data.episodes || [];
-                    
-                    let formattedEpisodes = "";
-                    let episodesCount = 0;
-                    const episodesList = [];
-                    
-                    const mainServer = eps.find(srv => srv.server_data && srv.server_data.length > 0);
-                    if (mainServer) {
-                        mainServer.server_data.forEach(ep => {
-                            if (ep.link_m3u8) {
-                                episodesList.push({ name: ep.name, link_m3u8: ep.link_m3u8 });
-                                formattedEpisodes += `${ep.name} | ${ep.link_m3u8}\n`;
-                                episodesCount++;
-                            }
-                        });
-                    }
+                    const episodesList = data.episodes || [];
                     currentDetailEpisodes = episodesList;
                     
                     const isSaved = checkIsSaved(m.slug);
@@ -1396,7 +1363,6 @@
                     
                     const safeName = m.name.replace(/`/g, '\\`').replace(/\$/g, '\\$');
                     const safePoster = m.poster_url.replace(/`/g, '\\`').replace(/\$/g, '\\$');
-                    const safeEpText = formattedEpisodes.replace(/`/g, '\\`').replace(/\$/g, '\\$');
                     
                     detailDiv.innerHTML = `
                         <button class="btn-sec" onclick="backToSearchResults()" style="margin-bottom: 1.25rem;">
@@ -1416,11 +1382,11 @@
                                     <div class="detail-description">${m.content || 'Chưa có mô tả cho phim này.'}</div>
                                     
                                     <div class="action-row">
-                                        <button class="btn-main" onclick="playSelectedMovie(\`${safeName}\`, \`${safeEpText}\`, \`${m.slug}\`)">
+                                        <button class="btn-main" onclick="playSelectedMovieDirect(\`${safeName}\`, \`${m.slug}\`)">
                                             <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                                             PHÁT NGAY
                                         </button>
-                                        <button id="btnSaveDetail" class="${saveBtnClass}" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesCount})">
+                                        <button id="btnSaveDetail" class="${saveBtnClass}" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesList.length})">
                                             <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
                                             <span id="saveBtnText">${saveBtnText}</span>
                                         </button>
@@ -1444,11 +1410,11 @@
             setTimeout(initTabbing, 100);
         }
 
-        function playSelectedMovie(name, episodesText, slug) {
+        function playSelectedMovieDirect(name, slug) {
             currentMovie = { slug, name };
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
-            inputArea.value = episodesText;
-            executeFromDetail(episodesText, savedMovie ? savedMovie.last_watched_url : null);
+            const targetUrl = savedMovie ? savedMovie.last_watched_url : null;
+            playEpisodesListDirect(currentDetailEpisodes, targetUrl);
         }
 
         // --- SERVER SAVED MOVIES FUNCTIONS ---
@@ -1524,22 +1490,10 @@
             try {
                 const res = await fetch(`/api/movie/${slug}`);
                 const data = await res.json();
-                if (data.status && data.movie) {
-                    const m = data.movie;
-                    const eps = data.episodes || [];
-                    const episodesList = [];
-                    const mainServer = eps.find(srv => srv.server_data && srv.server_data.length > 0);
-                    if (mainServer) {
-                        mainServer.server_data.forEach(ep => {
-                            if (ep.link_m3u8) {
-                                episodesList.push({ name: ep.name, link_m3u8: ep.link_m3u8 });
-                            }
-                        });
-                    }
-                    
+                if (data.status === 'success' && data.movie) {
                     const saved = savedMoviesList.find(item => item.slug === slug);
                     if (saved) {
-                        saved.episodes = episodesList;
+                        saved.episodes = data.episodes || [];
                         await fetch('/api/saved', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1627,15 +1581,7 @@
             if (!savedMovie || !savedMovie.episodes || savedMovie.episodes.length === 0) return;
             
             currentMovie = { slug: savedMovie.slug, name: savedMovie.name };
-            
-            let formattedEpisodes = "";
-            savedMovie.episodes.forEach(ep => {
-                formattedEpisodes += `${ep.name} | ${ep.link_m3u8}\n`;
-            });
-            
-            const targetEp = savedMovie.episodes[epIdx];
-            inputArea.value = formattedEpisodes;
-            executeFromDetail(formattedEpisodes, targetEp.link_m3u8);
+            playEpisodesListDirect(savedMovie.episodes, epIdx);
         }
 
         async function playResumeSavedMovie(slug) {
@@ -1657,36 +1603,17 @@
             if (!targetUrl) return alert("Không tìm thấy tập phim nào.");
             
             currentMovie = { slug: savedMovie.slug, name: savedMovie.name };
-            
-            let formattedEpisodes = "";
-            savedMovie.episodes.forEach(ep => {
-                formattedEpisodes += `${ep.name} | ${ep.link_m3u8}\n`;
-            });
-            
-            inputArea.value = formattedEpisodes;
-            executeFromDetail(formattedEpisodes, targetUrl);
+            playEpisodesListDirect(savedMovie.episodes, targetUrl);
         }
 
         async function loadAndPlayMovie(slug) {
             try {
                 const res = await fetch(`/api/movie/${slug}`);
                 const data = await res.json();
-                if (data.status && data.movie) {
-                    const m = data.movie;
-                    const eps = data.episodes || [];
-                    let formattedEpisodes = "";
-                    const mainServer = eps.find(srv => srv.server_data && srv.server_data.length > 0);
-                    if (mainServer) {
-                        mainServer.server_data.forEach(ep => {
-                            if (ep.link_m3u8) {
-                                formattedEpisodes += `${ep.name} | ${ep.link_m3u8}\n`;
-                            }
-                        });
-                    }
-                    
+                if (data.status === 'success' && data.movie) {
                     const savedMovie = savedMoviesList.find(item => item.slug === slug);
-                    currentMovie = { slug: m.slug, name: m.name };
-                    executeFromDetail(formattedEpisodes, savedMovie ? savedMovie.last_watched_url : null);
+                    currentMovie = { slug: data.movie.slug, name: data.movie.name };
+                    playEpisodesListDirect(data.episodes, savedMovie ? savedMovie.last_watched_url : null);
                 } else {
                     alert("Không thể tải thông tin phim.");
                 }
@@ -1699,7 +1626,7 @@
             if (playbackEpisodes.length > 1 && currentPlaybackIndex < playbackEpisodes.length - 1) {
                 const nextIdx = currentPlaybackIndex + 1;
                 const nextEp = playbackEpisodes[nextIdx];
-                play(nextEp.url, nextEp.title, nextIdx);
+                play(nextEp.link_m3u8, nextEp.name, nextIdx);
             }
         }
 

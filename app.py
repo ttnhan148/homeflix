@@ -309,12 +309,48 @@ async def search_movies(q: str):
 
 @app.get("/api/movie/{slug}")
 async def get_movie_detail(slug: str):
-    """Proxy lấy thông tin chi tiết phim từ PhimAPI"""
+    """Proxy và chuẩn hóa chi tiết phim để tối ưu hiệu năng client"""
     try:
         url = f"https://phimapi.com/phim/{slug}"
         response = await client.get(url)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        
+        if not data.get("status"):
+            return data
+            
+        movie_raw = data.get("movie", {})
+        # Rút gọn thông tin phim cần thiết
+        movie_clean = {
+            "name": movie_raw.get("name"),
+            "slug": movie_raw.get("slug"),
+            "origin_name": movie_raw.get("origin_name"),
+            "poster_url": movie_raw.get("poster_url"),
+            "year": str(movie_raw.get("year")),
+            "episode_current": movie_raw.get("episode_current"),
+            "time": movie_raw.get("time"),
+            "quality": movie_raw.get("quality"),
+            "lang": movie_raw.get("lang"),
+            "content": movie_raw.get("content")
+        }
+        
+        # Rút gọn danh sách tập phim (chỉ lấy server đầu tiên có dữ liệu)
+        episodes_clean = []
+        raw_eps = data.get("episodes", [])
+        main_server = next((srv for srv in raw_eps if srv.get("server_data")), None)
+        if main_server:
+            for ep in main_server.get("server_data", []):
+                if ep.get("link_m3u8"):
+                    episodes_clean.append({
+                        "name": ep.get("name"),
+                        "link_m3u8": ep.get("link_m3u8")
+                    })
+                    
+        return {
+            "status": "success",
+            "movie": movie_clean,
+            "episodes": episodes_clean
+        }
     except Exception as e:
         logger.error(f"Error getting movie detail '{slug}': {e}")
         return {"status": "error", "message": str(e)}
