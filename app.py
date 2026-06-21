@@ -1026,13 +1026,22 @@ async def _fetch_movies_from_url(url: str) -> list:
         resp = await client.get(url)
         resp.raise_for_status()
         data = resp.json()
-        items = data.get("items", [])
+        
+        cdn_domain = "https://phimimg.com"
+        if isinstance(data, dict):
+            if "data" in data and isinstance(data["data"], dict):
+                cdn_domain = data["data"].get("APP_DOMAIN_CDN_IMAGE", cdn_domain)
+                items = data["data"].get("items", [])
+            else:
+                items = data.get("items", [])
+        else:
+            items = []
         
         movie_list = []
         for item in items:
             p_url = item.get("poster_url", "")
             if p_url and not p_url.startswith("http"):
-                p_url = f"https://phimimg.com/{p_url.lstrip('/')}"
+                p_url = f"{cdn_domain.rstrip('/')}/{p_url.lstrip('/')}"
             
             movie_list.append({
                 "slug": item.get("slug"),
@@ -1048,12 +1057,12 @@ async def _fetch_movies_from_url(url: str) -> list:
 @app.get("/api/recommendations")
 async def get_recommendations_api():
     urls = [
-        "https://phimapi.com/danh-sach/phim-moi-cap-nhat?page=1",
-        "https://phimapi.com/danh-sach/phim-moi-cap-nhat-v2?page=1",
-        "https://phimapi.com/danh-sach/phim-moi-cap-nhat-v3?page=1"
+        "https://phimapi.com/v1/api/danh-sach/phim-le?page=1",
+        "https://phimapi.com/v1/api/danh-sach/phim-chieu-rap?page=1",
+        "https://phimapi.com/v1/api/the-loai/phim-18?sort_field=modified.time&sort_lang=&country=au-my&year="
     ]
     
-    de_xuat, moi_nhat, hot = await asyncio.gather(
+    de_xuat, phim_chieu_rap, hot = await asyncio.gather(
         _fetch_movies_from_url(urls[0]),
         _fetch_movies_from_url(urls[1]),
         _fetch_movies_from_url(urls[2])
@@ -1061,7 +1070,7 @@ async def get_recommendations_api():
     
     return {
         "Đề xuất": de_xuat,
-        "Mới nhất": moi_nhat,
+        "Phim Chiếu Rạp": phim_chieu_rap,
         "Hot": hot
     }
 
