@@ -826,6 +826,51 @@
             100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
 
+        .ep-btn, .saved-ep-btn {
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            position: relative;
+        }
+        .ep-btn {
+            min-width: 140px;
+        }
+        .ep-dl-indicator {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: var(--transition);
+            z-index: 2;
+            color: var(--text-dim);
+        }
+        .ep-dl-indicator:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.15);
+            transform: scale(1.2);
+        }
+        .ep-dl-indicator.completed {
+            color: #2cd054;
+        }
+        .ep-dl-indicator.downloading {
+            animation: ep-dl-spin 1.5s linear infinite;
+            color: #ffc107;
+        }
+        .ep-dl-indicator.pending {
+            color: #ffc107;
+        }
+        .ep-dl-indicator.failed {
+            color: #ff453a;
+        }
+        @keyframes ep-dl-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         /* Responsive styling for Mobile */
         .device-mobile .saved-movie-row {
             flex-direction: column;
@@ -866,49 +911,72 @@
             -webkit-overflow-scrolling: touch;
             align-items: stretch;
         }
+
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background-color: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding-top: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .sticky-header .tabs-nav {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <!-- COMPACT HEADER WITH CACHE STATS -->
-        <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding-bottom: 0.5rem; width: 100%;">
-            <h1>HomeFlix</h1>
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
-                    <span id="cacheLabel" style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Cache: 0 GB / 10 GB</span>
-                    <div style="width: 80px; height: 3px; background: #222; border-radius: 1.5px; overflow: hidden;">
-                        <div id="cacheProgressFill" style="height: 100%; background: var(--accent-color); width: 0%; transition: width 1s ease;"></div>
+        <!-- STICKY HEADER WRAPPER -->
+        <div id="stickyHeader" class="sticky-header">
+            <!-- COMPACT HEADER WITH CACHE STATS -->
+            <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <h1>HomeFlix</h1>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
+                        <span id="cacheLabel" style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Cache: 0 GB / 10 GB</span>
+                        <div style="width: 80px; height: 3px; background: #222; border-radius: 1.5px; overflow: hidden;">
+                            <div id="cacheProgressFill" style="height: 100%; background: var(--accent-color); width: 0%; transition: width 1s ease;"></div>
+                        </div>
                     </div>
+                    <button id="btnClearStorage" title="Xóa toàn bộ Cache" style="background: transparent; border: 1px solid var(--glass-border); color: #ff453a; padding: 0.4rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition);">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                    </button>
                 </div>
-                <button id="btnClearStorage" title="Xóa toàn bộ Cache" style="background: transparent; border: 1px solid var(--glass-border); color: #ff453a; padding: 0.4rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition);">
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </header>
+
+            <!-- 3 OPTIONS MENU -->
+            <div class="tabs-nav" id="appTabsNav">
+                <button class="tab-btn active" id="tabBtnSearch" onclick="switchTab('search-tab')">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
+                    Tìm Kiếm
+                </button>
+                <button class="tab-btn" id="tabBtnSaved" onclick="switchTab('saved-tab')">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                    </svg>
+                    Đã Lưu
+                </button>
+                <button class="tab-btn" id="tabBtnPlayer" onclick="switchTab('player-tab')">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                    </svg>
+                    Nhập URL
                 </button>
             </div>
-        </header>
-
-        <!-- 3 OPTIONS MENU -->
-        <div class="tabs-nav" id="appTabsNav">
-            <button class="tab-btn active" id="tabBtnSearch" onclick="switchTab('search-tab')">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
-                Tìm Kiếm
-            </button>
-            <button class="tab-btn" id="tabBtnSaved" onclick="switchTab('saved-tab')">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
-                </svg>
-                Đã Lưu
-            </button>
-            <button class="tab-btn" id="tabBtnPlayer" onclick="switchTab('player-tab')">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                </svg>
-                Nhập URL
-            </button>
         </div>
 
         <!-- TAB CONTENT 1: MANUAL LINK -->
@@ -1004,6 +1072,7 @@
         const globalPlayer = document.getElementById('globalPlayerContainer');
         const appHeader = document.getElementById('appHeader');
         const appTabsNav = document.getElementById('appTabsNav');
+        const stickyHeader = document.getElementById('stickyHeader');
         let hlsObj = null;
 
         // Trạng thái phim đang phát hiện tại (dùng để lưu tiến độ xem)
@@ -1015,6 +1084,103 @@
         // Theo dõi danh sách tập đang phát và vị trí hiện tại
         let playbackEpisodes = [];
         let currentPlaybackIndex = -1;
+
+        let downloadStatuses = {};
+
+        async function fetchDownloadStatuses() {
+            try {
+                const res = await fetch('/api/download/status');
+                downloadStatuses = await res.json();
+                updateDownloadIndicatorsUI();
+            } catch (e) {
+                console.error("Lỗi lấy trạng thái tải phim:", e);
+            }
+        }
+
+        function updateDownloadIndicatorsUI() {
+            document.querySelectorAll('.ep-dl-indicator').forEach(indicator => {
+                const movieSlug = indicator.getAttribute('data-movie-slug');
+                const epName = indicator.getAttribute('data-ep-name');
+                if (!movieSlug || !epName) return;
+                
+                let status = "not_started";
+                if (downloadStatuses[movieSlug] && downloadStatuses[movieSlug][epName]) {
+                    status = downloadStatuses[movieSlug][epName];
+                }
+                
+                indicator.className = `ep-dl-indicator ${status}`;
+                
+                if (status === 'completed') {
+                    indicator.innerHTML = `
+                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                    `;
+                    indicator.title = "Đã tải xuống (Xem offline)";
+                } else if (status === 'downloading') {
+                    indicator.innerHTML = `
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                            <circle cx="7" cy="7" r="5" stroke-opacity="0.25"/>
+                            <path d="M7 2a5 5 0 0 1 5 5" stroke-linecap="round"/>
+                        </svg>
+                    `;
+                    indicator.title = "Đang tải...";
+                } else if (status === 'pending') {
+                    indicator.innerHTML = `
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <circle cx="7" cy="7" r="5"/>
+                            <path stroke-linecap="round" d="M7 4v3l2 1"/>
+                        </svg>
+                    `;
+                    indicator.title = "Đang chờ tải...";
+                } else if (status === 'failed') {
+                    indicator.innerHTML = `
+                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                        </svg>
+                    `;
+                    indicator.title = "Tải thất bại. Nhấp để tải lại.";
+                } else {
+                    indicator.innerHTML = `
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                        </svg>
+                    `;
+                    indicator.title = "Tải trước tập này (MP4)";
+                }
+            });
+        }
+
+        async function requestDownloadEpisode(event, movieSlug, epName, epUrl) {
+            if (event) event.stopPropagation();
+            
+            if (downloadStatuses[movieSlug] && (downloadStatuses[movieSlug][epName] === 'completed' || downloadStatuses[movieSlug][epName] === 'downloading' || downloadStatuses[movieSlug][epName] === 'pending')) {
+                return;
+            }
+            
+            if (!downloadStatuses[movieSlug]) downloadStatuses[movieSlug] = {};
+            downloadStatuses[movieSlug][epName] = 'pending';
+            updateDownloadIndicatorsUI();
+            
+            try {
+                const res = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ movie_slug: movieSlug, episode_name: epName, episode_url: epUrl })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    fetchDownloadStatuses();
+                } else {
+                    downloadStatuses[movieSlug][epName] = 'failed';
+                    updateDownloadIndicatorsUI();
+                }
+            } catch (e) {
+                console.error("Lỗi khi tải tập phim:", e);
+                downloadStatuses[movieSlug][epName] = 'failed';
+                updateDownloadIndicatorsUI();
+            }
+        }
 
         // --- 1. DYNAMIC DEVICE DETECTION ---
         function detectDevice() {
@@ -1182,8 +1348,7 @@
             
             playbackEpisodes = episodesArray;
             
-            appHeader.style.display = 'none';
-            appTabsNav.style.display = 'none';
+            if (stickyHeader) stickyHeader.style.display = 'none';
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
 
             globalPlayer.style.display = 'flex';
@@ -1194,7 +1359,21 @@
             episodesArray.forEach((ep, i) => {
                 const btn = document.createElement('button');
                 btn.className = 'ep-btn';
-                btn.textContent = ep.name;
+                
+                const titleSpan = document.createElement('span');
+                titleSpan.textContent = ep.name;
+                btn.appendChild(titleSpan);
+
+                if (currentMovie && currentMovie.slug) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'ep-dl-indicator not_started';
+                    indicator.setAttribute('data-movie-slug', currentMovie.slug);
+                    indicator.setAttribute('data-ep-name', ep.name);
+                    indicator.setAttribute('data-ep-url', ep.link_m3u8);
+                    indicator.onclick = (e) => requestDownloadEpisode(e, currentMovie.slug, ep.name, ep.link_m3u8);
+                    btn.appendChild(indicator);
+                }
+
                 btn.onclick = () => play(ep.link_m3u8, ep.name, i);
                 gridEp.appendChild(btn);
                 
@@ -1208,6 +1387,7 @@
             sectionEp.style.display = 'flex';
             const startEp = episodesArray[playIdx];
             play(startEp.link_m3u8, startEp.name, playIdx);
+            updateDownloadIndicatorsUI();
             setTimeout(initTabbing, 100);
         }
 
@@ -1369,8 +1549,7 @@
             
             globalPlayer.style.display = 'none';
             
-            appHeader.style.display = 'flex';
-            appTabsNav.style.display = 'flex';
+            if (stickyHeader) stickyHeader.style.display = 'flex';
             
             const activeTabBtn = document.querySelector('.tab-btn.active');
             if (activeTabBtn) {
@@ -1643,7 +1822,10 @@
                             epClass = "saved-ep-btn watching";
                         }
                         
-                        epsHtml += `<button class="${epClass}" onclick="event.stopPropagation(); playEpisodeFromSaved(\`${m.slug}\`, ${idx})">${ep.name}</button>`;
+                        const safeEpName = ep.name.replace(/"/g, '&quot;').replace(/'/g, "\\'");
+                        const indicatorSpan = `<span class="ep-dl-indicator not_started" data-movie-slug="${m.slug}" data-ep-name="${ep.name.replace(/"/g, '&quot;')}" data-ep-url="${ep.link_m3u8}" onclick="event.stopPropagation(); requestDownloadEpisode(event, '${m.slug}', '${safeEpName}', '${ep.link_m3u8}')"></span>`;
+                        
+                        epsHtml += `<button class="${epClass}" onclick="event.stopPropagation(); playEpisodeFromSaved(\`${m.slug}\`, ${idx})"><span>${ep.name}</span>${indicatorSpan}</button>`;
                     });
                 } else {
                     epsHtml = `<span style="font-size: 0.85rem; color: var(--text-dim);">Chưa có danh sách tập phim. <a href="#" style="color: var(--accent-color); text-decoration: underline;" onclick="event.stopPropagation(); syncEpisodesForMovie(\`${m.slug}\`)">Đồng bộ ngay</a></span>`;
@@ -1677,6 +1859,7 @@
                 };
                 grid.appendChild(card);
             });
+            updateDownloadIndicatorsUI();
             setTimeout(initTabbing, 100);
         }
 
@@ -1746,7 +1929,7 @@
         async function loadRecommendations() {
             const container = document.getElementById('recommendationsContainer');
             if (!container) return;
-            container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Đang tải đề xuất hôm nay...</div>';
+            container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Đang tải phim mới cập nhật...</div>';
             try {
                 const res = await fetch('/api/recommendations');
                 const data = await res.json();
@@ -1754,7 +1937,7 @@
                 
                 const themes = Object.keys(data);
                 if (themes.length === 0) {
-                    container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Không có đề xuất cho hôm nay.</div>';
+                    container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Không có phim mới cập nhật.</div>';
                     return;
                 }
                 
@@ -1766,7 +1949,7 @@
                     
                     const title = document.createElement('div');
                     title.className = 'reco-theme-title';
-                    title.textContent = `Đề xuất: ${themeName}`;
+                    title.textContent = themeName;
                     section.appendChild(title);
                     
                     const grid = document.createElement('div');
@@ -1801,13 +1984,15 @@
                 });
                 setTimeout(initTabbing, 100);
             } catch (err) {
-                container.innerHTML = `<div style="text-align: center; color: var(--accent-color);">Lỗi tải đề xuất: ${err.message}</div>`;
+                container.innerHTML = `<div style="text-align: center; color: var(--accent-color);">Lỗi tải phim mới cập nhật: ${err.message}</div>`;
             }
         }
 
         detectDevice();
         fetchSavedMovies();
         loadRecommendations();
+        fetchDownloadStatuses();
+        setInterval(fetchDownloadStatuses, 5000);
         window.addEventListener('DOMContentLoaded', () => {
             initTabbing();
         });

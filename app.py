@@ -62,19 +62,6 @@ def init_db():
             updated_at TEXT NOT NULL
         )
     """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS recommendations (
-            theme_slug TEXT NOT NULL,
-            theme_name TEXT NOT NULL,
-            movie_slug TEXT NOT NULL,
-            movie_name TEXT NOT NULL,
-            poster_url TEXT,
-            year INTEGER,
-            fetched_date TEXT NOT NULL,
-            PRIMARY KEY (theme_slug, movie_slug, fetched_date)
-        )
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_reco_date ON recommendations(fetched_date)")
     conn.commit()
     conn.close()
 
@@ -210,7 +197,7 @@ async def get_download_status(movie_slug: str, ep_name: str) -> str:
         return "not_started"
     return status
 
-async def update_download_status(movie_slug: str, ep_name: str, status: str, error_msg: str = None):
+async def update_download_status(movie_slug: str, ep_name: str, status: str, error_msg: str = None, delete_at: float = None):
     data = await asyncio.to_thread(_load_downloads_status)
     key = f"{movie_slug}/{ep_name}"
     if key not in data:
@@ -220,6 +207,10 @@ async def update_download_status(movie_slug: str, ep_name: str, status: str, err
         data[key]["error"] = error_msg
     else:
         data[key].pop("error", None)
+    if delete_at is not None:
+        data[key]["delete_at"] = delete_at
+    else:
+        data[key].pop("delete_at", None)
     await asyncio.to_thread(_save_downloads_status, data)
 
 download_queue = asyncio.Queue()
@@ -237,40 +228,60 @@ async def add_to_download_queue(movie_slug: str, ep_name: str, ep_url: str):
     await download_queue.put((movie_slug, ep_name, ep_url))
 
 async def enforce_download_window(movie_slug: str):
-    movie = await get_movie_from_db(movie_slug)
-    if not movie:
-        return
-    episodes = movie.get("episodes", [])
-    if not episodes:
-        return
-    last_url = movie.get("last_watched_url", "")
-    
-    current_idx = 0
-    if last_url:
-        for idx, ep in enumerate(episodes):
-            if ep.get("link_m3u8") == last_url:
-                current_idx = idx
-                break
-                
-    targets = []
-    if current_idx < len(episodes):
-        targets.append(episodes[current_idx])
-    if current_idx + 1 < len(episodes):
-        targets.append(episodes[current_idx + 1])
-        
-    for ep in targets:
-        ep_name = ep.get("name")
-        ep_url = ep.get("link_m3u8")
-        status = await get_download_status(movie_slug, ep_name)
-        if status not in ("completed", "downloading", "pending"):
-            await add_to_download_queue(movie_slug, ep_name, ep_url)
+    # Disabled automatic queueing per user request
+    pass
+
+async def delayed_cleanup_worker():
+    await asyncio.sleep(10)
+    while True:
+        try:
+            now = time.time()
+            data = await asyncio.to_thread(_load_downloads_status)
+            modified = False
+            for key, info in list(data.items()):
+                delete_at = info.get("delete_at")
+                if delete_at and now >= delete_at:
+                    parts = key.split("/", 1)
+                    if len(parts) == 2:
+                        movie_slug, ep_name = parts
+                        clean_ep = clean_filename(ep_name)
+                        file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
+                        if os.path.exists(file_path):
+                            try:
+                                os.remove(file_path)
+                                logger.info(f"[Cleanup] Deleted watched episode file after 3h delay: {file_path}")
+                            except Exception as e:
+                                logger.warning(f"[Cleanup] Failed to delete file {file_path}: {e}")
+                        data.pop(key, None)
+                        modified = True
+            if modified:
+                await asyncio.to_thread(_save_downloads_status, data)
+        except Exception as e:
+            logger.error(f"Error in delayed_cleanup_worker: {e}")
+        await asyncio.sleep(60)
 
 async def download_worker():
     await asyncio.sleep(2)
     try:
+        data = await asyncio.to_thread(_load_downloads_status)
         movies = await get_all_movies_from_db()
-        for m in movies:
-            await enforce_download_window(m["slug"])
+        movies_by_slug = {m["slug"]: m for m in movies}
+        for key, info in data.items():
+            status = info.get("status")
+            if status in ("pending", "downloading"):
+                parts = key.split("/", 1)
+                if len(parts) == 2:
+                    movie_slug, ep_name = parts
+                    if movie_slug in movies_by_slug:
+                        movie = movies_by_slug[movie_slug]
+                        ep_url = None
+                        for ep in movie.get("episodes", []):
+                            if ep.get("name") == ep_name:
+                                ep_url = ep.get("link_m3u8")
+                                break
+                        if ep_url:
+                            queued_items.discard(key)
+                            await add_to_download_queue(movie_slug, ep_name, ep_url)
     except Exception as e:
         logger.error(f"Error re-queuing downloads on startup: {e}")
 
@@ -368,84 +379,6 @@ async def download_worker():
         finally:
             download_queue.task_done()
 
-# Tính năng đề xuất hôm nay
-GENRES_POOL = [
-    {"slug": "hanh-dong", "name": "Hành Động"},
-    {"slug": "kinh-di", "name": "Kinh Dị"},
-    {"slug": "tinh-cam", "name": "Tình Cảm"},
-    {"slug": "hai-huoc", "name": "Hài Hước"},
-    {"slug": "co-trang", "name": "Cổ Trang"},
-    {"slug": "vien-tuong", "name": "Viễn Tưởng"},
-    {"slug": "hinh-su", "name": "Hình Sự"},
-    {"slug": "tam-ly", "name": "Tâm Lý"},
-    {"slug": "phieu-luu", "name": "Phiêu Lưu"},
-    {"slug": "vo-thuat", "name": "Võ Thuật"}
-]
-
-def pick_themes_for_today(n=3):
-    today_ordinal = date.today().toordinal()
-    start_idx = today_ordinal % len(GENRES_POOL)
-    themes = []
-    for i in range(n):
-        idx = (start_idx + i) % len(GENRES_POOL)
-        themes.append(GENRES_POOL[idx])
-    return themes
-
-async def refresh_recommendations():
-    today = date.today().isoformat()
-    def _clear_old_recos():
-        conn = sqlite3.connect(DB_FILE, timeout=30.0)
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM recommendations WHERE fetched_date != ?", (today,))
-        conn.commit()
-        conn.close()
-    await asyncio.to_thread(_clear_old_recos)
-
-    themes = pick_themes_for_today(3)
-    for theme in themes:
-        theme_slug = theme["slug"]
-        theme_name = theme["name"]
-        try:
-            url = f"https://phimapi.com/v1/api/the-loai/{theme_slug}?page=1&sort_field=modified.time&sort_type=desc&limit=20"
-            resp = await client.get(url)
-            if resp.status_code == 200:
-                data = resp.json()
-                items = data.get("data", {}).get("items", [])
-                
-                def _save_recos(items_list):
-                    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-                    cursor = conn.cursor()
-                    for item in items_list:
-                        m_slug = item.get("slug")
-                        m_name = item.get("name")
-                        poster_url = item.get("poster_url")
-                        if poster_url and not poster_url.startswith("http"):
-                            poster_url = f"https://phimimg.com/{poster_url.lstrip('/')}"
-                        year = item.get("year", 0)
-                        try:
-                            year = int(year)
-                        except:
-                            year = 0
-                        
-                        cursor.execute("""
-                            INSERT OR REPLACE INTO recommendations (
-                                theme_slug, theme_name, movie_slug, movie_name, poster_url, year, fetched_date
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (theme_slug, theme_name, m_slug, m_name, poster_url, year, today))
-                    conn.commit()
-                    conn.close()
-                await asyncio.to_thread(_save_recos, items)
-                logger.info(f"Refreshed recommendations for theme: {theme_name}")
-        except Exception as e:
-            logger.warning(f"Error fetching recommendations for theme {theme_slug}: {e}")
-
-async def recommendation_scheduler():
-    while True:
-        try:
-            await refresh_recommendations()
-        except Exception as e:
-            logger.error(f"Error in recommendation_scheduler: {e}")
-        await asyncio.sleep(24 * 3600)
 
 def _cleanup_disk():
     now = time.time()
@@ -578,8 +511,8 @@ async def startup_event():
     asyncio.create_task(prune_cache())
     # Khởi động background worker tải phim MP4
     asyncio.create_task(download_worker())
-    # Khởi động scheduler lấy đề xuất hôm nay
-    asyncio.create_task(recommendation_scheduler())
+    # Khởi động background worker xóa phim đã xem sau 3h
+    asyncio.create_task(delayed_cleanup_worker())
 
 
 # Khởi tạo Jinja2 templates với đường dẫn tuyệt đối
@@ -884,7 +817,6 @@ async def save_movie_api(movie: dict):
         movie["total_episodes"] = len(movie["episodes"])
         
     await save_movie_to_db(movie)
-    await enforce_download_window(slug)
     return {"status": "success", "movie": movie}
 
 @app.post("/api/saved/progress")
@@ -911,20 +843,19 @@ async def save_movie_progress_api(progress: dict):
                 
         movie["episode_states"][last_url] = "watching"
         
-        # Xóa các file tập đã xem (trạng thái đổi sang watched)
+        # Xóa các file tập đã xem sau 3 giờ
         for ep in movie.get("episodes", []):
             if ep.get("link_m3u8") in previously_watching_urls:
                 clean_ep = clean_filename(ep.get("name"))
                 file_path = os.path.join(DOWNLOAD_DIR, slug, f"{clean_ep}.mp4")
                 if os.path.exists(file_path):
                     try:
-                        os.remove(file_path)
-                        logger.info(f"Đã xóa file tập đã xem xong: {file_path}")
+                        await update_download_status(slug, ep.get("name"), "completed", delete_at=time.time() + 10800)
+                        logger.info(f"Đã lên lịch xóa file tập đã xem xong sau 3 giờ: {file_path}")
                     except Exception as e:
-                        logger.warning(f"Không thể xóa file {file_path}: {e}")
+                        logger.warning(f"Không thể đặt lịch xóa file {file_path}: {e}")
                         
         await save_movie_to_db(movie)
-        await enforce_download_window(slug)
         return {"status": "success", "movie": movie}
     return {"status": "error", "message": "Movie not in saved list"}
 
@@ -944,6 +875,49 @@ async def delete_saved_movie_api(slug: str):
         return {"status": "success"}
     return {"status": "error", "message": "Movie not found"}
 
+@app.post("/api/download")
+async def download_episode_api(payload: dict):
+    movie_slug = payload.get("movie_slug")
+    ep_name = payload.get("episode_name")
+    ep_url = payload.get("episode_url")
+    if not movie_slug or not ep_name or not ep_url:
+        raise HTTPException(status_code=400, detail="Missing fields")
+    await add_to_download_queue(movie_slug, ep_name, ep_url)
+    return {"status": "success"}
+
+@app.get("/api/download/status")
+async def get_all_downloads_status_api():
+    data = await asyncio.to_thread(_load_downloads_status)
+    res = {}
+    for ep_key, info in data.items():
+        parts = ep_key.split("/", 1)
+        if len(parts) == 2:
+            movie_slug, ep_name = parts
+            status = info.get("status", "not_started")
+            clean_ep = clean_filename(ep_name)
+            file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
+            if status == "completed" and not os.path.exists(file_path):
+                status = "not_started"
+            if movie_slug not in res:
+                res[movie_slug] = {}
+            res[movie_slug][ep_name] = status
+    return res
+
+@app.get("/api/download/status/{movie_slug}")
+async def get_movie_downloads_status_api(movie_slug: str):
+    data = await asyncio.to_thread(_load_downloads_status)
+    res = {}
+    for ep_key, info in data.items():
+        if ep_key.startswith(f"{movie_slug}/"):
+            ep_name = ep_key.split("/", 1)[1]
+            status = info.get("status", "not_started")
+            clean_ep = clean_filename(ep_name)
+            file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
+            if status == "completed" and not os.path.exists(file_path):
+                status = "not_started"
+            res[ep_name] = status
+    return res
+
 @app.get("/api/download/status/{movie_slug}/{episode_name}")
 async def get_episode_download_status_api(movie_slug: str, episode_name: str):
     status = await get_download_status(movie_slug, episode_name)
@@ -962,30 +936,32 @@ async def get_media_file_api(movie_slug: str, episode_name: str):
 
 @app.get("/api/recommendations")
 async def get_recommendations_api():
-    today = date.today().isoformat()
-    def _query_recos():
-        conn = sqlite3.connect(DB_FILE, timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM recommendations WHERE fetched_date = ? ORDER BY theme_slug", (today,))
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
+    try:
+        url = "https://phimapi.com/danh-sach/phim-moi-cap-nhat?page=1"
+        resp = await client.get(url)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("items", [])
         
-    recos = await asyncio.to_thread(_query_recos)
-    
-    grouped = {}
-    for r in recos:
-        t_name = r["theme_name"]
-        if t_name not in grouped:
-            grouped[t_name] = []
-        grouped[t_name].append({
-            "slug": r["movie_slug"],
-            "name": r["movie_name"],
-            "poster_url": r["poster_url"],
-            "year": r["year"]
-        })
-    return grouped
+        movie_list = []
+        for item in items:
+            p_url = item.get("poster_url", "")
+            if p_url and not p_url.startswith("http"):
+                p_url = f"https://phimimg.com/{p_url.lstrip('/')}"
+            
+            movie_list.append({
+                "slug": item.get("slug"),
+                "name": item.get("name"),
+                "poster_url": p_url,
+                "year": item.get("year", "")
+            })
+            
+        return {
+            "Phim mới cập nhật": movie_list
+        }
+    except Exception as e:
+        logger.error(f"Error fetching newly updated movies: {e}")
+        return {"Phim mới cập nhật": []}
 
 @app.on_event("shutdown")
 async def shutdown_event():
