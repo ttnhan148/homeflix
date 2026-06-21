@@ -1087,7 +1087,14 @@
                 
                 <div id="playerEpisodeTitle" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-width: 0;"></div>
                 
-                <div style="display: flex; justify-content: flex-end;">
+                <div style="display: flex; justify-content: flex-end; gap: 0.5rem; align-items: center;">
+                    <button id="btnToggleAspect" class="btn-sec" style="padding: 0.5rem 0.8rem; font-size: 0.85rem; margin: 0; display: flex; align-items: center; gap: 0.35rem;" onclick="toggleAspectRatio()" title="Tỷ lệ màn hình (Zoom 21:9)">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <rect width="20" height="14" x="2" y="5" rx="2"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 9h3v3m10 3h-3v-3"/>
+                        </svg>
+                        Tỷ lệ
+                    </button>
                     <button id="btnNextEpisode" class="btn-main" style="display: none; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 700; gap: 0.35rem; margin: 0;" onclick="playNextEpisode()">
                         Tập tiếp theo
                         <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
@@ -1121,6 +1128,29 @@
         const cacheLabel = document.getElementById('cacheLabel');
         const cacheBar = document.getElementById('cacheProgressFill');
         const btnClear = document.getElementById('btnClearStorage');
+        
+        let currentAspectMode = 0; // 0: contain, 1: cover, 2: fill
+        const aspectModes = ["contain", "cover", "fill"];
+        const aspectLabels = ["Mặc định (Contain)", "Phóng to (Zoom 21:9)", "Kéo giãn (Stretch)"];
+
+        function toggleAspectRatio() {
+            currentAspectMode = (currentAspectMode + 1) % aspectModes.length;
+            video.style.objectFit = aspectModes[currentAspectMode];
+            showToast(aspectLabels[currentAspectMode]);
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('aspectToast');
+            if (!toast) return;
+            toast.textContent = msg;
+            toast.style.display = 'block';
+            if (toast.timeoutId) clearTimeout(toast.timeoutId);
+            toast.timeoutId = setTimeout(() => {
+                toast.style.display = 'none';
+            }, 2000);
+        }
+
+        video.addEventListener('dblclick', toggleAspectRatio);
         const globalPlayer = document.getElementById('globalPlayerContainer');
         const appHeader = document.getElementById('appHeader');
         const appTabsNav = document.getElementById('appTabsNav');
@@ -1612,6 +1642,10 @@
             }
             video.src = '';
             
+            // Reset aspect ratio
+            currentAspectMode = 0;
+            video.style.objectFit = 'contain';
+            
             document.body.classList.remove('player-active');
             globalPlayer.style.display = 'none';
             
@@ -2093,6 +2127,6 @@
             initTabbing();
         });
     </script>
+    <div id="aspectToast" style="display: none; position: fixed; bottom: 20%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: white; padding: 0.8rem 1.5rem; border-radius: 20px; font-weight: 600; font-size: 0.9rem; z-index: 9999; border: 1px solid var(--glass-border); text-align: center; pointer-events: none;"></div>
 </body>
-
 </html>
