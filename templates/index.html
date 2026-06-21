@@ -931,6 +931,39 @@
             border-bottom: none;
             padding-bottom: 0;
         }
+        
+        /* 21:9 & Ultra-wide screen optimization for Player */
+        body.player-active .container {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 0 !important;
+            gap: 1rem !important;
+        }
+        body.player-active #globalPlayerContainer {
+            padding: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+        body.player-active .player-wrapper {
+            border-radius: 0 !important;
+            border-left: none !important;
+            border-right: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+        body.player-active video {
+            width: 100% !important;
+            max-height: 85vh;
+            aspect-ratio: auto; /* Allow the browser to fit the screen */
+            object-fit: contain;
+        }
+        /* Padded controls & info */
+        body.player-active #globalPlayerContainer > div:first-child,
+        body.player-active #statusMessage,
+        body.player-active .episodes-section {
+            padding-left: 1.5rem !important;
+            padding-right: 1.5rem !important;
+        }
     </style>
 </head>
 
@@ -1351,6 +1384,7 @@
             if (stickyHeader) stickyHeader.style.display = 'none';
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
 
+            document.body.classList.add('player-active');
             globalPlayer.style.display = 'flex';
             
             gridEp.innerHTML = '';
@@ -1481,13 +1515,19 @@
             console.log("[Play] useMp4 =", useMp4, "mp4Url =", mp4Url);
 
             if (useMp4) {
-                status.textContent = `ĐANG PHÁT MP4 TRỰC TIẾP: ${title.toUpperCase()}`;
+                status.innerHTML = `
+                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; margin-bottom: 0.15rem;">MP4</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: white;">${title}</div>
+                `;
                 video.src = mp4Url;
                 console.log("[Play] Phát MP4 qua src");
                 video.play().catch(err => console.error("[Play] Lỗi video.play() MP4:", err));
             } else {
                 const proxy = `/proxy/m3u8?url=${encodeURIComponent(url)}`;
-                status.textContent = `ĐANG PHÁT HLS-PROXY: ${title.toUpperCase()}`;
+                status.innerHTML = `
+                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; margin-bottom: 0.15rem;">HLS</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: white;">${title}</div>
+                `;
                 console.log("[Play] Phát HLS qua Proxy:", proxy);
 
                 if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -1547,6 +1587,7 @@
             }
             video.src = '';
             
+            document.body.classList.remove('player-active');
             globalPlayer.style.display = 'none';
             
             if (stickyHeader) stickyHeader.style.display = 'flex';
@@ -1881,16 +1922,46 @@
                 return;
             }
             
-            let targetUrl = savedMovie.last_watched_url;
+            let targetUrl = null;
+            let targetIdx = 0;
             
-            if (!targetUrl && savedMovie.episodes.length > 0) {
-                targetUrl = savedMovie.episodes[0].link_m3u8;
+            if (savedMovie.episode_states && savedMovie.episodes.length > 0) {
+                // 1. Tìm tập đang xem (watching)
+                for (let i = 0; i < savedMovie.episodes.length; i++) {
+                    const ep = savedMovie.episodes[i];
+                    if (savedMovie.episode_states[ep.link_m3u8] === "watching") {
+                        targetUrl = ep.link_m3u8;
+                        targetIdx = i;
+                        break;
+                    }
+                }
+                
+                // 2. Nếu không có tập nào đang xem, tìm tập chưa xem gần nhất (tập đầu tiên không phải watched)
+                if (!targetUrl) {
+                    for (let i = 0; i < savedMovie.episodes.length; i++) {
+                        const ep = savedMovie.episodes[i];
+                        if (savedMovie.episode_states[ep.link_m3u8] !== "watched") {
+                            targetUrl = ep.link_m3u8;
+                            targetIdx = i;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // 3. Fallback dự phòng
+            if (!targetUrl) {
+                targetUrl = savedMovie.last_watched_url || (savedMovie.episodes.length > 0 ? savedMovie.episodes[0].link_m3u8 : null);
+                if (targetUrl) {
+                    targetIdx = savedMovie.episodes.findIndex(ep => ep.link_m3u8 === targetUrl);
+                    if (targetIdx === -1) targetIdx = 0;
+                }
             }
             
             if (!targetUrl) return alert("Không tìm thấy tập phim nào.");
             
             currentMovie = { slug: savedMovie.slug, name: savedMovie.name };
-            playEpisodesListDirect(savedMovie.episodes, targetUrl);
+            playEpisodesListDirect(savedMovie.episodes, targetIdx);
         }
 
 

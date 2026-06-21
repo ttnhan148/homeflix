@@ -62,8 +62,45 @@ def init_db():
             updated_at TEXT NOT NULL
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS episode_downloads (
+            movie_slug TEXT NOT NULL,
+            episode_name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error TEXT,
+            delete_at REAL,
+            PRIMARY KEY (movie_slug, episode_name)
+        )
+    """)
     conn.commit()
     conn.close()
+
+def migrate_downloads_json_to_db():
+    if not os.path.exists(DOWNLOADS_STATUS_FILE):
+        return
+    try:
+        with open(DOWNLOADS_STATUS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        for key, info in data.items():
+            parts = key.split("/", 1)
+            if len(parts) == 2:
+                movie_slug, ep_name = parts
+                status = info.get("status", "not_started")
+                error = info.get("error")
+                delete_at = info.get("delete_at")
+                cursor.execute("""
+                    INSERT OR REPLACE INTO episode_downloads (movie_slug, episode_name, status, error, delete_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (movie_slug, ep_name, status, error, delete_at))
+        conn.commit()
+        conn.close()
+        os.remove(DOWNLOADS_STATUS_FILE)
+        logger.info("[Migration] Successfully migrated downloads.json into SQLite DB.")
+    except Exception as e:
+        logger.error(f"[Migration] Error migrating downloads.json: {e}")
 
 # Helper SQLite cho saved_movies
 def _db_get_all_movies():
@@ -168,50 +205,64 @@ def clean_filename(name: str) -> str:
         s = hashlib.md5(name.encode()).hexdigest()
     return s
 
-def _load_downloads_status():
-    if not os.path.exists(DOWNLOADS_STATUS_FILE):
-        return {}
-    try:
-        with open(DOWNLOADS_STATUS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {}
+def _db_get_download_status(movie_slug: str, ep_name: str) -> dict:
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT status, error, delete_at FROM episode_downloads WHERE movie_slug = ? AND episode_name = ?",
+        (movie_slug, ep_name)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {"status": row[0], "error": row[1], "delete_at": row[2]}
+    return {"status": "not_started", "error": None, "delete_at": None}
 
-def _save_downloads_status(data):
-    try:
-        # Ghi tạm ra file tmp rồi rename để tránh hỏng file khi mất điện/crash giữa chừng
-        tmp_file = DOWNLOADS_STATUS_FILE + ".tmp"
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-        os.replace(tmp_file, DOWNLOADS_STATUS_FILE)
-    except Exception as e:
-        logger.error(f"Error saving downloads status: {e}")
+def _db_update_download_status(movie_slug: str, ep_name: str, status: str, error_msg: str = None, delete_at: float = None):
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO episode_downloads (movie_slug, episode_name, status, error, delete_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(movie_slug, episode_name) DO UPDATE SET
+            status=excluded.status,
+            error=excluded.error,
+            delete_at=excluded.delete_at
+    """, (movie_slug, ep_name, status, error_msg, delete_at))
+    conn.commit()
+    conn.close()
+
+def _db_get_all_downloads_status(movie_slug: str = None) -> dict:
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    if movie_slug:
+        cursor.execute("SELECT episode_name, status FROM episode_downloads WHERE movie_slug = ?", (movie_slug,))
+        rows = cursor.fetchall()
+        res = {row[0]: row[1] for row in rows}
+    else:
+        cursor.execute("SELECT movie_slug, episode_name, status FROM episode_downloads")
+        rows = cursor.fetchall()
+        res = {}
+        for row in rows:
+            m_slug, ep_name, status = row
+            if m_slug not in res:
+                res[m_slug] = {}
+            res[m_slug][ep_name] = status
+    conn.close()
+    return res
 
 async def get_download_status(movie_slug: str, ep_name: str) -> str:
-    data = await asyncio.to_thread(_load_downloads_status)
-    key = f"{movie_slug}/{ep_name}"
+    info = await asyncio.to_thread(_db_get_download_status, movie_slug, ep_name)
+    status = info.get("status", "not_started")
     clean_ep = clean_filename(ep_name)
     file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
-    status = data.get(key, {}).get("status", "not_started")
     if status == "completed" and not os.path.exists(file_path):
+        await asyncio.to_thread(_db_update_download_status, movie_slug, ep_name, "not_started")
         return "not_started"
     return status
 
 async def update_download_status(movie_slug: str, ep_name: str, status: str, error_msg: str = None, delete_at: float = None):
-    data = await asyncio.to_thread(_load_downloads_status)
-    key = f"{movie_slug}/{ep_name}"
-    if key not in data:
-        data[key] = {}
-    data[key]["status"] = status
-    if error_msg:
-        data[key]["error"] = error_msg
-    else:
-        data[key].pop("error", None)
-    if delete_at is not None:
-        data[key]["delete_at"] = delete_at
-    else:
-        data[key].pop("delete_at", None)
-    await asyncio.to_thread(_save_downloads_status, data)
+    await asyncio.to_thread(_db_update_download_status, movie_slug, ep_name, status, error_msg, delete_at)
 
 download_queue = asyncio.Queue()
 queued_items = set()
@@ -231,57 +282,75 @@ async def enforce_download_window(movie_slug: str):
     # Disabled automatic queueing per user request
     pass
 
+def _db_get_deletable_episodes(now: float) -> list:
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT movie_slug, episode_name FROM episode_downloads WHERE delete_at IS NOT NULL AND delete_at <= ?",
+        (now,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def _db_delete_download_record(movie_slug: str, ep_name: str):
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM episode_downloads WHERE movie_slug = ? AND episode_name = ?",
+        (movie_slug, ep_name)
+    )
+    conn.commit()
+    conn.close()
+
 async def delayed_cleanup_worker():
     await asyncio.sleep(10)
     while True:
         try:
             now = time.time()
-            data = await asyncio.to_thread(_load_downloads_status)
-            modified = False
-            for key, info in list(data.items()):
-                delete_at = info.get("delete_at")
-                if delete_at and now >= delete_at:
-                    parts = key.split("/", 1)
-                    if len(parts) == 2:
-                        movie_slug, ep_name = parts
-                        clean_ep = clean_filename(ep_name)
-                        file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
-                        if os.path.exists(file_path):
-                            try:
-                                os.remove(file_path)
-                                logger.info(f"[Cleanup] Deleted watched episode file after 3h delay: {file_path}")
-                            except Exception as e:
-                                logger.warning(f"[Cleanup] Failed to delete file {file_path}: {e}")
-                        data.pop(key, None)
-                        modified = True
-            if modified:
-                await asyncio.to_thread(_save_downloads_status, data)
+            deletable = await asyncio.to_thread(_db_get_deletable_episodes, now)
+            for movie_slug, ep_name in deletable:
+                clean_ep = clean_filename(ep_name)
+                file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        logger.info(f"[Cleanup] Deleted watched episode file after 3h delay: {file_path}")
+                    except Exception as e:
+                        logger.warning(f"[Cleanup] Failed to delete file {file_path}: {e}")
+                await asyncio.to_thread(_db_delete_download_record, movie_slug, ep_name)
         except Exception as e:
             logger.error(f"Error in delayed_cleanup_worker: {e}")
         await asyncio.sleep(60)
 
+def _db_get_queued_downloads() -> list:
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT movie_slug, episode_name FROM episode_downloads WHERE status IN ('pending', 'downloading')"
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
 async def download_worker():
     await asyncio.sleep(2)
     try:
-        data = await asyncio.to_thread(_load_downloads_status)
+        queued = await asyncio.to_thread(_db_get_queued_downloads)
         movies = await get_all_movies_from_db()
         movies_by_slug = {m["slug"]: m for m in movies}
-        for key, info in data.items():
-            status = info.get("status")
-            if status in ("pending", "downloading"):
-                parts = key.split("/", 1)
-                if len(parts) == 2:
-                    movie_slug, ep_name = parts
-                    if movie_slug in movies_by_slug:
-                        movie = movies_by_slug[movie_slug]
-                        ep_url = None
-                        for ep in movie.get("episodes", []):
-                            if ep.get("name") == ep_name:
-                                ep_url = ep.get("link_m3u8")
-                                break
-                        if ep_url:
-                            queued_items.discard(key)
-                            await add_to_download_queue(movie_slug, ep_name, ep_url)
+        for movie_slug, ep_name in queued:
+            if movie_slug in movies_by_slug:
+                movie = movies_by_slug[movie_slug]
+                ep_url = None
+                for ep in movie.get("episodes", []):
+                    if ep.get("name") == ep_name:
+                        ep_url = ep.get("link_m3u8")
+                        break
+                if ep_url:
+                    key = f"{movie_slug}/{ep_name}"
+                    queued_items.discard(key)
+                    await add_to_download_queue(movie_slug, ep_name, ep_url)
     except Exception as e:
         logger.error(f"Error re-queuing downloads on startup: {e}")
 
@@ -507,6 +576,8 @@ app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), na
 async def startup_event():
     # Khởi tạo database SQLite
     init_db()
+    # Chạy di chuyển dữ liệu downloads.json nếu có
+    migrate_downloads_json_to_db()
     # Khởi động tác vụ dọn dẹp cache ngầm
     asyncio.create_task(prune_cache())
     # Khởi động background worker tải phim MP4
@@ -864,7 +935,30 @@ async def delete_saved_movie_api(slug: str):
     movie = await get_movie_from_db(slug)
     if movie:
         await delete_movie_from_db(slug)
-        # Xóa toàn bộ file tải xuống của phim này
+        
+        # 1. Xóa các record tải xuống của phim trong DB
+        def _db_delete_movie_downloads(movie_slug):
+            conn = sqlite3.connect(DB_FILE, timeout=30.0)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM episode_downloads WHERE movie_slug = ?", (movie_slug,))
+            conn.commit()
+            conn.close()
+        await asyncio.to_thread(_db_delete_movie_downloads, slug)
+        
+        # 2. Xóa các thư mục cache phân đoạn liên quan đến từng tập phim
+        for ep in movie.get("episodes", []):
+            ep_url = ep.get("link_m3u8")
+            if ep_url:
+                sid = hashlib.md5(ep_url.encode()).hexdigest()
+                session_dir = os.path.join(CACHE_DIR, sid)
+                if os.path.exists(session_dir):
+                    try:
+                        shutil.rmtree(session_dir)
+                        logger.info(f"Đã xóa thư mục cache tập phim: {session_dir}")
+                    except Exception as e:
+                        logger.warning(f"Lỗi khi xóa cache {session_dir}: {e}")
+                        
+        # 3. Xóa thư mục tải xuống của phim
         movie_dir = os.path.join(DOWNLOAD_DIR, slug)
         if os.path.exists(movie_dir):
             try:
@@ -887,35 +981,28 @@ async def download_episode_api(payload: dict):
 
 @app.get("/api/download/status")
 async def get_all_downloads_status_api():
-    data = await asyncio.to_thread(_load_downloads_status)
+    raw_status = await asyncio.to_thread(_db_get_all_downloads_status)
     res = {}
-    for ep_key, info in data.items():
-        parts = ep_key.split("/", 1)
-        if len(parts) == 2:
-            movie_slug, ep_name = parts
-            status = info.get("status", "not_started")
+    for movie_slug, eps in raw_status.items():
+        res[movie_slug] = {}
+        for ep_name, status in eps.items():
             clean_ep = clean_filename(ep_name)
             file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
             if status == "completed" and not os.path.exists(file_path):
                 status = "not_started"
-            if movie_slug not in res:
-                res[movie_slug] = {}
             res[movie_slug][ep_name] = status
     return res
 
 @app.get("/api/download/status/{movie_slug}")
 async def get_movie_downloads_status_api(movie_slug: str):
-    data = await asyncio.to_thread(_load_downloads_status)
+    raw_status = await asyncio.to_thread(_db_get_all_downloads_status, movie_slug)
     res = {}
-    for ep_key, info in data.items():
-        if ep_key.startswith(f"{movie_slug}/"):
-            ep_name = ep_key.split("/", 1)[1]
-            status = info.get("status", "not_started")
-            clean_ep = clean_filename(ep_name)
-            file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
-            if status == "completed" and not os.path.exists(file_path):
-                status = "not_started"
-            res[ep_name] = status
+    for ep_name, status in raw_status.items():
+        clean_ep = clean_filename(ep_name)
+        file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
+        if status == "completed" and not os.path.exists(file_path):
+            status = "not_started"
+        res[ep_name] = status
     return res
 
 @app.get("/api/download/status/{movie_slug}/{episode_name}")
@@ -934,10 +1021,8 @@ async def get_media_file_api(movie_slug: str, episode_name: str):
         raise HTTPException(status_code=404, detail="File video chưa sẵn sàng hoặc không tồn tại.")
     return FileResponse(file_path, media_type="video/mp4")
 
-@app.get("/api/recommendations")
-async def get_recommendations_api():
+async def _fetch_movies_from_url(url: str) -> list:
     try:
-        url = "https://phimapi.com/danh-sach/phim-moi-cap-nhat?page=1"
         resp = await client.get(url)
         resp.raise_for_status()
         data = resp.json()
@@ -955,13 +1040,30 @@ async def get_recommendations_api():
                 "poster_url": p_url,
                 "year": item.get("year", "")
             })
-            
-        return {
-            "Phim mới cập nhật": movie_list
-        }
+        return movie_list
     except Exception as e:
-        logger.error(f"Error fetching newly updated movies: {e}")
-        return {"Phim mới cập nhật": []}
+        logger.error(f"Error fetching from {url}: {e}")
+        return []
+
+@app.get("/api/recommendations")
+async def get_recommendations_api():
+    urls = [
+        "https://phimapi.com/danh-sach/phim-moi-cap-nhat?page=1",
+        "https://phimapi.com/danh-sach/phim-moi-cap-nhat-v2?page=1",
+        "https://phimapi.com/danh-sach/phim-moi-cap-nhat-v3?page=1"
+    ]
+    
+    de_xuat, moi_nhat, hot = await asyncio.gather(
+        _fetch_movies_from_url(urls[0]),
+        _fetch_movies_from_url(urls[1]),
+        _fetch_movies_from_url(urls[2])
+    )
+    
+    return {
+        "Đề xuất": de_xuat,
+        "Mới nhất": moi_nhat,
+        "Hot": hot
+    }
 
 @app.on_event("shutdown")
 async def shutdown_event():
