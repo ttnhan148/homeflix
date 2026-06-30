@@ -72,6 +72,14 @@ def init_db():
             PRIMARY KEY (movie_slug, episode_name)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_cache (
+            cache_key TEXT PRIMARY KEY,
+            response_json TEXT NOT NULL,
+            cached_at REAL NOT NULL,
+            ttl_seconds INTEGER NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -101,6 +109,50 @@ def migrate_downloads_json_to_db():
         logger.info("[Migration] Successfully migrated downloads.json into SQLite DB.")
     except Exception as e:
         logger.error(f"[Migration] Error migrating downloads.json: {e}")
+
+# --- API Cache helpers (SQLite-backed, stale-fallback) ---
+def _db_get_cache(cache_key: str):
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT response_json, cached_at, ttl_seconds FROM api_cache WHERE cache_key = ?",
+        (cache_key,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        data = json.loads(row[0])
+        is_fresh = (time.time() - row[1]) < row[2]
+        return {"data": data, "is_fresh": is_fresh}
+    return None
+
+def _db_set_cache(cache_key: str, response_obj, ttl_seconds: int):
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO api_cache (cache_key, response_json, cached_at, ttl_seconds)
+        VALUES (?, ?, ?, ?)
+    """, (cache_key, json.dumps(response_obj, ensure_ascii=False), time.time(), ttl_seconds))
+    conn.commit()
+    conn.close()
+
+async def cached_fetch(cache_key: str, ttl_seconds: int, fetch_fn):
+    """Cache-aside with stale-fallback: trả cache cũ nếu phimapi.com lỗi."""
+    cached = await asyncio.to_thread(_db_get_cache, cache_key)
+    if cached and cached["is_fresh"]:
+        logger.info(f"[Cache] HIT key={cache_key}")
+        return cached["data"]
+    logger.info(f"[Cache] MISS key={cache_key}, gọi phimapi.com")
+    try:
+        fresh_data = await fetch_fn()
+        await asyncio.to_thread(_db_set_cache, cache_key, fresh_data, ttl_seconds)
+        return fresh_data
+    except Exception as e:
+        logger.warning(f"[Cache] Lỗi gọi phimapi.com cho key={cache_key}: {e}")
+        if cached:
+            logger.info(f"[Cache] Trả stale cache cho key={cache_key} (đã hết hạn)")
+            return cached["data"]
+        raise
 
 # Helper SQLite cho saved_movies
 def _db_get_all_movies():
@@ -802,20 +854,22 @@ async def clear_cache_endpoint():
 
 @app.get("/api/search")
 async def search_movies(q: str):
-    """Proxy tìm kiếm phim từ PhimAPI"""
-    try:
+    """Proxy tìm kiếm phim từ PhimAPI (cached 30 phút, stale-fallback)"""
+    async def _fetch():
         url = f"https://phimapi.com/v1/api/tim-kiem?keyword={urllib.parse.quote(q)}&limit=30"
         response = await client.get(url)
         response.raise_for_status()
         return response.json()
+    try:
+        return await cached_fetch(f"search:{q}", 1800, _fetch)
     except Exception as e:
         logger.error(f"Error searching movies: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/movie/{slug}")
 async def get_movie_detail(slug: str):
-    """Proxy và chuẩn hóa chi tiết phim để tối ưu hiệu năng client"""
-    try:
+    """Proxy và chuẩn hóa chi tiết phim để tối ưu hiệu năng client (cached 60 phút, stale-fallback)"""
+    async def _fetch():
         url = f"https://phimapi.com/phim/{slug}"
         response = await client.get(url)
         response.raise_for_status()
@@ -856,6 +910,8 @@ async def get_movie_detail(slug: str):
             "movie": movie_clean,
             "episodes": episodes_clean
         }
+    try:
+        return await cached_fetch(f"movie:{slug}", 3600, _fetch)
     except Exception as e:
         logger.error(f"Error getting movie detail '{slug}': {e}")
         return {"status": "error", "message": str(e)}
@@ -1063,9 +1119,9 @@ async def get_recommendations_api():
     ]
     
     de_xuat, phim_chieu_rap, hot = await asyncio.gather(
-        _fetch_movies_from_url(urls[0]),
-        _fetch_movies_from_url(urls[1]),
-        _fetch_movies_from_url(urls[2])
+        cached_fetch("reco:0", 1800, lambda: _fetch_movies_from_url(urls[0])),
+        cached_fetch("reco:1", 1800, lambda: _fetch_movies_from_url(urls[1])),
+        cached_fetch("reco:2", 1800, lambda: _fetch_movies_from_url(urls[2]))
     )
     
     return {
