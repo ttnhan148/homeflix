@@ -244,6 +244,91 @@
             width: 100%;
             aspect-ratio: 16/9;
             display: block;
+            object-fit: contain;
+            background-color: #000;
+        }
+
+        /* --- AIRPLAY REMOTE CONTROL OVERLAY --- */
+        .airplay-remote-overlay {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            border-radius: 8px;
+            gap: 1.5rem;
+            padding: 2rem;
+        }
+        .airplay-remote-overlay .airplay-icon {
+            font-size: 3rem;
+            animation: airplayPulse 2s ease-in-out infinite;
+        }
+        @keyframes airplayPulse {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+        .airplay-remote-overlay .airplay-label {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-main);
+            letter-spacing: 0.03em;
+        }
+        .airplay-controls {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 400px;
+        }
+        .airplay-playpause {
+            width: 64px;
+            height: 64px;
+            min-width: 64px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+        .airplay-playpause:hover {
+            background: var(--accent-hover);
+            transform: scale(1.08);
+        }
+        .airplay-seek-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        .airplay-seek-bar {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255,255,255,0.15);
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+        .airplay-seek-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent-color);
+        }
+        .airplay-seek-time {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--text-dim);
         }
 
         .status-msg {
@@ -1106,6 +1191,23 @@
 
             <div class="player-wrapper">
                 <video id="videoPlayer" controls playsinline></video>
+                <!-- AirPlay Remote Control Overlay -->
+                <div class="airplay-remote-overlay" id="airplayOverlay">
+                    <div class="airplay-icon">📡</div>
+                    <div class="airplay-label">Đang phát trên AirPlay</div>
+                    <div class="airplay-controls">
+                        <button class="airplay-playpause" id="airplayPlayPause" onclick="toggleAirplayPlayPause()">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path id="airplayPlayPauseIcon" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                        </button>
+                        <div class="airplay-seek-container">
+                            <input type="range" class="airplay-seek-bar" id="airplaySeekBar" min="0" max="100" value="0" step="0.1">
+                            <div class="airplay-seek-time">
+                                <span id="airplayTimeCurrent">0:00</span>
+                                <span id="airplayTimeDuration">0:00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="status-msg" id="statusMessage">Sẵn sàng phát.</div>
 
@@ -1156,6 +1258,101 @@
         const appTabsNav = document.getElementById('appTabsNav');
         const stickyHeader = document.getElementById('stickyHeader');
         let hlsObj = null;
+
+        // --- Native Fullscreen flag (chỉ gọi 1 lần mỗi session phát) ---
+        let hasEnteredFullscreen = false;
+
+        video.addEventListener('play', () => {
+            if (!hasEnteredFullscreen && video.webkitSupportsFullscreen) {
+                video.webkitEnterFullscreen();
+                hasEnteredFullscreen = true;
+            }
+        });
+
+        // --- AirPlay Remote Control Mode ---
+        let isAirplayActive = false;
+        let airplaySeekInterval = null;
+
+        video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => {
+            const isWireless = video.webkitCurrentPlaybackTargetIsWireless;
+            toggleRemoteMode(isWireless);
+        });
+
+        function toggleRemoteMode(isWireless) {
+            const overlay = document.getElementById('airplayOverlay');
+            isAirplayActive = isWireless;
+
+            if (isWireless) {
+                // Ẩn video (không pause — stream tiếp tục chạy tới AirPlay device)
+                video.style.display = 'none';
+                overlay.style.display = 'flex';
+                // Bắt đầu cập nhật seek bar theo video.currentTime
+                startAirplaySeekSync();
+                updateAirplayPlayPauseIcon();
+            } else {
+                // Hiện lại video, ẩn overlay
+                video.style.display = 'block';
+                overlay.style.display = 'none';
+                stopAirplaySeekSync();
+                showToast('Đã ngắt kết nối AirPlay');
+            }
+        }
+
+        function toggleAirplayPlayPause() {
+            if (video.paused) {
+                video.play().catch(e => console.warn('[AirPlay] play error:', e));
+            } else {
+                video.pause();
+            }
+            updateAirplayPlayPauseIcon();
+        }
+
+        function updateAirplayPlayPauseIcon() {
+            const iconPath = document.getElementById('airplayPlayPauseIcon');
+            if (!iconPath) return;
+            if (video.paused) {
+                // Play icon
+                iconPath.setAttribute('d', 'M8 5v14l11-7z');
+            } else {
+                // Pause icon
+                iconPath.setAttribute('d', 'M6 19h4V5H6v14zm8-14v14h4V5h-4z');
+            }
+        }
+
+        function formatTime(sec) {
+            if (!sec || isNaN(sec)) return '0:00';
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return m + ':' + (s < 10 ? '0' : '') + s;
+        }
+
+        function startAirplaySeekSync() {
+            stopAirplaySeekSync();
+            const seekBar = document.getElementById('airplaySeekBar');
+            const timeCurrent = document.getElementById('airplayTimeCurrent');
+            const timeDuration = document.getElementById('airplayTimeDuration');
+
+            airplaySeekInterval = setInterval(() => {
+                if (!video.duration) return;
+                seekBar.max = video.duration;
+                seekBar.value = video.currentTime;
+                timeCurrent.textContent = formatTime(video.currentTime);
+                timeDuration.textContent = formatTime(video.duration);
+                updateAirplayPlayPauseIcon();
+            }, 500);
+
+            // Seek khi kéo thanh
+            seekBar.oninput = () => {
+                video.currentTime = parseFloat(seekBar.value);
+            };
+        }
+
+        function stopAirplaySeekSync() {
+            if (airplaySeekInterval) {
+                clearInterval(airplaySeekInterval);
+                airplaySeekInterval = null;
+            }
+        }
 
         // Trạng thái phim đang phát hiện tại (dùng để lưu tiến độ xem)
         let currentMovie = null;
@@ -1645,6 +1842,16 @@
             // Reset aspect ratio
             currentAspectMode = 0;
             video.style.objectFit = 'contain';
+
+            // Reset native fullscreen flag for next play session
+            hasEnteredFullscreen = false;
+
+            // Reset AirPlay overlay if active
+            if (isAirplayActive) {
+                toggleRemoteMode(false);
+            }
+            video.style.display = 'block';
+            document.getElementById('airplayOverlay').style.display = 'none';
             
             document.body.classList.remove('player-active');
             globalPlayer.style.display = 'none';
