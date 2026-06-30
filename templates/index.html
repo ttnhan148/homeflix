@@ -2126,6 +2126,15 @@
         window.addEventListener('DOMContentLoaded', () => {
             initTabbing();
         });
+
+        // Service Worker registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(reg => console.log('[SW] Registered:', reg.scope))
+                    .catch(err => console.warn('[SW] Registration failed:', err));
+            });
+        }
     </script>
     <div id="aspectToast" style="display: none; position: fixed; bottom: 20%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: white; padding: 0.8rem 1.5rem; border-radius: 20px; font-weight: 600; font-size: 0.9rem; z-index: 9999; border: 1px solid var(--glass-border); text-align: center; pointer-events: none;"></div>
 </body>
