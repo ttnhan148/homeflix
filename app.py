@@ -1077,58 +1077,87 @@ async def get_media_file_api(movie_slug: str, episode_name: str):
         raise HTTPException(status_code=404, detail="File video chưa sẵn sàng hoặc không tồn tại.")
     return FileResponse(file_path, media_type="video/mp4")
 
-async def _fetch_movies_from_url(url: str) -> list:
-    try:
+def _normalize_movie_list(items: list) -> list:
+    """Normalize KKPhim v1 API items to uniform format."""
+    result = []
+    for item in items:
+        poster = item.get("poster_url", "")
+        thumb = item.get("thumb_url", "")
+        result.append({
+            "slug": item.get("slug"),
+            "name": item.get("name"),
+            "origin_name": item.get("origin_name"),
+            "poster_url": poster if poster.startswith("http") else f"https://phimimg.com/{poster.lstrip('/')}" if poster else "",
+            "thumb_url": thumb if thumb.startswith("http") else f"https://phimimg.com/{thumb.lstrip('/')}" if thumb else "",
+            "year": item.get("year", ""),
+            "quality": item.get("quality", ""),
+            "lang": item.get("lang", ""),
+            "episode_current": item.get("episode_current", ""),
+            "tmdb": item.get("tmdb", {})
+        })
+    return result
+
+# --- Smart Homepage sections ---
+
+@app.get("/api/home/latest")
+async def home_latest(page: int = 1):
+    """Phim mới cập nhật (KKPhim home API, cache 30 phút)"""
+    async def _fetch():
+        url = f"https://phimapi.com/v1/api/home?page={page}"
         resp = await client.get(url)
         resp.raise_for_status()
         data = resp.json()
-        
-        cdn_domain = "https://phimimg.com"
-        if isinstance(data, dict):
-            if "data" in data and isinstance(data["data"], dict):
-                cdn_domain = data["data"].get("APP_DOMAIN_CDN_IMAGE", cdn_domain)
-                items = data["data"].get("items", [])
-            else:
-                items = data.get("items", [])
-        else:
-            items = []
-        
-        movie_list = []
-        for item in items:
-            p_url = item.get("poster_url", "")
-            if p_url and not p_url.startswith("http"):
-                p_url = f"{cdn_domain.rstrip('/')}/{p_url.lstrip('/')}"
-            
-            movie_list.append({
-                "slug": item.get("slug"),
-                "name": item.get("name"),
-                "poster_url": p_url,
-                "year": item.get("year", "")
-            })
-        return movie_list
+        items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
+        pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
+        return {
+            "items": _normalize_movie_list(items),
+            "pagination": pagination
+        }
+    try:
+        return await cached_fetch(f"home:latest:{page}", 1800, _fetch)
     except Exception as e:
-        logger.error(f"Error fetching from {url}: {e}")
-        return []
+        logger.error(f"Error fetching home/latest: {e}")
+        return {"items": [], "pagination": {}, "error": str(e)}
 
-@app.get("/api/recommendations")
-async def get_recommendations_api():
-    urls = [
-        "https://phimapi.com/v1/api/danh-sach/phim-le?page=1",
-        "https://phimapi.com/v1/api/danh-sach/phim-chieu-rap?page=1",
-        "https://phimapi.com/v1/api/the-loai/phim-18?sort_field=modified.time&sort_lang=&country=au-my&year="
-    ]
-    
-    de_xuat, phim_chieu_rap, hot = await asyncio.gather(
-        cached_fetch("reco:0", 1800, lambda: _fetch_movies_from_url(urls[0])),
-        cached_fetch("reco:1", 1800, lambda: _fetch_movies_from_url(urls[1])),
-        cached_fetch("reco:2", 1800, lambda: _fetch_movies_from_url(urls[2]))
-    )
-    
-    return {
-        "Đề xuất": de_xuat,
-        "Phim Chiếu Rạp": phim_chieu_rap,
-        "Hot": hot
-    }
+@app.get("/api/home/phim-le")
+async def home_phim_le(page: int = 1):
+    """Phim Lẻ (cache 1 giờ)"""
+    async def _fetch():
+        url = f"https://phimapi.com/v1/api/danh-sach/phim-le?page={page}"
+        resp = await client.get(url)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
+        pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
+        return {
+            "items": _normalize_movie_list(items),
+            "pagination": pagination
+        }
+    try:
+        return await cached_fetch(f"home:phim-le:{page}", 3600, _fetch)
+    except Exception as e:
+        logger.error(f"Error fetching home/phim-le: {e}")
+        return {"items": [], "pagination": {}, "error": str(e)}
+
+@app.get("/api/home/phim-chieu-rap")
+async def home_phim_chieu_rap(page: int = 1):
+    """Phim Chiếu Rạp (cache 1 giờ)"""
+    async def _fetch():
+        url = f"https://phimapi.com/v1/api/danh-sach/phim-chieu-rap?page={page}"
+        resp = await client.get(url)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
+        pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
+        return {
+            "items": _normalize_movie_list(items),
+            "pagination": pagination
+        }
+    try:
+        return await cached_fetch(f"home:phim-chieu-rap:{page}", 3600, _fetch)
+    except Exception as e:
+        logger.error(f"Error fetching home/phim-chieu-rap: {e}")
+        return {"items": [], "pagination": {}, "error": str(e)}
 
 @app.on_event("shutdown")
 async def shutdown_event():
