@@ -1179,6 +1179,36 @@
             transform: none !important;
         }
 
+        /* Tắt backdrop-filter trên mobile — gây mất touch event + hao pin */
+        .device-mobile .btn-control,
+        .device-mobile .btn-overlay-back,
+        .device-mobile .center-play-btn,
+        .device-mobile .tab-btn,
+        .device-mobile .grid-tab-btn,
+        .device-mobile .btn-sec,
+        .device-mobile .btn-paste,
+        .device-mobile .ep-btn,
+        .device-mobile .saved-ep-btn,
+        .device-mobile .episodes-drawer-toggle,
+        .device-mobile .search-overlay-close,
+        .device-mobile .search-overlay-input,
+        .device-mobile .search-bar input,
+        .device-mobile textarea,
+        .device-mobile .input-card,
+        .device-mobile .movie-card,
+        .device-mobile .episodes-section,
+        .device-mobile .movie-detail-panel,
+        .device-mobile .saved-movie-row,
+        .device-mobile .episodes-drawer,
+        .device-mobile .status-msg,
+        .device-mobile .detail-description,
+        .device-mobile .meta-item,
+        .device-mobile .player-toast,
+        .device-mobile .search-overlay {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+
         /* --- SMARTPAGE: HERO SECTION --- */
         .hero-scroll-section {
             display: flex;
