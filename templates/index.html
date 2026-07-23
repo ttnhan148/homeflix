@@ -775,6 +775,266 @@
             transform: none !important;
         }
 
+        /* --- SMARTPAGE: HERO SECTION --- */
+        .hero-scroll-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            width: 100%;
+        }
+
+        .hero-scroll-grid {
+            display: flex;
+            overflow-x: auto;
+            gap: 1rem;
+            padding-bottom: 0.5rem;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+
+        .hero-scroll-grid::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .hero-scroll-grid::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+
+        .hero-card {
+            flex: 0 0 200px;
+            scroll-snap-align: start;
+            background: var(--card-bg);
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: var(--transition);
+            border: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .hero-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent-color);
+        }
+
+        .hero-card .movie-poster {
+            width: 100%;
+            aspect-ratio: 2/3;
+            object-fit: cover;
+            background: #222;
+        }
+
+        .hero-card .movie-info {
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .hero-card .movie-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: white;
+            line-height: 1.2;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .hero-card .movie-meta {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .hero-card .quality-badge {
+            background: var(--accent-color);
+            color: white;
+            padding: 0.05rem 0.3rem;
+            border-radius: 2px;
+            font-size: 0.6rem;
+            font-weight: 700;
+        }
+
+        .skeleton-card {
+            flex: 0 0 200px;
+            border-radius: 6px;
+            background: #1a1a1a;
+            animation: skeleton-pulse 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-card .skeleton-img {
+            width: 100%;
+            aspect-ratio: 2/3;
+            background: #222;
+        }
+
+        .skeleton-card .skeleton-text {
+            height: 0.8rem;
+            margin: 0.5rem;
+            background: #222;
+            border-radius: 3px;
+        }
+
+        .skeleton-card .skeleton-text-short {
+            width: 60%;
+            height: 0.6rem;
+            margin: 0 0.5rem 0.5rem;
+            background: #222;
+            border-radius: 3px;
+        }
+
+        /* TV mode */
+        .device-tv .hero-card {
+            flex: 0 0 250px;
+        }
+
+        .device-tv .hero-card .movie-title {
+            font-size: 1rem;
+        }
+
+        .device-tv .skeleton-card {
+            flex: 0 0 250px;
+        }
+
+        /* Mobile */
+        .device-mobile .hero-card {
+            flex: 0 0 160px;
+        }
+
+        .device-mobile .skeleton-card {
+            flex: 0 0 160px;
+        }
+
+        /* --- SMARTPAGE: GRID TABS SECTION --- */
+        .grid-tabs-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            width: 100%;
+        }
+
+        .grid-tabs-nav {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .grid-tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+
+        .grid-tab-btn:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .grid-tab-btn.active {
+            color: white;
+            background: var(--accent-color);
+        }
+
+        .grid-tab-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .grid-load-more {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            padding: 1rem;
+        }
+
+        /* TV mode */
+        .device-tv .grid-tab-btn {
+            font-size: 1rem;
+            padding: 0.7rem 1.4rem;
+        }
+
+        .device-tv .grid-tab-content {
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        }
+
+        /* Mobile */
+        .device-mobile .grid-tab-content {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        /* --- SEARCH OVERLAY --- */
+        .search-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .search-overlay.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .search-overlay-header {
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-overlay-close {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+            display: flex;
+            align-items: center;
+            transition: var(--transition);
+        }
+
+        .search-overlay-close:hover {
+            color: var(--accent-color);
+        }
+
+        .search-overlay .movies-grid {
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        /* Skeleton pulse animation */
+        @keyframes skeleton-pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.6; }
+        }
+
         /* --- SAVED MOVIES LIST & EPISODES COLOR-CODING --- */
         .saved-movies-list-container {
             display: flex;
