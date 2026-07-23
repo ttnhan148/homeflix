@@ -325,151 +325,8 @@
             max-width: 40vw;
             margin: 0 1rem;
         }
-        .center-play-btn {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 70px;
-            height: 70px;
-            border-radius: 50%;
-            background: rgba(20, 20, 20, 0.7);
-            border: 2px solid rgba(255,255,255,0.6);
-            color: white;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-            z-index: 11;
-            pointer-events: auto;
-            backdrop-filter: blur(12px);
-        }
-        .center-play-btn:hover {
-            transform: translate(-50%, -50%) scale(1.1);
-            border-color: var(--accent-color);
-            background: rgba(229, 9, 20, 0.2);
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
-        }
-        .center-play-btn.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        .player-bottom-bar {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-            padding: 0.5rem 1rem 0.75rem;
-            background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-        }
-        .custom-seek-wrapper {
-            width: 100%;
-            padding: 0.25rem 0;
-        }
-        .custom-seek-bar {
-            width: 100%;
-            height: 5px;
-            -webkit-appearance: none;
-            appearance: none;
-            background: rgba(255,255,255,0.15);
-            border-radius: 3px;
-            outline: none;
-            cursor: pointer;
-            transition: height 0.15s ease;
-        }
-        .custom-seek-bar:hover {
-            height: 7px;
-        }
-        .custom-seek-bar::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: var(--accent-color);
-            cursor: pointer;
-            box-shadow: 0 0 6px rgba(229, 9, 20, 0.5);
-            transition: transform 0.15s ease;
-        }
-        .custom-seek-bar:hover::-webkit-slider-thumb {
-            transform: scale(1.2);
-        }
-        .custom-seek-bar::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: var(--accent-color);
-            cursor: pointer;
-            border: none;
-            box-shadow: 0 0 6px rgba(229, 9, 20, 0.5);
-        }
-        .bottom-controls {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-        }
-        .btn-control {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.08);
-            color: white;
-            cursor: pointer;
-            padding: 0.4rem;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: var(--transition);
-            opacity: 0.85;
-            backdrop-filter: blur(4px);
-        }
-        .btn-control:hover {
-            opacity: 1;
-            background: rgba(255,255,255,0.12);
-            border-color: rgba(255,255,255,0.2);
-        }
-        .time-display {
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: rgba(255,255,255,0.8);
-            min-width: 80px;
-            font-variant-numeric: tabular-nums;
-        }
-        .volume-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 0.3rem;
-            margin-left: auto;
-        }
-        .volume-slider {
-            width: 60px;
-            height: 5px;
-            -webkit-appearance: none;
-            appearance: none;
-            background: rgba(255,255,255,0.15);
-            border-radius: 3px;
-            outline: none;
-            cursor: pointer;
-            transition: width 0.2s ease;
-        }
-        .volume-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: white;
-            cursor: pointer;
-            box-shadow: 0 0 4px rgba(0,0,0,0.4);
-        }
-        .volume-slider::-moz-range-thumb {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: white;
-            cursor: pointer;
-            border: none;
-            box-shadow: 0 0 4px rgba(0,0,0,0.4);
-        }
+
+
         /* --- EPISODES DRAWER --- */
         .episodes-drawer {
             width: 100%;
@@ -527,26 +384,7 @@
             border-radius: 3px;
         }
         /* --- PLAYER TOAST --- */
-        .player-toast {
-            position: absolute;
-            bottom: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            z-index: 12;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-            opacity: 0;
-            backdrop-filter: blur(8px);
-        }
-        .player-toast.active {
-            opacity: 1;
-        }
+
         /* TV */
         .device-tv .player-top-bar {
             padding: 1rem 1.5rem;
@@ -558,19 +396,7 @@
         .device-tv .player-ep-title {
             font-size: 1.1rem;
         }
-        .device-tv .center-play-btn {
-            width: 90px;
-            height: 90px;
-        }
-        .device-tv .player-bottom-bar {
-            padding: 0.75rem 1.5rem 1rem;
-        }
-        .device-tv .btn-control {
-            padding: 0.5rem;
-        }
-        .device-tv .time-display {
-            font-size: 0.9rem;
-        }
+
         /* Mobile */
         .device-mobile .player-overlay {
             font-size: 0.9rem;
@@ -579,16 +405,7 @@
             font-size: 0.75rem;
             padding: 0.5rem 0.7rem;
         }
-        .device-mobile .center-play-btn {
-            width: 60px;
-            height: 60px;
-        }
-        .device-mobile .bottom-controls {
-            gap: 0.4rem;
-        }
-        .device-mobile .volume-slider {
-            width: 40px;
-        }
+
         .device-mobile .episodes-drawer .episodes-grid {
             grid-template-columns: repeat(2, 1fr);
             gap: 0.4rem;
@@ -1180,9 +997,7 @@
         }
 
         /* Tắt backdrop-filter trên mobile — gây mất touch event + hao pin */
-        .device-mobile .btn-control,
         .device-mobile .btn-overlay-back,
-        .device-mobile .center-play-btn,
         .device-mobile .tab-btn,
         .device-mobile .grid-tab-btn,
         .device-mobile .btn-sec,
@@ -1203,7 +1018,6 @@
         .device-mobile .status-msg,
         .device-mobile .detail-description,
         .device-mobile .meta-item,
-        .device-mobile .player-toast,
         .device-mobile .search-overlay {
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
@@ -1927,7 +1741,7 @@
         <div id="globalPlayerContainer" style="display: none; flex-direction: column; gap: 1.25rem; width: 100%; animation: netflixFadeIn 0.5s ease-out; padding-top: 0.5rem;">
 
             <div class="player-wrapper">
-                <video id="videoPlayer" playsinline></video>
+                <video id="videoPlayer" playsinline controls></video>
                 <!-- AirPlay Remote Control Overlay -->
                 <div class="airplay-remote-overlay" id="airplayOverlay">
                     <div class="airplay-icon">📡</div>
@@ -1963,7 +1777,6 @@
         function togglePlayerZoom() {
             zoomMode = !zoomMode;
             video.style.objectFit = zoomMode ? 'cover' : 'contain';
-            playerOverlay.showToast(zoomMode ? 'Phóng to (Zoom)' : 'Mặc định (Contain)');
         }
         
         video.addEventListener('dblclick', togglePlayerZoom);
@@ -1998,7 +1811,7 @@
                 const overlay = document.createElement('div');
                 overlay.className = 'player-overlay active';
                 
-                // Top bar
+                // Top bar — only back button + episode title
                 const topBar = document.createElement('div');
                 topBar.className = 'player-top-bar';
                 topBar.innerHTML = `
@@ -2012,114 +1825,22 @@
                     <div style="width:80px;"></div>
                 `;
                 
-                // Center play button
-                const centerBtn = document.createElement('button');
-                centerBtn.className = 'center-play-btn hidden';
-                centerBtn.innerHTML = `<svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
-                centerBtn.onclick = () => this.togglePlay();
-                
-                // Bottom bar
-                const bottomBar = document.createElement('div');
-                bottomBar.className = 'player-bottom-bar';
-                
-                // Seek bar
-                const seekWrapper = document.createElement('div');
-                seekWrapper.className = 'custom-seek-wrapper';
-                const seekBar = document.createElement('input');
-                seekBar.type = 'range';
-                seekBar.className = 'custom-seek-bar';
-                seekBar.min = 0;
-                seekBar.max = 100;
-                seekBar.value = 0;
-                seekBar.step = 0.1;
-                seekBar.oninput = () => {
-                    if (video.duration) {
-                        video.currentTime = parseFloat(seekBar.value);
-                    }
-                };
-                seekWrapper.appendChild(seekBar);
-                
-                // Controls row
-                const controlsRow = document.createElement('div');
-                controlsRow.className = 'bottom-controls';
-                
-                const playBtn = document.createElement('button');
-                playBtn.className = 'btn-control';
-                playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
-                playBtn.onclick = () => this.togglePlay();
-                
-                const timeDisplay = document.createElement('span');
-                timeDisplay.className = 'time-display';
-                timeDisplay.textContent = '0:00 / 0:00';
-                
-                const volumeBtn = document.createElement('button');
-                volumeBtn.className = 'btn-control';
-                volumeBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v7a4.5 4.5 0 002.5-3.5zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
-                volumeBtn.onclick = () => {
-                    video.muted = !video.muted;
-                    this.updateVolumeIcon();
-                };
-                
-                const volumeSlider = document.createElement('input');
-                volumeSlider.type = 'range';
-                volumeSlider.className = 'volume-slider';
-                volumeSlider.min = 0;
-                volumeSlider.max = 1;
-                volumeSlider.value = 1;
-                volumeSlider.step = 0.05;
-                volumeSlider.oninput = () => {
-                    video.volume = parseFloat(volumeSlider.value);
-                    video.muted = false;
-                    this.updateVolumeIcon();
-                };
-                
-                const volumeWrapper = document.createElement('div');
-                volumeWrapper.className = 'volume-wrapper';
-                volumeWrapper.appendChild(volumeBtn);
-                volumeWrapper.appendChild(volumeSlider);
-                
-                const fullscreenBtn = document.createElement('button');
-                fullscreenBtn.className = 'btn-control';
-                fullscreenBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
-                fullscreenBtn.onclick = () => this.toggleFullscreen();
-                
-                const pipBtn = document.createElement('button');
-                pipBtn.className = 'btn-control';
-                pipBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M19 11h-8v6h8v-6zm4 8V5c-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 0H3V5h18v14z"/></svg>`;
-                pipBtn.onclick = () => this.togglePiP();
-                
-                controlsRow.appendChild(playBtn);
-                controlsRow.appendChild(timeDisplay);
-                controlsRow.appendChild(volumeWrapper);
-                controlsRow.appendChild(fullscreenBtn);
-                controlsRow.appendChild(pipBtn);
-                
-                bottomBar.appendChild(seekWrapper);
-                bottomBar.appendChild(controlsRow);
-                
-                // Toast
-                const toast = document.createElement('div');
-                toast.className = 'player-toast';
-                
                 overlay.appendChild(topBar);
-                overlay.appendChild(centerBtn);
-                overlay.appendChild(bottomBar);
-                overlay.appendChild(toast);
                 
                 this.el = overlay;
                 this.topBar = topBar;
-                this.centerBtn = centerBtn;
-                this.bottomBar = bottomBar;
-                this.seekBar = seekBar;
-                this.playBtn = playBtn;
-                this.timeDisplay = timeDisplay;
-                this.volumeBtn = volumeBtn;
-                this.volumeSlider = volumeSlider;
-                this.fullscreenBtn = fullscreenBtn;
-                this.pipBtn = pipBtn;
-                this.toastEl = toast;
+                this.centerBtn = null;
+                this.bottomBar = null;
+                this.seekBar = null;
+                this.playBtn = null;
+                this.timeDisplay = null;
+                this.volumeBtn = null;
+                this.volumeSlider = null;
+                this.fullscreenBtn = null;
+                this.pipBtn = null;
+                this.toastEl = null;
                 
-                // Auto-hide listeners
+                // Auto-hide for top bar
                 const resetFn = () => this.resetInactivityTimer();
                 overlay.addEventListener('mousemove', resetFn);
                 overlay.addEventListener('touchstart', resetFn);
@@ -2143,7 +1864,6 @@
                     this.el.classList.add('hidden');
                     this.el.classList.remove('active');
                     this.visible = false;
-                    if (this.centerBtn) this.centerBtn.classList.add('hidden');
                 }
             },
             
@@ -2155,122 +1875,7 @@
             resetInactivityTimer() {
                 if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
                 this.show();
-                if (this.centerBtn) {
-                    if (video.paused) this.centerBtn.classList.remove('hidden');
-                    else this.centerBtn.classList.add('hidden');
-                }
                 this.inactivityTimer = setTimeout(() => this.hide(), this.INACTIVITY_TIMEOUT);
-            },
-            
-            updateSeekBar() {
-                if (!this.seekBar || !this.timeDisplay || !video.duration) return;
-                const current = video.currentTime;
-                const duration = video.duration;
-                this.seekBar.max = duration;
-                this.seekBar.value = current;
-                const pct = (current / duration) * 100;
-                this.seekBar.style.background = `linear-gradient(to right, var(--accent-color) ${pct}%, rgba(255,255,255,0.2) ${pct}%)`;
-                this.timeDisplay.textContent = this.formatTime(current) + ' / ' + this.formatTime(duration);
-            },
-            
-            formatTime(sec) {
-                if (!sec || isNaN(sec)) return '0:00';
-                const m = Math.floor(sec / 60);
-                const s = Math.floor(sec % 60);
-                return m + ':' + (s < 10 ? '0' : '') + s;
-            },
-            
-            updatePlayPauseIcon() {
-                if (this.centerBtn) {
-                    if (video.paused) {
-                        this.centerBtn.classList.remove('hidden');
-                        this.centerBtn.innerHTML = `<svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
-                    } else {
-                        this.centerBtn.classList.add('hidden');
-                    }
-                }
-                if (this.playBtn) {
-                    if (video.paused) {
-                        this.playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
-                    } else {
-                        this.playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
-                    }
-                }
-            },
-            
-            updateVolumeIcon() {
-                if (!this.volumeBtn) return;
-                if (video.muted || video.volume === 0) {
-                    this.volumeBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12A4.5 4.5 0 0014 8.5v7a4.5 4.5 0 002.5-3.5zM3 9v6h4l5 5V4L7 9H3zm15.5 3A7.5 7.5 0 0017 6.64v2.07a5.5 5.5 0 010 6.58v2.07A7.5 7.5 0 0018.5 12zM19 2l-3.5 3.5-1.42-1.42L20 0 24 4l-1.41 1.42L19 2z"/></svg>`;
-                } else {
-                    this.volumeBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v7a4.5 4.5 0 002.5-3.5zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
-                }
-            },
-            
-            updateFullscreenIcon() {
-                if (!this.fullscreenBtn) return;
-                const isFull = document.fullscreenElement || document.webkitFullscreenElement;
-                if (isFull) {
-                    this.fullscreenBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>`;
-                } else {
-                    this.fullscreenBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
-                }
-            },
-
-            updatePiPIcon() {
-                if (!this.pipBtn) return;
-                const isPiP = document.pictureInPictureElement;
-                if (isPiP) {
-                    this.pipBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zm-10-7h9v6h-9z"/></svg>`;
-                } else {
-                    this.pipBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M19 11h-8v6h8v-6zm4 8V5c-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 0H3V5h18v14z"/></svg>`;
-                }
-            },
-            
-            togglePlay() {
-                if (video.paused) video.play().catch(e => console.warn('[Overlay] play error:', e));
-                else video.pause();
-            },
-            
-            toggleFullscreen() {
-                if (document.fullscreenElement || document.webkitFullscreenElement) {
-                    if (document.exitFullscreen) document.exitFullscreen();
-                    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-                } else {
-                    const el = document.documentElement;
-                    if (el.requestFullscreen) el.requestFullscreen();
-                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-                }
-            },
-            
-            togglePiP() {
-                if (document.pictureInPictureElement) {
-                    document.exitPictureInPicture().catch(e => console.warn('[PiP] exit error:', e));
-                } else {
-                    video.requestPictureInPicture().catch(e => console.warn('[PiP] enter error:', e));
-                }
-            },
-            
-            showToast(msg, duration) {
-                if (!this.toastEl) return;
-                this.toastEl.textContent = msg;
-                this.toastEl.classList.add('active');
-                if (this.toastTimeout) clearTimeout(this.toastTimeout);
-                this.toastTimeout = setTimeout(() => {
-                    this.toastEl.classList.remove('active');
-                }, duration || 2000);
-            },
-            
-            startSeekSync() {
-                if (this.seekInterval) clearInterval(this.seekInterval);
-                this.seekInterval = setInterval(() => this.updateSeekBar(), 250);
-            },
-            
-            stopSeekSync() {
-                if (this.seekInterval) {
-                    clearInterval(this.seekInterval);
-                    this.seekInterval = null;
-                }
             },
             
             setTitle(title) {
@@ -2349,39 +1954,13 @@ function buildEpisodesGridInDrawer(episodesArray, playIdx) {
             }
         });
 
-// Overlay sync events
+// Overlay sync — native controls handle play/pause/seek/volume/fullscreen/PiP
 video.addEventListener('play', () => {
-    if (playerOverlay.el) {
-        playerOverlay.resetInactivityTimer();
-        playerOverlay.updatePlayPauseIcon();
-        playerOverlay.startSeekSync();
-    }
+    if (playerOverlay.el) playerOverlay.resetInactivityTimer();
 });
 
 video.addEventListener('pause', () => {
-    if (playerOverlay.el) {
-        playerOverlay.resetInactivityTimer();
-        playerOverlay.updatePlayPauseIcon();
-        if (playerOverlay.centerBtn) playerOverlay.centerBtn.classList.remove('hidden');
-    }
-});
-
-video.addEventListener('volumechange', () => {
-    if (playerOverlay.el) playerOverlay.updateVolumeIcon();
-});
-
-document.addEventListener('fullscreenchange', () => {
-    if (playerOverlay.el) playerOverlay.updateFullscreenIcon();
-});
-document.addEventListener('webkitfullscreenchange', () => {
-    if (playerOverlay.el) playerOverlay.updateFullscreenIcon();
-});
-
-video.addEventListener('enterpictureinpicture', () => {
-    if (playerOverlay.el) playerOverlay.updatePiPIcon();
-});
-video.addEventListener('leavepictureinpicture', () => {
-    if (playerOverlay.el) playerOverlay.updatePiPIcon();
+    if (playerOverlay.el) playerOverlay.resetInactivityTimer();
 });
 
 // Desktop auto-fullscreen on first play
@@ -2420,7 +1999,6 @@ video.addEventListener('play', () => {
                 video.style.display = 'block';
                 overlay.style.display = 'none';
                 stopAirplaySeekSync();
-                if (playerOverlay) playerOverlay.showToast('Đã ngắt kết nối AirPlay');
             }
         }
 
@@ -3032,14 +2610,14 @@ video.addEventListener('play', () => {
             if (episodes.length > 0) {
                 playEpisodesListDirect(episodes, episodes[0].link_m3u8);
             } else {
-                playerOverlay.showToast('KHÔNG TÌM THẤY VIDEO', 3000);
+                alert('KHÔNG TÌM THẤY VIDEO');
             }
         }
 
         // Tải tập phim với tuỳ chọn vị trí phát bằng mảng tập phim đã chuẩn hóa
         function playEpisodesListDirect(episodesArray, targetUrlOrIdx) {
             if (!episodesArray || episodesArray.length === 0) {
-                playerOverlay.showToast('KHÔNG TÌM THẤY VIDEO', 3000);
+                alert('KHÔNG TÌM THẤY VIDEO');
                 return;
             }
             
@@ -3150,7 +2728,6 @@ video.addEventListener('play', () => {
                 const msg = errorMap[video.error ? video.error.code : 4] || "Lỗi không xác định.";
                 console.error("[Play] Video Error Event:", video.error, "Msg:", msg);
                 alert(`[Native Player Error]: ${msg}\nTên tập: ${title}`);
-                playerOverlay.showToast(`LỖI: ${msg.toUpperCase()}`, 3000);
             };
 
             console.log("[Play] useMp4 =", useMp4, "mp4Url =", mp4Url);
@@ -3158,8 +2735,6 @@ video.addEventListener('play', () => {
             // Update overlay title
             playerOverlay.setTitle(title);
             playerOverlay.resetInactivityTimer();
-            playerOverlay.startSeekSync();
-            playerOverlay.updatePlayPauseIcon();
 
             if (useMp4) {
                 video.src = mp4Url;
@@ -3205,13 +2780,12 @@ video.addEventListener('play', () => {
                                     break;
                             }
                             alert(`[HLS Error]: ${errorMsg}\nChi tiết: ${data.details}\nTên tập: ${title}`);
-                            playerOverlay.showToast(`LỖI: ${errorMsg.toUpperCase()}`, 3000);
                             hlsObj.destroy();
                         }
                     });
                 } else {
                     console.error("[Play] Trình duyệt không hỗ trợ phát HLS (không có Hls.js và không có Native HLS)");
-                    playerOverlay.showToast('LỖI: TRÌNH DUYỆT KHÔNG HỖ TRỢ HLS', 3000);
+                    alert('LỖI: TRÌNH DUYỆT KHÔNG HỖ TRỢ HLS');
                 }
             }
         }
@@ -3229,7 +2803,6 @@ video.addEventListener('play', () => {
             hasEnteredFullscreen = false;
             
             // Clean up overlay
-            playerOverlay.stopSeekSync();
             playerOverlay.el = null;
             const oldOverlay = document.querySelector('.player-overlay');
             if (oldOverlay) oldOverlay.remove();
