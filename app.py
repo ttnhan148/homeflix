@@ -1188,9 +1188,9 @@ async def home_cache_warmer():
     while True:
         logger.info("[CacheWarmer] Bắt đầu làm mới cache homepage...")
         # Page 1 cho cả 3 section (có thể mở rộng thêm page sau)
-        await _warm_section("latest", 1, 1800, "https://phimapi.com/v1/api/home?page={}")
-        await _warm_section("phim-le", 1, 3600, "https://phimapi.com/v1/api/danh-sach/phim-le?page={}")
-        await _warm_section("phim-chieu-rap", 1, 3600, "https://phimapi.com/v1/api/danh-sach/phim-chieu-rap?page={}")
+        await _warm_section("latest", 1, 1800, "https://phimapi.com/v1/api/home?page={page}")
+        await _warm_section("phim-le", 1, 3600, "https://phimapi.com/v1/api/danh-sach/phim-le?page={page}")
+        await _warm_section("phim-chieu-rap", 1, 3600, "https://phimapi.com/v1/api/danh-sach/phim-chieu-rap?page={page}")
         logger.info(f"[CacheWarmer] Đợi {WARM_CACHE_INTERVAL}s cho lần refresh tiếp theo...")
         await asyncio.sleep(WARM_CACHE_INTERVAL)
 
