@@ -234,10 +234,329 @@
         .player-wrapper {
             width: 100%;
             background: #000;
+            position: relative;
             border-radius: 6px;
             overflow: hidden;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
             border: 1px solid var(--glass-border);
+        }
+
+        /* --- CUSTOM PLAYER OVERLAY --- */
+        .player-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 10;
+        }
+        .player-overlay.active {
+            opacity: 1;
+        }
+        .player-overlay.hidden {
+            opacity: 0;
+        }
+        .player-overlay * {
+            pointer-events: auto;
+        }
+        .player-top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .btn-overlay-back {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .btn-overlay-back:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .player-ep-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: white;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 40vw;
+            margin: 0 1rem;
+        }
+        .center-play-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.5);
+            border: 3px solid rgba(255,255,255,0.8);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            z-index: 11;
+            pointer-events: auto;
+        }
+        .center-play-btn:hover {
+            transform: translate(-50%, -50%) scale(1.1);
+            background: rgba(255,255,255,0.15);
+        }
+        .center-play-btn.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .player-bottom-bar {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            padding: 0.5rem 1rem 0.75rem;
+            background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .custom-seek-wrapper {
+            width: 100%;
+            padding: 0.25rem 0;
+        }
+        .custom-seek-bar {
+            width: 100%;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+            transition: height 0.15s ease;
+        }
+        .custom-seek-bar:hover {
+            height: 6px;
+        }
+        .custom-seek-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .custom-seek-bar:hover::-webkit-slider-thumb {
+            opacity: 1;
+        }
+        .custom-seek-bar::-moz-range-thumb {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: none;
+        }
+        .bottom-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .btn-control {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 0.3rem;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            opacity: 0.85;
+        }
+        .btn-control:hover {
+            opacity: 1;
+            background: rgba(255,255,255,0.1);
+        }
+        .time-display {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: rgba(255,255,255,0.8);
+            min-width: 80px;
+            font-variant-numeric: tabular-nums;
+        }
+        .volume-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            margin-left: auto;
+        }
+        .volume-slider {
+            width: 60px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+            transition: width 0.2s ease;
+        }
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+        }
+        .volume-slider::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            border: none;
+        }
+        /* --- EPISODES DRAWER --- */
+        .episodes-drawer {
+            width: 100%;
+            overflow: hidden;
+            transition: max-height 0.35s ease;
+            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+            background: var(--card-bg);
+        }
+        .episodes-drawer.collapsed {
+            max-height: 44px;
+        }
+        .episodes-drawer.expanded {
+            max-height: 400px;
+        }
+        .episodes-drawer-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #222;
+            border: none;
+            color: var(--text-main);
+            padding: 0.6rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .episodes-drawer-toggle:hover {
+            background: #2a2a2a;
+        }
+        .episodes-drawer-toggle .drawer-arrow {
+            transition: transform 0.3s ease;
+        }
+        .episodes-drawer.expanded .episodes-drawer-toggle .drawer-arrow {
+            transform: rotate(180deg);
+        }
+        .episodes-drawer .episodes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.6rem;
+            padding: 0.75rem 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .episodes-drawer .episodes-grid::-webkit-scrollbar {
+            width: 6px;
+        }
+        .episodes-drawer .episodes-grid::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+        /* --- PLAYER TOAST --- */
+        .player-toast {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            z-index: 12;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            opacity: 0;
+        }
+        .player-toast.active {
+            opacity: 1;
+        }
+        /* TV */
+        .device-tv .player-top-bar {
+            padding: 1rem 1.5rem;
+        }
+        .device-tv .btn-overlay-back {
+            font-size: 1rem;
+            padding: 0.6rem 1rem;
+        }
+        .device-tv .player-ep-title {
+            font-size: 1.1rem;
+        }
+        .device-tv .center-play-btn {
+            width: 90px;
+            height: 90px;
+        }
+        .device-tv .player-bottom-bar {
+            padding: 0.75rem 1.5rem 1rem;
+        }
+        .device-tv .btn-control {
+            padding: 0.5rem;
+        }
+        .device-tv .time-display {
+            font-size: 0.9rem;
+        }
+        /* Mobile */
+        .device-mobile .player-overlay {
+            font-size: 0.9rem;
+        }
+        .device-mobile .btn-overlay-back {
+            font-size: 0.75rem;
+            padding: 0.5rem 0.7rem;
+        }
+        .device-mobile .center-play-btn {
+            width: 60px;
+            height: 60px;
+        }
+        .device-mobile .bottom-controls {
+            gap: 0.4rem;
+        }
+        .device-mobile .volume-slider {
+            width: 40px;
+        }
+        .device-mobile .episodes-drawer .episodes-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.4rem;
         }
 
         video {
@@ -251,15 +570,20 @@
         /* --- AIRPLAY REMOTE CONTROL OVERLAY --- */
         .airplay-remote-overlay {
             display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            width: 100%;
-            aspect-ratio: 16/9;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             gap: 1.5rem;
             padding: 2rem;
+            z-index: 20;
         }
         .airplay-remote-overlay .airplay-icon {
             font-size: 3rem;
