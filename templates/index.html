@@ -1652,16 +1652,9 @@
     <div class="container">
         <!-- STICKY HEADER WRAPPER -->
         <div id="stickyHeader" class="sticky-header">
-            <!-- COMPACT HEADER WITH CACHE STATS -->
             <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h1>HomeFlix</h1>
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
-                        <span id="cacheLabel" style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Cache: 0 GB / 10 GB</span>
-                        <div style="width: 80px; height: 3px; background: #222; border-radius: 1.5px; overflow: hidden;">
-                            <div id="cacheProgressFill" style="height: 100%; background: var(--accent-color); width: 0%; transition: width 1s ease;"></div>
-                        </div>
-                    </div>
                     <button id="btnClearStorage" title="Xóa toàn bộ Cache" style="background: transparent; border: 1px solid var(--glass-border); color: #ff453a; padding: 0.4rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition);">
                         <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -1804,8 +1797,6 @@
         const btnPlay = document.getElementById('btnMainPlay');
         const btnPaste = document.getElementById('btnQuickActionPaste');
         const video = document.getElementById('videoPlayer');
-        const cacheLabel = document.getElementById('cacheLabel');
-        const cacheBar = document.getElementById('cacheProgressFill');
         const btnClear = document.getElementById('btnClearStorage');
         
         // --- Double-click zoom ---
@@ -2820,24 +2811,11 @@ video.addEventListener('play', () => {
         inputArea.addEventListener('click', expandManualInput);
 
         // --- CACHE ---
-        async function refreshCache() {
-            try {
-                const res = await fetch('/api/cache/status');
-                const data = await res.json();
-                if (data.size_gb !== undefined) {
-                    cacheLabel.textContent = `Cache: ${data.size_gb} GB / ${data.max_gb} GB`;
-                    cacheBar.style.width = `${data.percent}%`;
-                }
-            } catch { }
-        }
         btnClear.onclick = async () => {
             if (confirm("Xóa tất cả nội dung tải xuống?")) {
                 await fetch('/api/cache/clear', { method: 'POST' });
-                refreshCache();
             }
         };
-        setInterval(refreshCache, 15000);
-        refreshCache();
 
         // --- CLIPBOARD ---
         async function tryManualPaste() {
