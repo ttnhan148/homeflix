@@ -1554,20 +1554,6 @@
             aspect-ratio: auto; /* Allow the browser to fit the screen */
             object-fit: contain;
         }
-        /* Padded controls & info */
-        body.player-active #globalPlayerContainer > div:first-child {
-            position: sticky;
-            top: 0;
-            z-index: 101;
-            background-color: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            padding-top: 0.75rem !important;
-            padding-bottom: 0.75rem !important;
-            border-bottom: 1px solid var(--glass-border);
-            padding-left: 1.5rem !important;
-            padding-right: 1.5rem !important;
-        }
         body.player-active #statusMessage,
         body.player-active .episodes-section {
             padding-left: 1.5rem !important;
@@ -1769,7 +1755,7 @@
         };
 
 // --- Episodes Drawer ---
-let episodesDrawerExpanded = false;
+let episodesDrawerExpanded = true;
 
 function buildEpisodesDrawer() {
     const existing = document.getElementById('episodesDrawerEl');
@@ -1777,7 +1763,7 @@ function buildEpisodesDrawer() {
     
     const drawer = document.createElement('div');
     drawer.id = 'episodesDrawerEl';
-    drawer.className = 'episodes-drawer collapsed';
+    drawer.className = 'episodes-drawer expanded';
     
     const toggle = document.createElement('button');
     toggle.className = 'episodes-drawer-toggle';
