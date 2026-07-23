@@ -665,133 +665,161 @@
             border: 1px solid var(--glass-border);
         }
 
-        /* Movie Detail Panel */
-        .movie-detail-panel {
-            background: rgba(20, 20, 20, 0.7);
-            border-radius: 12px;
-            padding: 1.25rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.25rem;
-            border: 1px solid var(--glass-border);
-            backdrop-filter: blur(8px);
+        /* --- DETAIL HERO --- */
+        .detail-hero {
+            position: relative;
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #000;
         }
 
-        .detail-header {
-            display: flex;
-            gap: 1.25rem;
-        }
-
-        .detail-poster {
-            width: 150px;
-            aspect-ratio: 2/3;
+        .detail-backdrop {
+            width: 100%;
+            aspect-ratio: 16/9;
             object-fit: cover;
-            border-radius: 8px;
-            background: rgba(20, 20, 20, 0.7);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-            border: 1px solid var(--glass-border);
+            display: block;
         }
 
-        .detail-info {
-            display: flex;
-            flex-direction: column;
-            gap: 0.6rem;
-            flex: 1;
+        .detail-hero-gradient {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 70%;
+            background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(18,18,18,0.95) 100%);
+            pointer-events: none;
         }
 
-        .detail-title {
+        .detail-hero-content {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 1.5rem;
+            z-index: 1;
+        }
+
+        .detail-hero-title {
             font-size: 1.5rem;
             font-weight: 800;
-            color: white;
+            color: #fff;
+            line-height: 1.2;
+            margin-bottom: 0.25rem;
         }
 
-        .detail-origin-title {
-            font-size: 0.95rem;
-            color: var(--text-dim);
-            font-style: italic;
-        }
-
-        .detail-meta-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-top: 0.25rem;
-        }
-
-        .meta-item {
-            background: rgba(20, 20, 20, 0.6);
-            padding: 0.25rem 0.5rem;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            color: var(--text-dim);
-            border: 1px solid var(--glass-border);
-            backdrop-filter: blur(4px);
-        }
-
-        .detail-description {
+        .detail-hero-subtitle {
             font-size: 0.85rem;
-            color: #ccc;
-            line-height: 1.4;
-            margin-top: 0.25rem;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 0.75rem;
-            border-radius: 10px;
-            border: 1px solid var(--glass-border);
-            backdrop-filter: blur(8px);
+            font-weight: 400;
+            color: #a1a1aa;
         }
 
-        .action-row {
+        /* --- DETAIL CHIPS --- */
+        .detail-chips {
             display: flex;
-            gap: 0.75rem;
-            margin-top: 0.75rem;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 1rem 0;
         }
 
-        .btn-sec {
-            background: rgba(20, 20, 20, 0.7);
+        .detail-chip {
+            background: #27272a;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #e4e4e7;
+            white-space: nowrap;
+        }
+
+        /* --- DETAIL OVERVIEW --- */
+        .detail-overview {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #d4d4d8;
+            margin-bottom: 1.5rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* --- DETAIL ACTIONS --- */
+        .detail-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .detail-action-side {
+            width: 48px;
+            height: 48px;
+            background: #27272a;
+            border-radius: 12px;
+            border: none;
             color: white;
-            border: 1px solid var(--glass-border);
-            padding: 0.7rem 1.2rem;
-            border-radius: 10px;
-            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
             cursor: pointer;
             transition: var(--transition);
+            flex-shrink: 0;
+        }
+
+        .detail-action-side span {
+            font-size: 10px;
+            font-weight: 500;
+            line-height: 1;
+        }
+
+        .detail-action-side:hover {
+            background: #3f3f46;
+        }
+
+        .detail-action-play {
+            flex: 1;
+            height: 48px;
+            background: var(--accent-color);
+            border-radius: 12px;
+            border: none;
+            color: #fff;
+            font-weight: 600;
+            font-size: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 4px 14px rgba(229, 9, 20, 0.4);
+        }
+
+        .detail-action-play:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        /* --- DETAIL BACK BUTTON --- */
+        .detail-back-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 0.5rem 0;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
             gap: 0.4rem;
-            backdrop-filter: blur(8px);
+            transition: var(--transition);
         }
 
-        .btn-sec:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.3);
-        }
-
-        .btn-sec:focus-visible {
-            outline: 2px solid var(--accent-color);
-            outline-offset: 2px;
-        }
-
-        .btn-save-movie {
-            border-color: rgba(40, 167, 69, 0.4);
-            color: #2cd054;
-        }
-
-        .btn-save-movie:hover {
-            background: rgba(40, 167, 69, 0.2);
-            border-color: #28a745;
-            color: #4ade80;
-        }
-
-        .btn-delete-movie {
-            border-color: rgba(220, 53, 69, 0.4);
-            color: #f87171;
-        }
-
-        .btn-delete-movie:hover {
-            background: rgba(220, 53, 69, 0.2);
-            border-color: #dc3545;
-            color: #fca5a5;
+        .detail-back-btn:hover {
+            color: white;
         }
 
 
@@ -850,16 +878,26 @@
             height: 3rem;
         }
 
-        .device-tv .detail-poster {
-            width: 180px;
+        .device-tv .detail-hero-title {
+            font-size: 2rem;
         }
 
-        .device-tv .detail-title {
-            font-size: 1.8rem;
+        .device-tv .detail-hero-subtitle {
+            font-size: 1rem;
         }
 
-        .device-tv .detail-description {
-            font-size: 0.95rem;
+        .device-tv .detail-overview {
+            font-size: 1rem;
+        }
+
+        .device-tv .detail-action-side {
+            width: 56px;
+            height: 56px;
+        }
+
+        .device-tv .detail-action-play {
+            height: 56px;
+            font-size: 1.1rem;
         }
 
         /* Hộp viền tập trung (focus ring) cực kỳ nổi bật khi duyệt remote trên TV/Projector */
@@ -927,43 +965,35 @@
             padding: 0.6rem 0.8rem;
         }
 
-        .device-mobile .detail-header {
-            flex-direction: column;
-            align-items: center;
-            gap: 1rem;
+        .device-mobile .detail-hero-title {
+            font-size: 1.25rem;
         }
 
-        .device-mobile .detail-poster {
-            width: 160px;
-            height: auto;
-        }
-
-        .device-mobile .detail-info {
-            align-items: center;
-            text-align: center;
-            width: 100%;
-        }
-
-        .device-mobile .detail-meta-list {
-            justify-content: center;
-        }
-
-        .device-mobile .detail-title {
-            font-size: 1.3rem;
-        }
-
-        .device-mobile .detail-description {
+        .device-mobile .detail-hero-subtitle {
             font-size: 0.8rem;
-            padding: 0.6rem;
         }
 
-        .device-mobile .action-row {
-            flex-direction: column;
-            gap: 0.5rem;
+        .device-mobile .detail-hero-content {
+            padding: 1rem;
         }
 
-        .device-mobile .action-row button {
-            width: 100%;
+        .device-mobile .detail-chips {
+            gap: 6px;
+        }
+
+        .device-mobile .detail-overview {
+            font-size: 13px;
+            -webkit-line-clamp: 3;
+        }
+
+        .device-mobile .detail-action-side {
+            width: 44px;
+            height: 44px;
+        }
+
+        .device-mobile .detail-action-play {
+            height: 44px;
+            font-size: 14px;
         }
 
         /* Tắt viền focus màu vàng xấu xí trên thiết bị di động chạm tay */
@@ -2710,41 +2740,39 @@ video.addEventListener('play', () => {
                     currentDetailEpisodes = episodesList;
                     
                     const isSaved = checkIsSaved(m.slug);
-                    const saveBtnText = isSaved ? "Hủy lưu" : "Lưu phim";
-                    const saveBtnClass = isSaved ? "btn-sec btn-delete-movie" : "btn-sec btn-save-movie";
                     
                     const safeName = m.name.replace(/`/g, '\\`').replace(/\$/g, '\\$');
                     const safePoster = m.poster_url.replace(/`/g, '\\`').replace(/\$/g, '\\$');
                     
                     detailDiv.innerHTML = `
-                        <button class="btn-sec" onclick="backToSearchResults()" style="margin-bottom: 1.25rem;">
-                            ← Quay lại kết quả tìm kiếm
+                        <button class="detail-back-btn" onclick="backToSearchResults()">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                            Quay lại
                         </button>
-                        <div class="movie-detail-panel">
-                            <div class="detail-header">
-                                <img class="detail-poster" src="${m.poster_url}" alt="${m.name}">
-                                <div class="detail-info">
-                                    <div class="detail-title">${m.name}</div>
-                                    <div class="detail-origin-title">${m.origin_name} (${m.year})</div>
-                                    <div class="detail-meta-list">
-                                        <span class="meta-item">Trạng thái: ${m.episode_current}</span>
-                                        <span class="meta-item">Thời lượng: ${m.time}</span>
-                                        <span class="meta-item">Chất lượng: ${m.quality} / ${m.lang}</span>
-                                    </div>
-                                    <div class="detail-description">${m.content || 'Chưa có mô tả cho phim này.'}</div>
-                                    
-                                    <div class="action-row">
-                                        <button class="btn-main" onclick="playSelectedMovieDirect(\`${safeName}\`, \`${m.slug}\`)">
-                                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                                            PHÁT NGAY
-                                        </button>
-                                        <button id="btnSaveDetail" class="${saveBtnClass}" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesList.length})">
-                                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
-                                            <span id="saveBtnText">${saveBtnText}</span>
-                                        </button>
-                                    </div>
-                                </div>
+                        <div class="detail-hero">
+                            <img class="detail-backdrop" src="${m.poster_url}" alt="${m.name}">
+                            <div class="detail-hero-gradient"></div>
+                            <div class="detail-hero-content">
+                                <div class="detail-hero-title">${m.name}</div>
+                                <div class="detail-hero-subtitle">${m.origin_name} (${m.year})</div>
                             </div>
+                        </div>
+                        <div class="detail-chips">
+                            <span class="detail-chip">${m.episode_current}</span>
+                            <span class="detail-chip">${m.time}</span>
+                            <span class="detail-chip">${m.quality}</span>
+                            <span class="detail-chip">${m.lang}</span>
+                        </div>
+                        <div class="detail-overview">${m.content || 'Chưa có mô tả cho phim này.'}</div>
+                        <div class="detail-actions">
+                            <button id="btnSaveDetail" class="detail-action-side" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesList.length})">
+                                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+                                <span id="saveBtnText">${isSaved ? 'Đã lưu' : 'Lưu phim'}</span>
+                            </button>
+                            <button class="detail-action-play" onclick="playSelectedMovieDirect(\`${safeName}\`, \`${m.slug}\`)">
+                                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                Phát Ngay
+                            </button>
                         </div>
                     `;
                     setTimeout(initTabbing, 100);
@@ -2790,7 +2818,7 @@ video.addEventListener('play', () => {
                     if (data.status === 'success') {
                         savedMoviesList = savedMoviesList.filter(item => item.slug !== slug);
                         if (btn) {
-                            btn.className = "btn-sec btn-save-movie";
+                            btn.className = "detail-action-side";
                             txt.textContent = "Lưu phim";
                         }
                     }
@@ -2814,8 +2842,8 @@ video.addEventListener('play', () => {
                     if (data.status === 'success') {
                         savedMoviesList.push(data.movie);
                         if (btn) {
-                            btn.className = "btn-sec btn-delete-movie";
-                            txt.textContent = "Hủy lưu";
+                            btn.className = "detail-action-side";
+                            txt.textContent = "Đã lưu";
                         }
                     }
                 } catch(e) { alert("Không thể lưu phim: " + e.message); }
