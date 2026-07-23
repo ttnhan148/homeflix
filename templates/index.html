@@ -2543,6 +2543,7 @@ video.addEventListener('play', () => {
             const resultsDiv = document.getElementById('searchResults');
             const detailDiv = document.getElementById('movieDetailContainer');
             const homepageContent = document.getElementById('homepageContent');
+            document.getElementById('searchOverlay').classList.remove('active');
             if (homepageContent) homepageContent.style.display = 'none';
             resultsDiv.style.display = 'none';
             detailDiv.style.display = 'block';
