@@ -1394,18 +1394,49 @@
         <!-- TAB CONTENT 2: SEARCH -->
         <div id="search-tab" class="tab-content active">
             <div class="search-container">
+                <!-- Search bar -->
                 <div class="search-bar">
-                    <input type="text" id="searchInput" placeholder="Nhập tên phim..." onkeydown="if(event.key==='Enter') searchMovies()">
-                    <button class="btn-main" onclick="searchMovies()">TÌM KIẾM</button>
+                    <input type="text" id="searchInput" placeholder="Tìm kiếm phim..." oninput="handleSearchInput(event)" onkeydown="if(event.key==='Enter') searchMovies()">
+                    <button class="btn-main" onclick="searchMovies()">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        TÌM KIẾM
+                    </button>
                 </div>
-                
-                <!-- Recommendations Section -->
-                <div id="recommendationsContainer" style="display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem;"></div>
 
-                <!-- Search Results -->
-                <div id="searchResults" class="movies-grid"></div>
+                <!-- Search overlay -->
+                <div id="searchOverlay" class="search-overlay">
+                    <div class="search-overlay-header">
+                        <span style="font-size: 1.1rem; font-weight: 700; color: white;">Kết quả tìm kiếm</span>
+                        <button class="search-overlay-close" onclick="closeSearchOverlay()">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="searchResults" class="movies-grid"></div>
+                </div>
 
-                <!-- Movie Detail Container -->
+                <!-- Homepage content -->
+                <div id="homepageContent" style="display: flex; flex-direction: column; gap: 2rem;">
+                    <!-- Hero section: Latest -->
+                    <div id="heroSection" class="hero-scroll-section">
+                        <div class="reco-theme-title">Phim Mới Cập Nhật</div>
+                        <div id="heroGrid" class="hero-scroll-grid"></div>
+                    </div>
+
+                    <!-- Grid tabs section -->
+                    <div class="grid-tabs-section">
+                        <div class="grid-tabs-nav">
+                            <button class="grid-tab-btn active" data-tab="phim-chieu-rap" onclick="switchHomeTab('phim-chieu-rap')">Phim Chiếu Rạp</button>
+                            <button class="grid-tab-btn" data-tab="phim-le" onclick="switchHomeTab('phim-le')">Phim Lẻ</button>
+                        </div>
+                        <div id="homeGridContent" class="grid-tab-content"></div>
+                    </div>
+                </div>
+
+                <!-- Movie Detail Container (kept from old design) -->
                 <div id="movieDetailContainer" style="display: none;"></div>
             </div>
         </div>
@@ -1626,6 +1657,295 @@
 
         let downloadStatuses = {};
 
+        // --- Smart Homepage State ---
+        let homeState = {
+            latest: { items: [], page: 1, loading: false, hasMore: true },
+            phimLe: { items: [], page: 1, loading: false, hasMore: true },
+            phimChieuRap: { items: [], page: 1, loading: false, hasMore: true },
+            activeGridTab: 'phim-chieu-rap'
+        };
+
+        async function fetchHomeSection(section, page) {
+            const key = section === 'latest' ? 'latest' : section === 'phim-le' ? 'phimLe' : 'phimChieuRap';
+            const state = homeState[key];
+            if (state.loading || !state.hasMore) return;
+
+            state.loading = true;
+            state.page = page || state.page;
+
+            const endpoint = section === 'latest' ? '/api/home/latest' : section === 'phim-le' ? '/api/home/phim-le' : '/api/home/phim-chieu-rap';
+            try {
+                const res = await fetch(`${endpoint}?page=${state.page}`);
+                const data = await res.json();
+                const items = data.items || [];
+
+                if (items.length === 0 || (data.pagination && data.pagination.currentPage >= data.pagination.totalPages)) {
+                    state.hasMore = false;
+                }
+
+                if (state.page === 1) {
+                    state.items = items;
+                } else {
+                    state.items = state.items.concat(items);
+                }
+            } catch (e) {
+                console.error(`Error fetching ${section}:`, e);
+            } finally {
+                state.loading = false;
+            }
+        }
+
+        function renderHeroCards() {
+            const grid = document.getElementById('heroGrid');
+            if (!grid) return;
+
+            const state = homeState.latest;
+            if (state.items.length === 0 && state.loading) {
+                grid.innerHTML = Array(5).fill(0).map(() => `
+                    <div class="skeleton-card">
+                        <div class="skeleton-img"></div>
+                        <div class="skeleton-text"></div>
+                        <div class="skeleton-text-short"></div>
+                    </div>
+                `).join('');
+                return;
+            }
+
+            grid.innerHTML = state.items.map(movie => {
+                const poster = movie.poster_url || '';
+                const quality = movie.quality ? `<span class="quality-badge">${movie.quality}</span>` : '';
+                return `
+                    <div class="hero-card" onclick="showMovieDetailBySlug('${movie.slug}')" ${document.body.classList.contains('device-mobile') ? '' : 'tabindex="0"'}>
+                        <img class="movie-poster" src="${poster}" alt="${movie.name}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>'">
+                        <div class="movie-info">
+                            <div class="movie-title">${movie.name}</div>
+                            <div class="movie-meta">
+                                <span>${movie.year}</span>
+                                ${quality}
+                                <span>${movie.episode_current || ''}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderGridCards(append) {
+            const grid = document.getElementById('homeGridContent');
+            if (!grid) return;
+
+            // Remove old loader sentinel
+            const oldLoader = document.getElementById('gridLoader');
+            if (oldLoader) oldLoader.remove();
+
+            const tab = homeState.activeGridTab;
+            const key = tab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const state = homeState[key];
+
+            if (!append) {
+                if (state.items.length === 0 && state.loading) {
+                    grid.innerHTML = Array(6).fill(0).map(() => `
+                        <div class="skeleton-card" style="min-height: 280px;">
+                            <div class="skeleton-img"></div>
+                            <div class="skeleton-text"></div>
+                            <div class="skeleton-text-short"></div>
+                        </div>
+                    `).join('');
+                    return;
+                }
+                grid.innerHTML = '';
+            }
+
+            const startIdx = append ? grid.children.length : 0;
+            for (let i = startIdx; i < state.items.length; i++) {
+                const movie = state.items[i];
+                const card = document.createElement('div');
+                card.className = 'movie-card';
+                if (!document.body.classList.contains('device-mobile')) {
+                    card.setAttribute('tabindex', '0');
+                }
+
+                const poster = movie.poster_url || '';
+                card.innerHTML = `
+                    <img class="movie-poster" src="${poster}" alt="${movie.name}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>'">
+                    <div class="movie-info">
+                        <div class="movie-title">${movie.name}</div>
+                        <div class="movie-meta">
+                            <span>Năm: ${movie.year}</span>
+                            ${movie.quality ? `<span class="badge-type">${movie.quality}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+                card.onclick = () => showMovieDetailBySlug(movie.slug);
+                grid.appendChild(card);
+            }
+
+            // Add loader sentinel for infinite scroll if more pages exist
+            if (state.hasMore) {
+                const loader = document.createElement('div');
+                loader.className = 'grid-load-more';
+                loader.id = 'gridLoader';
+                loader.textContent = '';
+                grid.appendChild(loader);
+            }
+        }
+
+        let homeObservers = {};
+
+        function setupHomeInfiniteScroll() {
+            // Hero observer
+            const heroGrid = document.getElementById('heroGrid');
+            if (heroGrid && homeState.latest.hasMore) {
+                if (homeObservers.hero) homeObservers.hero.disconnect();
+                homeObservers.hero = new IntersectionObserver((entries) => {
+                    if (entries[0].isIntersecting && homeState.latest.hasMore && !homeState.latest.loading) {
+                        homeState.latest.page++;
+                        fetchHomeSection('latest', homeState.latest.page).then(() => {
+                            renderHeroCards();
+                            setupHomeInfiniteScroll();
+                        });
+                    }
+                }, { rootMargin: '300px' });
+                const lastCard = heroGrid.lastElementChild;
+                if (lastCard) homeObservers.hero.observe(lastCard);
+            }
+
+            // Grid observer
+            const gridContent = document.getElementById('homeGridContent');
+            const loader = document.getElementById('gridLoader');
+            if (gridContent && loader) {
+                if (homeObservers.grid) homeObservers.grid.disconnect();
+                const tab = homeState.activeGridTab;
+                const key = tab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+                const state = homeState[key];
+
+                homeObservers.grid = new IntersectionObserver((entries) => {
+                    if (entries[0].isIntersecting && state.hasMore && !state.loading) {
+                        state.page++;
+                        fetchHomeSection(tab, state.page).then(() => {
+                            renderGridCards(true);
+                            setupHomeInfiniteScroll();
+                        });
+                    }
+                }, { rootMargin: '300px' });
+                homeObservers.grid.observe(loader);
+            }
+        }
+
+        function switchHomeTab(tab) {
+            homeState.activeGridTab = tab;
+
+            document.querySelectorAll('.grid-tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+
+            const key = tab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const state = homeState[key];
+
+            if (state.items.length === 0 && !state.loading) {
+                fetchHomeSection(tab, 1).then(() => {
+                    renderGridCards(false);
+                    setupHomeInfiniteScroll();
+                });
+            } else {
+                renderGridCards(false);
+                setupHomeInfiniteScroll();
+            }
+        }
+
+        async function showMovieDetailBySlug(slug) {
+            const resultsDiv = document.getElementById('searchResults');
+            const detailDiv = document.getElementById('movieDetailContainer');
+            const homepageContent = document.getElementById('homepageContent');
+            if (homepageContent) homepageContent.style.display = 'none';
+            resultsDiv.style.display = 'none';
+            detailDiv.style.display = 'block';
+            await showMovieDetail(slug);
+        }
+
+        function backToHomeFromDetail() {
+            document.getElementById('movieDetailContainer').style.display = 'none';
+            document.getElementById('searchOverlay').classList.remove('active');
+            const homepageContent = document.getElementById('homepageContent');
+            if (homepageContent) homepageContent.style.display = 'flex';
+        }
+
+        // Monkey-patch backToSearchResults to handle home context
+        const originalBackToSearch = window.backToSearchResults;
+        window.backToSearchResults = function() {
+            const detailDiv = document.getElementById('movieDetailContainer');
+            detailDiv.style.display = 'none';
+            const homepageContent = document.getElementById('homepageContent');
+            if (homepageContent) homepageContent.style.display = 'flex';
+            document.getElementById('searchOverlay').classList.remove('active');
+            setTimeout(initTabbing, 100);
+        };
+
+        // Search with debounce
+        let searchTimeout = null;
+        function handleSearchInput(e) {
+            clearTimeout(searchTimeout);
+            const q = e.target.value.trim();
+            if (!q) return;
+            searchTimeout = setTimeout(() => {
+                searchMovies();
+            }, 300);
+        }
+
+        async function searchMovies() {
+            const q = document.getElementById('searchInput').value.trim();
+            if (!q) return;
+
+            const resultsDiv = document.getElementById('searchResults');
+            const overlay = document.getElementById('searchOverlay');
+            const homepageContent = document.getElementById('homepageContent');
+            if (homepageContent) homepageContent.style.display = 'none';
+            overlay.classList.add('active');
+            resultsDiv.style.display = 'grid';
+            resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim);">Đang tìm kiếm...</div>';
+
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                if (data.status === 'success' && data.data && data.data.items.length > 0) {
+                    resultsDiv.innerHTML = '';
+                    const cdnDomain = data.data.APP_DOMAIN_CDN_IMAGE || 'https://phimimg.com';
+                    data.data.items.forEach(item => {
+                        const card = document.createElement('div');
+                        card.className = 'movie-card';
+                        if (!document.body.classList.contains('device-mobile')) {
+                            card.setAttribute('tabindex', '0');
+                        }
+                        const posterPath = item.poster_url.startsWith('http') ? item.poster_url : `${cdnDomain}/${item.poster_url}`;
+                        card.innerHTML = `
+                            <img class="movie-poster" src="${posterPath}" alt="${item.name}" loading="lazy">
+                            <div class="movie-info">
+                                <div class="movie-title">${item.name}</div>
+                                <div class="movie-meta">
+                                    <span>Năm: ${item.year}</span>
+                                    <span class="badge-type">${item.type === 'single' ? 'Phim Lẻ' : 'Phim Bộ'}</span>
+                                </div>
+                            </div>
+                        `;
+                        card.onclick = () => showMovieDetailBySlug(item.slug);
+                        resultsDiv.appendChild(card);
+                    });
+                    setTimeout(initTabbing, 100);
+                } else {
+                    resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--accent-color);">Không tìm thấy phim nào phù hợp.</div>';
+                }
+            } catch (err) {
+                resultsDiv.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--accent-color);">Lỗi kết nối: ${err.message}</div>`;
+            }
+        }
+
+        function closeSearchOverlay() {
+            document.getElementById('searchOverlay').classList.remove('active');
+            const homepageContent = document.getElementById('homepageContent');
+            if (homepageContent) homepageContent.style.display = 'flex';
+            document.getElementById('searchInput').value = '';
+        }
+
         async function fetchDownloadStatuses() {
             try {
                 const res = await fetch('/api/download/status');
@@ -1777,12 +2097,11 @@
             if (tabId === 'player-tab') document.getElementById('tabBtnPlayer').classList.add('active');
             if (tabId === 'search-tab') {
                 document.getElementById('tabBtnSearch').classList.add('active');
-                const q = document.getElementById('searchInput').value.trim();
-                if (!q) {
-                    const recoDiv = document.getElementById('recommendationsContainer');
-                    if (recoDiv) recoDiv.style.display = 'flex';
-                    document.getElementById('searchResults').style.display = 'none';
-                    document.getElementById('movieDetailContainer').style.display = 'none';
+                // If detail is showing, keep it; otherwise show homepage
+                const detailDiv = document.getElementById('movieDetailContainer');
+                if (detailDiv.style.display !== 'block') {
+                    document.getElementById('homepageContent').style.display = 'flex';
+                    document.getElementById('searchOverlay').classList.remove('active');
                 }
             }
             if (tabId === 'saved-tab') {
@@ -2126,62 +2445,12 @@
             }
         }
 
-        // --- SEARCH FUNCTIONS ---
-        async function searchMovies() {
-            const q = document.getElementById('searchInput').value.trim();
-            if (!q) return alert("Vui lòng nhập từ khóa tìm kiếm.");
-            
-            const resultsDiv = document.getElementById('searchResults');
-            const detailDiv = document.getElementById('movieDetailContainer');
-            const recoDiv = document.getElementById('recommendationsContainer');
-            
-            if (recoDiv) recoDiv.style.display = 'none';
-            resultsDiv.style.display = 'grid';
-            resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim);">Đang tìm kiếm...</div>';
-            detailDiv.style.display = 'none';
-            
-            try {
-                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-                const data = await res.json();
-                
-                if (data.status === 'success' && data.data && data.data.items.length > 0) {
-                    resultsDiv.innerHTML = '';
-                    const cdnDomain = data.data.APP_DOMAIN_CDN_IMAGE || 'https://phimimg.com';
-                    data.data.items.forEach(item => {
-                        const card = document.createElement('div');
-                        card.className = 'movie-card';
-                        if (!document.body.classList.contains('device-mobile')) {
-                            card.setAttribute('tabindex', '0');
-                        }
-                        
-                        const posterPath = item.poster_url.startsWith('http') ? item.poster_url : `${cdnDomain}/${item.poster_url}`;
-                        
-                        card.innerHTML = `
-                            <img class="movie-poster" src="${posterPath}" alt="${item.name}">
-                            <div class="movie-info">
-                                <div class="movie-title">${item.name}</div>
-                                <div class="movie-meta">
-                                    <span>Năm: ${item.year}</span>
-                                    <span class="badge-type">${item.type === 'single' ? 'Phim Lẻ' : 'Phim Bộ'}</span>
-                                </div>
-                            </div>
-                        `;
-                        card.onclick = () => showMovieDetail(item.slug);
-                        resultsDiv.appendChild(card);
-                    });
-                    setTimeout(initTabbing, 100);
-                } else {
-                    resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--accent-color);">Không tìm thấy phim nào phù hợp.</div>';
-                }
-            } catch (err) {
-                resultsDiv.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--accent-color);">Lỗi kết nối: ${err.message}</div>`;
-            }
-        }
-
         async function showMovieDetail(slug) {
             const detailDiv = document.getElementById('movieDetailContainer');
             const resultsDiv = document.getElementById('searchResults');
+            const homepageContent = document.getElementById('homepageContent');
             
+            if (homepageContent) homepageContent.style.display = 'none';
             resultsDiv.style.display = 'none';
             detailDiv.style.display = 'block';
             detailDiv.innerHTML = '<div style="text-align: center; color: var(--text-dim);">Đang tải chi tiết phim...</div>';
@@ -2240,19 +2509,6 @@
             } catch (err) {
                 detailDiv.innerHTML = `<div style="text-align: center; color: var(--accent-color);">Lỗi kết nối: ${err.message}</div>`;
             }
-        }
-
-        function backToSearchResults() {
-            document.getElementById('movieDetailContainer').style.display = 'none';
-            const q = document.getElementById('searchInput').value.trim();
-            if (q) {
-                document.getElementById('searchResults').style.display = 'grid';
-            } else {
-                const recoDiv = document.getElementById('recommendationsContainer');
-                if (recoDiv) recoDiv.style.display = 'flex';
-                document.getElementById('searchResults').style.display = 'none';
-            }
-            setTimeout(initTabbing, 100);
         }
 
         function playSelectedMovieDirect(name, slug) {
@@ -2523,71 +2779,16 @@
             }
         };
 
-        async function loadRecommendations() {
-            const container = document.getElementById('recommendationsContainer');
-            if (!container) return;
-            container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Đang tải phim mới cập nhật...</div>';
-            try {
-                const res = await fetch('/api/recommendations');
-                const data = await res.json();
-                container.innerHTML = '';
-                
-                const themes = Object.keys(data);
-                if (themes.length === 0) {
-                    container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Không có phim mới cập nhật.</div>';
-                    return;
-                }
-                
-                themes.forEach(themeName => {
-                    const section = document.createElement('div');
-                    section.style.display = 'flex';
-                    section.style.flexDirection = 'column';
-                    section.style.gap = '0.5rem';
-                    
-                    const title = document.createElement('div');
-                    title.className = 'reco-theme-title';
-                    title.textContent = themeName;
-                    section.appendChild(title);
-                    
-                    const grid = document.createElement('div');
-                    grid.className = 'reco-scroll-grid';
-                    
-                    data[themeName].forEach(movie => {
-                        const card = document.createElement('div');
-                        card.className = 'movie-card';
-                        card.style.flex = '0 0 150px';
-                        if (!document.body.classList.contains('device-mobile')) {
-                            card.setAttribute('tabindex', '0');
-                        }
-                        
-                        card.innerHTML = `
-                            <img class="movie-poster" src="${movie.poster_url}" alt="${movie.name}" style="height: 220px; object-fit: cover;">
-                            <div class="movie-info">
-                                <div class="movie-title" style="font-size: 0.8rem; height: 2.2rem;">${movie.name}</div>
-                                <div class="movie-meta">
-                                    <span>Năm: ${movie.year}</span>
-                                </div>
-                            </div>
-                        `;
-                        card.onclick = () => {
-                            container.style.display = 'none';
-                            showMovieDetail(movie.slug);
-                        };
-                        grid.appendChild(card);
-                    });
-                    
-                    section.appendChild(grid);
-                    container.appendChild(section);
-                });
-                setTimeout(initTabbing, 100);
-            } catch (err) {
-                container.innerHTML = `<div style="text-align: center; color: var(--accent-color);">Lỗi tải phim mới cập nhật: ${err.message}</div>`;
-            }
-        }
-
         detectDevice();
         fetchSavedMovies();
-        loadRecommendations();
+        // Initialize Smart Homepage
+        (async function initHomepage() {
+            await fetchHomeSection('latest', 1);
+            renderHeroCards();
+            await fetchHomeSection('phim-chieu-rap', 1);
+            renderGridCards(false);
+            setupHomeInfiniteScroll();
+        })();
         fetchDownloadStatuses();
         setInterval(fetchDownloadStatuses, 5000);
         window.addEventListener('DOMContentLoaded', () => {
