@@ -1846,28 +1846,7 @@
         const cacheBar = document.getElementById('cacheProgressFill');
         const btnClear = document.getElementById('btnClearStorage');
         
-        let currentAspectMode = 0; // 0: contain, 1: cover, 2: fill
-        const aspectModes = ["contain", "cover", "fill"];
-        const aspectLabels = ["Mặc định (Contain)", "Phóng to (Zoom 21:9)", "Kéo giãn (Stretch)"];
-
-        function toggleAspectRatio() {
-            currentAspectMode = (currentAspectMode + 1) % aspectModes.length;
-            video.style.objectFit = aspectModes[currentAspectMode];
-            showToast(aspectLabels[currentAspectMode]);
-        }
-
-        function showToast(msg) {
-            const toast = document.getElementById('aspectToast');
-            if (!toast) return;
-            toast.textContent = msg;
-            toast.style.display = 'block';
-            if (toast.timeoutId) clearTimeout(toast.timeoutId);
-            toast.timeoutId = setTimeout(() => {
-                toast.style.display = 'none';
-            }, 2000);
-        }
-
-        video.addEventListener('dblclick', toggleAspectRatio);
+        video.addEventListener('dblclick', togglePlayerZoom);
         const globalPlayer = document.getElementById('globalPlayerContainer');
         const appHeader = document.getElementById('appHeader');
         const appTabsNav = document.getElementById('appTabsNav');
@@ -1876,6 +1855,299 @@
 
         // --- Native Fullscreen flag (chỉ gọi 1 lần mỗi session phát) ---
         let hasEnteredFullscreen = false;
+
+        // --- Custom Player Overlay ---
+        const playerOverlay = {
+            visible: true,
+            inactivityTimer: null,
+            INACTIVITY_TIMEOUT: 2500,
+            el: null,
+            topBar: null,
+            centerBtn: null,
+            bottomBar: null,
+            seekBar: null,
+            volumeSlider: null,
+            volumeBtn: null,
+            playBtn: null,
+            timeDisplay: null,
+            fullscreenBtn: null,
+            pipBtn: null,
+            toastEl: null,
+
+            build() {
+                const overlay = document.createElement('div');
+                overlay.className = 'player-overlay active';
+                
+                // Top bar
+                const topBar = document.createElement('div');
+                topBar.className = 'player-top-bar';
+                topBar.innerHTML = `
+                    <button class="btn-overlay-back" onclick="exitPlayer()">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                        </svg>
+                        Quay lại
+                    </button>
+                    <div class="player-ep-title" id="playerEpTitle"></div>
+                    <div style="width:80px;"></div>
+                `;
+                
+                // Center play button
+                const centerBtn = document.createElement('button');
+                centerBtn.className = 'center-play-btn hidden';
+                centerBtn.innerHTML = `<svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+                centerBtn.onclick = () => this.togglePlay();
+                
+                // Bottom bar
+                const bottomBar = document.createElement('div');
+                bottomBar.className = 'player-bottom-bar';
+                
+                // Seek bar
+                const seekWrapper = document.createElement('div');
+                seekWrapper.className = 'custom-seek-wrapper';
+                const seekBar = document.createElement('input');
+                seekBar.type = 'range';
+                seekBar.className = 'custom-seek-bar';
+                seekBar.min = 0;
+                seekBar.max = 100;
+                seekBar.value = 0;
+                seekBar.step = 0.1;
+                seekBar.oninput = () => {
+                    if (video.duration) {
+                        video.currentTime = parseFloat(seekBar.value);
+                    }
+                };
+                seekWrapper.appendChild(seekBar);
+                
+                // Controls row
+                const controlsRow = document.createElement('div');
+                controlsRow.className = 'bottom-controls';
+                
+                const playBtn = document.createElement('button');
+                playBtn.className = 'btn-control';
+                playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+                playBtn.onclick = () => this.togglePlay();
+                
+                const timeDisplay = document.createElement('span');
+                timeDisplay.className = 'time-display';
+                timeDisplay.textContent = '0:00 / 0:00';
+                
+                const volumeBtn = document.createElement('button');
+                volumeBtn.className = 'btn-control';
+                volumeBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v7a4.5 4.5 0 002.5-3.5zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+                volumeBtn.onclick = () => {
+                    video.muted = !video.muted;
+                    this.updateVolumeIcon();
+                };
+                
+                const volumeSlider = document.createElement('input');
+                volumeSlider.type = 'range';
+                volumeSlider.className = 'volume-slider';
+                volumeSlider.min = 0;
+                volumeSlider.max = 1;
+                volumeSlider.value = 1;
+                volumeSlider.step = 0.05;
+                volumeSlider.oninput = () => {
+                    video.volume = parseFloat(volumeSlider.value);
+                    video.muted = false;
+                    this.updateVolumeIcon();
+                };
+                
+                const volumeWrapper = document.createElement('div');
+                volumeWrapper.className = 'volume-wrapper';
+                volumeWrapper.appendChild(volumeBtn);
+                volumeWrapper.appendChild(volumeSlider);
+                
+                const fullscreenBtn = document.createElement('button');
+                fullscreenBtn.className = 'btn-control';
+                fullscreenBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
+                fullscreenBtn.onclick = () => this.toggleFullscreen();
+                
+                const pipBtn = document.createElement('button');
+                pipBtn.className = 'btn-control';
+                pipBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M19 11h-8v6h8v-6zm4 8V5c-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 0H3V5h18v14z"/></svg>`;
+                pipBtn.onclick = () => this.togglePiP();
+                
+                controlsRow.appendChild(playBtn);
+                controlsRow.appendChild(timeDisplay);
+                controlsRow.appendChild(volumeWrapper);
+                controlsRow.appendChild(fullscreenBtn);
+                controlsRow.appendChild(pipBtn);
+                
+                bottomBar.appendChild(seekWrapper);
+                bottomBar.appendChild(controlsRow);
+                
+                // Toast
+                const toast = document.createElement('div');
+                toast.className = 'player-toast';
+                
+                overlay.appendChild(topBar);
+                overlay.appendChild(centerBtn);
+                overlay.appendChild(bottomBar);
+                overlay.appendChild(toast);
+                
+                this.el = overlay;
+                this.topBar = topBar;
+                this.centerBtn = centerBtn;
+                this.bottomBar = bottomBar;
+                this.seekBar = seekBar;
+                this.playBtn = playBtn;
+                this.timeDisplay = timeDisplay;
+                this.volumeBtn = volumeBtn;
+                this.volumeSlider = volumeSlider;
+                this.fullscreenBtn = fullscreenBtn;
+                this.pipBtn = pipBtn;
+                this.toastEl = toast;
+                
+                // Auto-hide listeners
+                const resetFn = () => this.resetInactivityTimer();
+                overlay.addEventListener('mousemove', resetFn);
+                overlay.addEventListener('touchstart', resetFn);
+                video.addEventListener('mousemove', resetFn);
+                video.addEventListener('touchstart', resetFn);
+                video.addEventListener('click', () => this.toggleOverlayVisibility());
+                
+                return overlay;
+            },
+            
+            show() {
+                if (this.el) {
+                    this.el.classList.remove('hidden');
+                    this.el.classList.add('active');
+                    this.visible = true;
+                }
+            },
+            
+            hide() {
+                if (this.el && video.paused === false) {
+                    this.el.classList.add('hidden');
+                    this.el.classList.remove('active');
+                    this.visible = false;
+                    if (this.centerBtn) this.centerBtn.classList.add('hidden');
+                }
+            },
+            
+            toggleOverlayVisibility() {
+                if (this.visible) this.hide();
+                else { this.show(); this.resetInactivityTimer(); }
+            },
+            
+            resetInactivityTimer() {
+                if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
+                this.show();
+                if (this.centerBtn) {
+                    if (video.paused) this.centerBtn.classList.remove('hidden');
+                    else this.centerBtn.classList.add('hidden');
+                }
+                this.inactivityTimer = setTimeout(() => this.hide(), this.INACTIVITY_TIMEOUT);
+            },
+            
+            updateSeekBar() {
+                if (!this.seekBar || !this.timeDisplay || !video.duration) return;
+                const current = video.currentTime;
+                const duration = video.duration;
+                this.seekBar.max = duration;
+                this.seekBar.value = current;
+                const pct = (current / duration) * 100;
+                this.seekBar.style.background = `linear-gradient(to right, var(--accent-color) ${pct}%, rgba(255,255,255,0.2) ${pct}%)`;
+                this.timeDisplay.textContent = this.formatTime(current) + ' / ' + this.formatTime(duration);
+            },
+            
+            formatTime(sec) {
+                if (!sec || isNaN(sec)) return '0:00';
+                const m = Math.floor(sec / 60);
+                const s = Math.floor(sec % 60);
+                return m + ':' + (s < 10 ? '0' : '') + s;
+            },
+            
+            updatePlayPauseIcon() {
+                if (this.centerBtn) {
+                    if (video.paused) {
+                        this.centerBtn.classList.remove('hidden');
+                        this.centerBtn.innerHTML = `<svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+                    } else {
+                        this.centerBtn.classList.add('hidden');
+                    }
+                }
+                if (this.playBtn) {
+                    if (video.paused) {
+                        this.playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+                    } else {
+                        this.playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+                    }
+                }
+            },
+            
+            updateVolumeIcon() {
+                if (!this.volumeBtn) return;
+                if (video.muted || video.volume === 0) {
+                    this.volumeBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12A4.5 4.5 0 0014 8.5v7a4.5 4.5 0 002.5-3.5zM3 9v6h4l5 5V4L7 9H3zm15.5 3A7.5 7.5 0 0017 6.64v2.07a5.5 5.5 0 010 6.58v2.07A7.5 7.5 0 0018.5 12zM19 2l-3.5 3.5-1.42-1.42L20 0 24 4l-1.41 1.42L19 2z"/></svg>`;
+                } else {
+                    this.volumeBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v7a4.5 4.5 0 002.5-3.5zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+                }
+            },
+            
+            updateFullscreenIcon() {
+                if (!this.fullscreenBtn) return;
+                const isFull = document.fullscreenElement || document.webkitFullscreenElement;
+                if (isFull) {
+                    this.fullscreenBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>`;
+                } else {
+                    this.fullscreenBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`;
+                }
+            },
+            
+            togglePlay() {
+                if (video.paused) video.play().catch(e => console.warn('[Overlay] play error:', e));
+                else video.pause();
+            },
+            
+            toggleFullscreen() {
+                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                    if (document.exitFullscreen) document.exitFullscreen();
+                    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                } else {
+                    const el = document.documentElement;
+                    if (el.requestFullscreen) el.requestFullscreen();
+                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                }
+            },
+            
+            togglePiP() {
+                if (document.pictureInPictureElement) {
+                    document.exitPictureInPicture().catch(e => console.warn('[PiP] exit error:', e));
+                } else {
+                    video.requestPictureInPicture().catch(e => console.warn('[PiP] enter error:', e));
+                }
+            },
+            
+            showToast(msg, duration) {
+                if (!this.toastEl) return;
+                this.toastEl.textContent = msg;
+                this.toastEl.classList.add('active');
+                if (this.toastTimeout) clearTimeout(this.toastTimeout);
+                this.toastTimeout = setTimeout(() => {
+                    this.toastEl.classList.remove('active');
+                }, duration || 2000);
+            },
+            
+            startSeekSync() {
+                if (this.seekInterval) clearInterval(this.seekInterval);
+                this.seekInterval = setInterval(() => this.updateSeekBar(), 250);
+            },
+            
+            stopSeekSync() {
+                if (this.seekInterval) {
+                    clearInterval(this.seekInterval);
+                    this.seekInterval = null;
+                }
+            },
+            
+            setTitle(title) {
+                const el = document.getElementById('playerEpTitle');
+                if (el) el.textContent = title || '';
+            }
+        };
 
         video.addEventListener('play', () => {
             if (!hasEnteredFullscreen && video.webkitSupportsFullscreen) {
@@ -1909,7 +2181,7 @@
                 video.style.display = 'block';
                 overlay.style.display = 'none';
                 stopAirplaySeekSync();
-                showToast('Đã ngắt kết nối AirPlay');
+                if (playerOverlay) playerOverlay.showToast('Đã ngắt kết nối AirPlay');
             }
         }
 
@@ -2743,7 +3015,6 @@
             video.src = '';
             
             // Reset aspect ratio
-            currentAspectMode = 0;
             video.style.objectFit = 'contain';
 
             // Reset native fullscreen flag for next play session
