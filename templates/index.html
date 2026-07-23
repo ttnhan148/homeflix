@@ -2149,12 +2149,123 @@
             }
         };
 
+// --- Episodes Drawer ---
+let episodesDrawerExpanded = false;
+
+function buildEpisodesDrawer() {
+    const existing = document.getElementById('episodesDrawerEl');
+    if (existing) existing.remove();
+    
+    const drawer = document.createElement('div');
+    drawer.id = 'episodesDrawerEl';
+    drawer.className = 'episodes-drawer collapsed';
+    
+    const toggle = document.createElement('button');
+    toggle.className = 'episodes-drawer-toggle';
+    toggle.innerHTML = `<span>📋 Danh sách tập (<span id="epCount">0</span>)</span><span class="drawer-arrow">▾</span>`;
+    toggle.onclick = toggleEpisodesDrawer;
+    
+    const grid = document.createElement('div');
+    grid.className = 'episodes-grid';
+    grid.id = 'drawerEpGrid';
+    
+    drawer.appendChild(toggle);
+    drawer.appendChild(grid);
+    
+    return drawer;
+}
+
+function toggleEpisodesDrawer() {
+    const drawer = document.getElementById('episodesDrawerEl');
+    if (!drawer) return;
+    episodesDrawerExpanded = !episodesDrawerExpanded;
+    drawer.className = 'episodes-drawer ' + (episodesDrawerExpanded ? 'expanded' : 'collapsed');
+}
+
+function buildEpisodesGridInDrawer(episodesArray, playIdx) {
+    const grid = document.getElementById('drawerEpGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    
+    document.getElementById('epCount').textContent = episodesArray.length;
+    
+    episodesArray.forEach((ep, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'ep-btn' + (i === playIdx ? ' active' : '');
+        
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = ep.name;
+        btn.appendChild(titleSpan);
+        
+        if (currentMovie && currentMovie.slug) {
+            const indicator = document.createElement('span');
+            indicator.className = 'ep-dl-indicator not_started';
+            indicator.setAttribute('data-movie-slug', currentMovie.slug);
+            indicator.setAttribute('data-ep-name', ep.name);
+            indicator.setAttribute('data-ep-url', ep.link_m3u8);
+            indicator.onclick = (e) => requestDownloadEpisode(e, currentMovie.slug, ep.name, ep.link_m3u8);
+            btn.appendChild(indicator);
+        }
+        
+        btn.onclick = () => play(ep.link_m3u8, ep.name, i);
+        grid.appendChild(btn);
+    });
+}
+
         video.addEventListener('play', () => {
             if (!hasEnteredFullscreen && video.webkitSupportsFullscreen) {
                 video.webkitEnterFullscreen();
                 hasEnteredFullscreen = true;
             }
         });
+
+// Overlay sync events
+video.addEventListener('play', () => {
+    if (playerOverlay.el) {
+        playerOverlay.resetInactivityTimer();
+        playerOverlay.updatePlayPauseIcon();
+        playerOverlay.startSeekSync();
+    }
+});
+
+video.addEventListener('pause', () => {
+    if (playerOverlay.el) {
+        playerOverlay.resetInactivityTimer();
+        playerOverlay.updatePlayPauseIcon();
+        if (playerOverlay.centerBtn) playerOverlay.centerBtn.classList.remove('hidden');
+    }
+});
+
+video.addEventListener('volumechange', () => {
+    if (playerOverlay.el) playerOverlay.updateVolumeIcon();
+});
+
+document.addEventListener('fullscreenchange', () => {
+    if (playerOverlay.el) playerOverlay.updateFullscreenIcon();
+});
+document.addEventListener('webkitfullscreenchange', () => {
+    if (playerOverlay.el) playerOverlay.updateFullscreenIcon();
+});
+
+video.addEventListener('enterpictureinpicture', () => {
+    if (playerOverlay.el) {
+        playerOverlay.pipBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zm-10-7h9v6h-9z"/></svg>`;
+    }
+});
+video.addEventListener('leavepictureinpicture', () => {
+    if (playerOverlay.el) playerOverlay.updateFullscreenIcon();
+});
+
+// Desktop auto-fullscreen on first play
+video.addEventListener('play', () => {
+    if (!hasEnteredFullscreen) {
+        const el = document.documentElement;
+        if (el.requestFullscreen && !document.fullscreenElement) {
+            el.requestFullscreen().catch(() => {});
+        }
+        hasEnteredFullscreen = true;
+    }
+});
 
         // --- AirPlay Remote Control Mode ---
         let isAirplayActive = false;
@@ -2796,7 +2907,7 @@
         // Tải tập phim với tuỳ chọn vị trí phát bằng mảng tập phim đã chuẩn hóa
         function playEpisodesListDirect(episodesArray, targetUrlOrIdx) {
             if (!episodesArray || episodesArray.length === 0) {
-                status.innerHTML = '<span style="color:#E50914">KHÔNG TÌM THẤY VIDEO</span>';
+                playerOverlay.showToast('KHÔNG TÌM THẤY VIDEO', 3000);
                 return;
             }
             
@@ -2808,30 +2919,18 @@
             document.body.classList.add('player-active');
             globalPlayer.style.display = 'flex';
             
-            gridEp.innerHTML = '';
-            let playIdx = 0;
+            // Add overlay to player-wrapper
+            const wrapper = document.querySelector('.player-wrapper');
+            if (wrapper && !wrapper.querySelector('.player-overlay')) {
+                wrapper.appendChild(playerOverlay.build());
+            }
             
+            // Add episodes drawer after player-wrapper
+            const drawer = buildEpisodesDrawer();
+            globalPlayer.appendChild(drawer);
+            
+            let playIdx = 0;
             episodesArray.forEach((ep, i) => {
-                const btn = document.createElement('button');
-                btn.className = 'ep-btn';
-                
-                const titleSpan = document.createElement('span');
-                titleSpan.textContent = ep.name;
-                btn.appendChild(titleSpan);
-
-                if (currentMovie && currentMovie.slug) {
-                    const indicator = document.createElement('span');
-                    indicator.className = 'ep-dl-indicator not_started';
-                    indicator.setAttribute('data-movie-slug', currentMovie.slug);
-                    indicator.setAttribute('data-ep-name', ep.name);
-                    indicator.setAttribute('data-ep-url', ep.link_m3u8);
-                    indicator.onclick = (e) => requestDownloadEpisode(e, currentMovie.slug, ep.name, ep.link_m3u8);
-                    btn.appendChild(indicator);
-                }
-
-                btn.onclick = () => play(ep.link_m3u8, ep.name, i);
-                gridEp.appendChild(btn);
-                
                 if (typeof targetUrlOrIdx === 'number') {
                     if (i === targetUrlOrIdx) playIdx = i;
                 } else if (targetUrlOrIdx) {
@@ -2839,11 +2938,10 @@
                 }
             });
             
-            sectionEp.style.display = 'flex';
+            buildEpisodesGridInDrawer(episodesArray, playIdx);
             const startEp = episodesArray[playIdx];
             play(startEp.link_m3u8, startEp.name, playIdx);
             updateDownloadIndicatorsUI();
-            setTimeout(initTabbing, 100);
         }
 
         async function play(url, title, idx) {
@@ -2936,23 +3034,20 @@
 
             console.log("[Play] useMp4 =", useMp4, "mp4Url =", mp4Url);
 
-            const epTitleEl = document.getElementById('playerEpisodeTitle');
             status.style.display = 'none';
 
+            // Update overlay title
+            playerOverlay.setTitle(title);
+            playerOverlay.resetInactivityTimer();
+            playerOverlay.startSeekSync();
+            playerOverlay.updatePlayPauseIcon();
+
             if (useMp4) {
-                epTitleEl.innerHTML = `
-                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; margin-bottom: 0.15rem;">MP4</div>
-                    <div style="font-size: 1.05rem; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw;">${title}</div>
-                `;
                 video.src = mp4Url;
                 console.log("[Play] Phát MP4 qua src");
                 video.play().catch(err => console.error("[Play] Lỗi video.play() MP4:", err));
             } else {
                 const proxy = `/proxy/m3u8?url=${encodeURIComponent(url)}`;
-                epTitleEl.innerHTML = `
-                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; margin-bottom: 0.15rem;">HLS</div>
-                    <div style="font-size: 1.05rem; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw;">${title}</div>
-                `;
                 console.log("[Play] Phát HLS qua Proxy:", proxy);
 
                 if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -3007,37 +3102,36 @@
         // --- EXIT PLAYER (QUAY LẠI TRANG CHỦ) ---
         function exitPlayer() {
             video.pause();
-            video.onerror = null; // Gỡ bắt lỗi tạm thời để tránh thông báo lỗi giả khi reset nguồn phát
+            video.onerror = null;
             if (hlsObj) {
                 hlsObj.destroy();
                 hlsObj = null;
             }
             video.src = '';
-            
-            // Reset aspect ratio
             video.style.objectFit = 'contain';
-
-            // Reset native fullscreen flag for next play session
             hasEnteredFullscreen = false;
-
-            // Reset AirPlay overlay if active
-            if (isAirplayActive) {
-                toggleRemoteMode(false);
-            }
+            
+            // Clean up overlay
+            playerOverlay.stopSeekSync();
+            playerOverlay.el = null;
+            const oldOverlay = document.querySelector('.player-overlay');
+            if (oldOverlay) oldOverlay.remove();
+            
+            // Remove episodes drawer
+            const drawer = document.getElementById('episodesDrawerEl');
+            if (drawer) drawer.remove();
+            
+            if (isAirplayActive) toggleRemoteMode(false);
             video.style.display = 'block';
             document.getElementById('airplayOverlay').style.display = 'none';
             
             document.body.classList.remove('player-active');
             globalPlayer.style.display = 'none';
-            
             if (stickyHeader) stickyHeader.style.display = 'flex';
             
             const activeTabBtn = document.querySelector('.tab-btn.active');
-            if (activeTabBtn) {
-                activeTabBtn.click();
-            } else {
-                switchTab('player-tab');
-            }
+            if (activeTabBtn) activeTabBtn.click();
+            else switchTab('player-tab');
         }
 
         async function showMovieDetail(slug) {
