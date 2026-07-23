@@ -636,6 +636,8 @@ async def startup_event():
     asyncio.create_task(download_worker())
     # Khởi động background worker xóa phim đã xem sau 3h
     asyncio.create_task(delayed_cleanup_worker())
+    # Khởi động cache warmer cho homepage (pre-warm + refresh định kỳ)
+    asyncio.create_task(home_cache_warmer())
 
 
 # Khởi tạo Jinja2 templates với đường dẫn tuyệt đối
@@ -1158,6 +1160,39 @@ async def home_phim_chieu_rap(page: int = 1):
     except Exception as e:
         logger.error(f"Error fetching home/phim-chieu-rap: {e}")
         return {"items": [], "pagination": {}, "error": str(e)}
+
+# --- Background cache warmer cho Homepage ---
+WARM_CACHE_INTERVAL = 600  # 10 phút refresh cache homepage
+
+async def _warm_section(section_name: str, page: int, ttl: int, url_template: str):
+    """Helper: fetch + cache một section."""
+    async def _fetch():
+        url = url_template.format(page=page)
+        resp = await client.get(url)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
+        pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
+        return {
+            "items": _normalize_movie_list(items),
+            "pagination": pagination
+        }
+    try:
+        await cached_fetch(f"home:{section_name}:{page}", ttl, _fetch)
+        logger.info(f"[CacheWarmer] OK section={section_name} page={page}")
+    except Exception as e:
+        logger.warning(f"[CacheWarmer] FAIL section={section_name} page={page}: {e}")
+
+async def home_cache_warmer():
+    """Định kỳ làm mới cache homepage để user luôn có data nhanh."""
+    while True:
+        logger.info("[CacheWarmer] Bắt đầu làm mới cache homepage...")
+        # Page 1 cho cả 3 section (có thể mở rộng thêm page sau)
+        await _warm_section("latest", 1, 1800, "https://phimapi.com/v1/api/home?page={}")
+        await _warm_section("phim-le", 1, 3600, "https://phimapi.com/v1/api/danh-sach/phim-le?page={}")
+        await _warm_section("phim-chieu-rap", 1, 3600, "https://phimapi.com/v1/api/danh-sach/phim-chieu-rap?page={}")
+        logger.info(f"[CacheWarmer] Đợi {WARM_CACHE_INTERVAL}s cho lần refresh tiếp theo...")
+        await asyncio.sleep(WARM_CACHE_INTERVAL)
 
 @app.on_event("shutdown")
 async def shutdown_event():
