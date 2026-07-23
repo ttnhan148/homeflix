@@ -264,33 +264,6 @@
         }
 
         /* --- CUSTOM PLAYER OVERLAY --- */
-        .player-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-            z-index: 10;
-        }
-        .player-overlay.active {
-            opacity: 1;
-        }
-        .player-overlay.hidden {
-            opacity: 0;
-        }
-        .player-overlay * {
-            pointer-events: auto;
-        }
-        .player-top-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 1rem;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-        }
         .btn-overlay-back {
             display: flex;
             align-items: center;
@@ -382,21 +355,11 @@
         /* --- PLAYER TOAST --- */
 
         /* TV */
-        .device-tv .player-top-bar {
-            padding: 1rem 1.5rem;
-        }
         .device-tv .btn-overlay-back {
             font-size: 1rem;
             padding: 0.6rem 1rem;
         }
-        .device-tv .player-ep-title {
-            font-size: 1.1rem;
-        }
-
         /* Mobile */
-        .device-mobile .player-overlay {
-            font-size: 0.9rem;
-        }
         .device-mobile .btn-overlay-back {
             font-size: 0.75rem;
             padding: 0.5rem 0.7rem;
@@ -1736,6 +1699,18 @@
         <!-- GLOBAL PLAYER CONTAINER (Theatre mode - only visible when media is active) -->
         <div id="globalPlayerContainer" style="display: none; flex-direction: column; gap: 1.25rem; width: 100%; animation: netflixFadeIn 0.5s ease-out; padding-top: 0.5rem;">
 
+            <!-- Player header: back button + title (above video, not overlapping) -->
+            <div id="playerHeader" class="player-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0;">
+                <button class="btn-overlay-back" onclick="exitPlayer()">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    Quay lại
+                </button>
+                <div class="player-ep-title" id="playerEpTitle" style="flex: 1; margin: 0 1rem;"></div>
+                <div style="width:80px;"></div>
+            </div>
+
             <div class="player-wrapper">
                 <video id="videoPlayer" playsinline controls></video>
                 <!-- AirPlay Remote Control Overlay -->
@@ -1785,95 +1760,8 @@
         // --- Native Fullscreen flag (chỉ gọi 1 lần mỗi session phát) ---
         let hasEnteredFullscreen = false;
 
-        // --- Custom Player Overlay ---
+        // --- Player header controls ---
         const playerOverlay = {
-            visible: true,
-            inactivityTimer: null,
-            INACTIVITY_TIMEOUT: 2500,
-            el: null,
-            topBar: null,
-            centerBtn: null,
-            bottomBar: null,
-            seekBar: null,
-            volumeSlider: null,
-            volumeBtn: null,
-            playBtn: null,
-            timeDisplay: null,
-            fullscreenBtn: null,
-            pipBtn: null,
-            toastEl: null,
-
-            build() {
-                const overlay = document.createElement('div');
-                overlay.className = 'player-overlay active';
-                
-                // Top bar — only back button + episode title
-                const topBar = document.createElement('div');
-                topBar.className = 'player-top-bar';
-                topBar.innerHTML = `
-                    <button class="btn-overlay-back" onclick="exitPlayer()">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                        </svg>
-                        Quay lại
-                    </button>
-                    <div class="player-ep-title" id="playerEpTitle"></div>
-                    <div style="width:80px;"></div>
-                `;
-                
-                overlay.appendChild(topBar);
-                
-                this.el = overlay;
-                this.topBar = topBar;
-                this.centerBtn = null;
-                this.bottomBar = null;
-                this.seekBar = null;
-                this.playBtn = null;
-                this.timeDisplay = null;
-                this.volumeBtn = null;
-                this.volumeSlider = null;
-                this.fullscreenBtn = null;
-                this.pipBtn = null;
-                this.toastEl = null;
-                
-                // Auto-hide for top bar
-                const resetFn = () => this.resetInactivityTimer();
-                overlay.addEventListener('mousemove', resetFn);
-                overlay.addEventListener('touchstart', resetFn);
-                video.addEventListener('mousemove', resetFn);
-                video.addEventListener('touchstart', resetFn);
-                video.addEventListener('click', () => this.toggleOverlayVisibility());
-                
-                return overlay;
-            },
-            
-            show() {
-                if (this.el) {
-                    this.el.classList.remove('hidden');
-                    this.el.classList.add('active');
-                    this.visible = true;
-                }
-            },
-            
-            hide() {
-                if (this.el && video.paused === false) {
-                    this.el.classList.add('hidden');
-                    this.el.classList.remove('active');
-                    this.visible = false;
-                }
-            },
-            
-            toggleOverlayVisibility() {
-                if (this.visible) this.hide();
-                else { this.show(); this.resetInactivityTimer(); }
-            },
-            
-            resetInactivityTimer() {
-                if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
-                this.show();
-                this.inactivityTimer = setTimeout(() => this.hide(), this.INACTIVITY_TIMEOUT);
-            },
-            
             setTitle(title) {
                 const el = document.getElementById('playerEpTitle');
                 if (el) el.textContent = title || '';
@@ -1949,15 +1837,6 @@ function buildEpisodesGridInDrawer(episodesArray, playIdx) {
                 hasEnteredFullscreen = true;
             }
         });
-
-// Overlay sync — native controls handle play/pause/seek/volume/fullscreen/PiP
-video.addEventListener('play', () => {
-    if (playerOverlay.el) playerOverlay.resetInactivityTimer();
-});
-
-video.addEventListener('pause', () => {
-    if (playerOverlay.el) playerOverlay.resetInactivityTimer();
-});
 
 // Desktop auto-fullscreen on first play
 video.addEventListener('play', () => {
@@ -2625,12 +2504,6 @@ video.addEventListener('play', () => {
             document.body.classList.add('player-active');
             globalPlayer.style.display = 'flex';
             
-            // Add overlay to player-wrapper
-            const wrapper = document.querySelector('.player-wrapper');
-            if (wrapper && !wrapper.querySelector('.player-overlay')) {
-                wrapper.appendChild(playerOverlay.build());
-            }
-            
             // Add episodes drawer after player-wrapper
             const drawer = buildEpisodesDrawer();
             globalPlayer.appendChild(drawer);
@@ -2730,7 +2603,6 @@ video.addEventListener('play', () => {
 
             // Update overlay title
             playerOverlay.setTitle(title);
-            playerOverlay.resetInactivityTimer();
 
             if (useMp4) {
                 video.src = mp4Url;
@@ -2797,11 +2669,6 @@ video.addEventListener('play', () => {
             video.src = '';
             video.style.objectFit = 'contain';
             hasEnteredFullscreen = false;
-            
-            // Clean up overlay
-            playerOverlay.el = null;
-            const oldOverlay = document.querySelector('.player-overlay');
-            if (oldOverlay) oldOverlay.remove();
             
             // Remove episodes drawer
             const drawer = document.getElementById('episodesDrawerEl');
