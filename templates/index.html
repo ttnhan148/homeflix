@@ -1654,13 +1654,6 @@
         <div id="stickyHeader" class="sticky-header">
             <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h1>HomeFlix</h1>
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <button id="btnClearStorage" title="Xóa toàn bộ Cache" style="background: transparent; border: 1px solid var(--glass-border); color: #ff453a; padding: 0.4rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition);">
-                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                    </button>
-                </div>
             </header>
 
             <!-- 3 OPTIONS MENU -->
@@ -1797,7 +1790,7 @@
         const btnPlay = document.getElementById('btnMainPlay');
         const btnPaste = document.getElementById('btnQuickActionPaste');
         const video = document.getElementById('videoPlayer');
-        const btnClear = document.getElementById('btnClearStorage');
+
         
         // --- Double-click zoom ---
         let zoomMode = false;
@@ -2746,7 +2739,7 @@ video.addEventListener('play', () => {
         function initTabbing() {
             if (document.body.classList.contains('device-mobile')) return;
 
-            document.querySelectorAll('.tab-btn, input, textarea, .btn-main, .btn-paste, .btn-sec, #btnClearStorage').forEach(el => {
+            document.querySelectorAll('.tab-btn, input, textarea, .btn-main, .btn-paste, .btn-sec').forEach(el => {
                 if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
             });
         }
@@ -2810,12 +2803,8 @@ video.addEventListener('play', () => {
         inputArea.addEventListener('focus', expandManualInput);
         inputArea.addEventListener('click', expandManualInput);
 
-        // --- CACHE ---
-        btnClear.onclick = async () => {
-            if (confirm("Xóa tất cả nội dung tải xuống?")) {
-                await fetch('/api/cache/clear', { method: 'POST' });
-            }
-        };
+
+
 
         // --- CLIPBOARD ---
         async function tryManualPaste() {
