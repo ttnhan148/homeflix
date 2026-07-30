@@ -375,6 +375,16 @@ async def delayed_cleanup_worker():
             logger.error(f"Error in delayed_cleanup_worker: {e}")
         await asyncio.sleep(60)
 
+def _db_reset_stuck_downloads():
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE episode_downloads SET status = 'pending' WHERE status = 'downloading'"
+    )
+    conn.commit()
+    conn.close()
+    logger.info("[Startup] Reset stuck 'downloading' episodes to 'pending'")
+
 def _db_get_queued_downloads() -> list:
     conn = sqlite3.connect(DB_FILE, timeout=30.0)
     cursor = conn.cursor()
@@ -630,6 +640,8 @@ async def startup_event():
     init_db()
     # Chạy di chuyển dữ liệu downloads.json nếu có
     migrate_downloads_json_to_db()
+    # Reset các download bị treo do server restart
+    await asyncio.to_thread(_db_reset_stuck_downloads)
     # Khởi động tác vụ dọn dẹp cache ngầm
     asyncio.create_task(prune_cache())
     # Khởi động background worker tải phim MP4
@@ -882,11 +894,18 @@ async def get_movie_detail(slug: str):
             
         movie_raw = data.get("movie", {})
         # Rút gọn thông tin phim cần thiết
+        poster_raw = movie_raw.get("poster_url") or ""
+        if poster_raw.startswith("http"):
+            poster_url = poster_raw
+        elif poster_raw:
+            poster_url = f"https://phimimg.com/{poster_raw.lstrip('/')}"
+        else:
+            poster_url = ""
         movie_clean = {
             "name": movie_raw.get("name"),
             "slug": movie_raw.get("slug"),
             "origin_name": movie_raw.get("origin_name"),
-            "poster_url": movie_raw.get("poster_url") if movie_raw.get("poster_url", "").startswith("http") else f"https://phimimg.com/{movie_raw.get('poster_url', '').lstrip('/')}",
+            "poster_url": poster_url,
             "year": str(movie_raw.get("year")),
             "episode_current": movie_raw.get("episode_current"),
             "time": movie_raw.get("time"),
