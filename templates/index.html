@@ -1345,6 +1345,125 @@
             padding: 1rem;
         }
 
+        /* --- FILTER BAR & DROPDOWN --- */
+        .filter-bar {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-left: auto;
+        }
+        .filter-dropdown {
+            position: relative;
+        }
+        .filter-btn {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--glass-border);
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 0.5rem 0.9rem;
+            border-radius: var(--radius-md);
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .filter-btn:hover {
+            color: var(--text-main);
+            background: rgba(255,255,255,0.06);
+        }
+        .filter-btn.active {
+            color: var(--accent-color);
+            border-color: rgba(229,9,20,0.4);
+            background: rgba(229,9,20,0.1);
+        }
+        .filter-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            min-width: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #111113;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-card);
+            padding: 0.4rem;
+            z-index: 50;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .filter-menu.open {
+            display: flex;
+        }
+        .filter-option {
+            text-align: left;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 0.5rem 0.7rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .filter-option:hover {
+            background: rgba(255,255,255,0.06);
+            color: var(--text-main);
+        }
+        .filter-option.active {
+            color: var(--accent-color);
+            background: rgba(229,9,20,0.1);
+        }
+        .filter-clear-btn {
+            background: transparent;
+            border: 1px solid rgba(229,9,20,0.4);
+            color: var(--accent-color);
+            font-size: 0.75rem;
+            padding: 0.4rem 0.7rem;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .filter-clear-btn:hover {
+            background: rgba(229,9,20,0.12);
+        }
+        .filter-empty {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: var(--text-dim);
+            padding: 3rem 0;
+        }
+        .filter-menu::-webkit-scrollbar {
+            width: 6px;
+        }
+        .filter-menu::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.15);
+            border-radius: 3px;
+        }
+        .device-mobile .grid-tabs-nav {
+            flex-wrap: wrap;
+        }
+        .device-mobile .filter-bar {
+            margin-left: 0;
+            width: 100%;
+            flex-wrap: wrap;
+        }
+        .device-tv .filter-btn,
+        .device-tv .filter-option,
+        .device-tv .filter-clear-btn {
+            padding-top: 0.6rem;
+            padding-bottom: 0.6rem;
+        }
+        .device-tv .filter-btn:focus-visible,
+        .device-tv .filter-option:focus-visible,
+        .device-tv .filter-clear-btn:focus-visible {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 2px;
+        }
+
         /* TV mode */
         .device-tv .grid-tab-btn {
             font-size: 1rem;
