@@ -1183,6 +1183,34 @@ async def home_phim_chieu_rap(page: int = 1, category: str = "", country: str = 
         logger.error(f"Error fetching home/phim-chieu-rap: {e}")
         return {"items": [], "pagination": {}, "error": str(e)}
 
+async def _fetch_filter_list(api_path: str):
+    """Fetch danh sách lọc (thể loại/quốc gia) từ phimapi."""
+    resp = await client.get(f"https://phimapi.com/v1/api/{api_path}")
+    resp.raise_for_status()
+    data = resp.json()
+    items = data.get("data", {}).get("items", [])
+    return {"items": [{"name": it.get("name", ""), "slug": it.get("slug", "")} for it in items if it.get("slug")]}
+
+
+@app.get("/api/home/categories")
+async def home_categories():
+    """Danh sách thể loại cho bộ lọc (cache 24 giờ)"""
+    try:
+        return await cached_fetch("home:categories", 86400, lambda: _fetch_filter_list("the-loai"))
+    except Exception as e:
+        logger.error(f"Error fetching home/categories: {e}")
+        return {"items": [], "error": str(e)}
+
+
+@app.get("/api/home/countries")
+async def home_countries():
+    """Danh sách quốc gia cho bộ lọc (cache 24 giờ)"""
+    try:
+        return await cached_fetch("home:countries", 86400, lambda: _fetch_filter_list("quoc-gia"))
+    except Exception as e:
+        logger.error(f"Error fetching home/countries: {e}")
+        return {"items": [], "error": str(e)}
+
 # --- Background cache warmer cho Homepage ---
 WARM_CACHE_INTERVAL = 600  # 10 phút refresh cache homepage
 
