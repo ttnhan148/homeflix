@@ -1799,13 +1799,8 @@
         }
 
         .saved-movie-row .episodes-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
+            display: block;
             margin-top: 0.5rem;
-            max-height: 130px;
-            overflow-y: auto;
-            padding-right: 0.5rem;
             width: 100%;
         }
 
@@ -3654,28 +3649,14 @@ video.addEventListener('play', () => {
                 
                 const totalEpsText = m.total_episodes ? `${m.total_episodes} tập` : m.episode_current;
                 
-                let epsHtml = "";
+                let epsContainer = null;
                 if (m.episodes && m.episodes.length > 0) {
-                    m.episodes.forEach((ep, idx) => {
-                        let epClass = "saved-ep-btn unwatched";
-                        
-                        if (m.episode_states) {
-                            if (m.episode_states[ep.link_m3u8] === "watching") {
-                                epClass = "saved-ep-btn watching";
-                            } else if (m.episode_states[ep.link_m3u8] === "watched") {
-                                epClass = "saved-ep-btn watched";
-                            }
-                        } else if (m.last_watched_url === ep.link_m3u8) {
-                            epClass = "saved-ep-btn watching";
-                        }
-                        
-                        const safeEpName = ep.name.replace(/"/g, '&quot;').replace(/'/g, "\\'");
-                        const indicatorSpan = `<span class="ep-dl-indicator not_started" data-movie-slug="${m.slug}" data-ep-name="${ep.name.replace(/"/g, '&quot;')}" data-ep-url="${ep.link_m3u8}" onclick="event.stopPropagation(); requestDownloadEpisode(event, '${m.slug}', '${safeEpName}', '${ep.link_m3u8}')"></span>`;
-                        
-                        epsHtml += `<button class="${epClass}" onclick="event.stopPropagation(); playEpisodeFromSaved(\`${m.slug}\`, ${idx})"><span>${ep.name}</span>${indicatorSpan}</button>`;
-                    });
+                    epsContainer = document.createElement('div');
+                    epsContainer.className = 'episodes-container';
                 } else {
-                    epsHtml = `<span style="font-size: 0.85rem; color: var(--text-dim);">Chưa có danh sách tập phim. <a href="#" style="color: var(--accent-color); text-decoration: underline;" onclick="event.stopPropagation(); syncEpisodesForMovie(\`${m.slug}\`)">Đồng bộ ngay</a></span>`;
+                    epsContainer = document.createElement('div');
+                    epsContainer.className = 'episodes-container';
+                    epsContainer.innerHTML = `<span style="font-size: 0.85rem; color: var(--text-dim);">Chưa có danh sách tập phim. <a href="#" style="color: var(--accent-color); text-decoration: underline;" onclick="event.stopPropagation(); syncEpisodesForMovie(\`${m.slug}\`)">Đồng bộ ngay</a></span>`;
                 }
 
                 card.innerHTML = `
@@ -3685,9 +3666,7 @@ video.addEventListener('play', () => {
                         <div class="movie-meta">
                             <span>Năm: ${m.year} (${totalEpsText})</span>
                         </div>
-                        <div class="episodes-container">
-                            ${epsHtml}
-                        </div>
+                        <div class="eps-host"></div>
                         <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                             <button class="btn-main" style="padding: 0.5rem 1.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.25rem;" onclick="event.stopPropagation(); playResumeSavedMovie(\`${m.slug}\`)">
                                 <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
@@ -3705,6 +3684,21 @@ video.addEventListener('play', () => {
                     showMovieDetail(m.slug);
                 };
                 grid.appendChild(card);
+
+                const epsHost = card.querySelector('.eps-host');
+                if (epsHost) {
+                    if (m.episodes && m.episodes.length > 0) {
+                        epsHost.replaceWith(epsContainer);
+                        renderEpisodeList(epsContainer, {
+                            episodes: m.episodes,
+                            movieSlug: m.slug,
+                            watchStates: m.episode_states || {},
+                            onPlay: (ep, idx) => playEpisodeFromSaved(m.slug, idx)
+                        });
+                    } else {
+                        epsHost.replaceWith(epsContainer);
+                    }
+                }
             });
             updateDownloadIndicatorsUI();
             setTimeout(initTabbing, 100);
