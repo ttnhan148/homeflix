@@ -358,6 +358,12 @@
             background: rgba(255,255,255,0.08);
             border-radius: 3px;
         }
+        .episodes-drawer .episodes-drawer-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            padding: 0.75rem 1rem;
+        }
 
         /* --- EPISODE LIST (dùng chung detail + drawer + saved) --- */
         .ep-list {
@@ -2237,7 +2243,7 @@ function buildEpisodesDrawer() {
     toggle.onclick = toggleEpisodesDrawer;
     
     const grid = document.createElement('div');
-    grid.className = 'episodes-grid';
+    grid.className = 'episodes-drawer-grid';
     grid.id = 'drawerEpGrid';
     
     drawer.appendChild(toggle);
@@ -2253,35 +2259,48 @@ function toggleEpisodesDrawer() {
     drawer.className = 'episodes-drawer ' + (episodesDrawerExpanded ? 'expanded' : 'collapsed');
 }
 
-function buildEpisodesGridInDrawer(episodesArray, playIdx) {
-    const grid = document.getElementById('drawerEpGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    
-    document.getElementById('epCount').textContent = episodesArray.length;
-    
-    episodesArray.forEach((ep, i) => {
-        const btn = document.createElement('button');
-        btn.className = 'ep-btn' + (i === playIdx ? ' active' : '');
-        
-        const titleSpan = document.createElement('span');
-        titleSpan.textContent = ep.name;
-        btn.appendChild(titleSpan);
-        
-        if (currentMovie && currentMovie.slug) {
-            const indicator = document.createElement('span');
-            indicator.className = 'ep-dl-indicator not_started';
-            indicator.setAttribute('data-movie-slug', currentMovie.slug);
-            indicator.setAttribute('data-ep-name', ep.name);
-            indicator.setAttribute('data-ep-url', ep.link_m3u8);
-            indicator.onclick = (e) => requestDownloadEpisode(e, currentMovie.slug, ep.name, ep.link_m3u8);
-            btn.appendChild(indicator);
+        function buildEpisodesGridInDrawer(episodesArray, playIdx) {
+            const grid = document.getElementById('drawerEpGrid');
+            if (!grid) return;
+
+            const countEl = document.getElementById('epCount');
+            if (countEl) countEl.textContent = episodesArray.length;
+
+            const safePlayIdx = Math.max(0, playIdx || 0);
+            grid._epChunk = Math.floor(safePlayIdx / EP_CHUNK);
+
+            let watchStates = {};
+            if (currentMovie && currentMovie.slug) {
+                const saved = savedMoviesList.find(item => item.slug === currentMovie.slug);
+                if (saved && saved.episode_states) watchStates = saved.episode_states;
+            }
+
+            renderEpisodeList(grid, {
+                episodes: episodesArray,
+                movieSlug: currentMovie ? currentMovie.slug : null,
+                watchStates,
+                showTitle: false,
+                onPlay: (ep, i) => play(ep.link_m3u8, ep.name, i)
+            });
+
+            const localIdx = safePlayIdx - grid._epChunk * EP_CHUNK;
+            const activeBtn = grid.querySelectorAll('.ep-item')[localIdx];
+            if (activeBtn) activeBtn.classList.add('active');
         }
-        
-        btn.onclick = () => play(ep.link_m3u8, ep.name, i);
-        grid.appendChild(btn);
-    });
-}
+
+        function syncDrawerToPlaying(url) {
+            const grid = document.getElementById('drawerEpGrid');
+            if (!grid) return;
+            const epIdx = playbackEpisodes.findIndex(ep => ep.link_m3u8 === url);
+            if (epIdx === -1) return;
+            const targetChunk = Math.floor(epIdx / EP_CHUNK);
+            if (grid._epChunk !== targetChunk) {
+                grid._epChunk = targetChunk;
+                buildEpisodesGridInDrawer(playbackEpisodes, epIdx);
+            } else {
+                grid.querySelectorAll('.ep-item').forEach(b => b.classList.toggle('active', b.__epUrl === url));
+            }
+        }
 
         // --- Unified Episode List (dùng chung detail + drawer + saved) ---
         const EP_CHUNK = 100;
@@ -3247,8 +3266,7 @@ video.addEventListener('play', () => {
         async function play(url, title, idx) {
             console.log("[Play] Bắt đầu phát tập:", title, "URL:", url, "currentMovie:", currentMovie);
             currentPlaybackIndex = idx;
-            const btns = document.querySelectorAll('#epGridContent .ep-btn, #drawerEpGrid .ep-btn');
-            btns.forEach((b, i) => b.classList.toggle('active', i === idx));
+            syncDrawerToPlaying(url);
 
             // Gửi báo cáo tiến trình xem phim về Server (nếu phim đã được lưu)
             if (currentMovie && currentMovie.slug) {
