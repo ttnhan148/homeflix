@@ -1184,6 +1184,30 @@ async def home_phim_chieu_rap(page: int = 1, category: str = "", country: str = 
         logger.error(f"Error fetching home/phim-chieu-rap: {e}")
         return {"items": [], "pagination": {}, "error": str(e)}
 
+
+@app.get("/api/home/phim-bo")
+async def home_phim_bo(page: int = 1, category: str = "", country: str = "", year: str = ""):
+    """Phim Bộ + bộ lọc thể loại/quốc gia/năm (cache 1 giờ theo tổ hợp lọc)"""
+    try:
+        return await cached_fetch(
+            _danh_sach_cache_key("phim-bo", page, category, country, year), 3600,
+            lambda: _fetch_danh_sach("phim-bo", page, category, country, year))
+    except Exception as e:
+        logger.error(f"Error fetching home/phim-bo: {e}")
+        return {"items": [], "pagination": {}, "error": str(e)}
+
+
+@app.get("/api/home/tv-shows")
+async def home_tv_shows(page: int = 1, category: str = "", country: str = "", year: str = ""):
+    """TV Shows + bộ lọc thể loại/quốc gia/năm (cache 1 giờ theo tổ hợp lọc)"""
+    try:
+        return await cached_fetch(
+            _danh_sach_cache_key("tv-shows", page, category, country, year), 3600,
+            lambda: _fetch_danh_sach("tv-shows", page, category, country, year))
+    except Exception as e:
+        logger.error(f"Error fetching home/tv-shows: {e}")
+        return {"items": [], "pagination": {}, "error": str(e)}
+
 async def _fetch_filter_list(api_path: str):
     """Fetch danh sách lọc (thể loại/quốc gia) từ phimapi."""
     resp = await client.get(f"https://phimapi.com/v1/api/{api_path}")
@@ -1248,10 +1272,12 @@ async def home_cache_warmer():
     """Định kỳ làm mới cache homepage để user luôn có data nhanh."""
     while True:
         logger.info("[CacheWarmer] Bắt đầu làm mới cache homepage...")
-        # Page 1 cho cả 3 section (có thể mở rộng thêm page sau)
+        # Page 1 cho cả 5 section (có thể mở rộng thêm page sau)
         await _warm_section("latest", 1, 1800, "https://phimapi.com/v1/api/home?page={page}")
         await _warm_danh_sach("phim-le", 1)
         await _warm_danh_sach("phim-chieu-rap", 1)
+        await _warm_danh_sach("phim-bo", 1)
+        await _warm_danh_sach("tv-shows", 1)
         logger.info(f"[CacheWarmer] Đợi {WARM_CACHE_INTERVAL}s cho lần refresh tiếp theo...")
         await asyncio.sleep(WARM_CACHE_INTERVAL)
 
