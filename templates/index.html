@@ -1304,6 +1304,7 @@
 
         .grid-tabs-nav {
             display: flex;
+            flex-wrap: wrap;
             gap: 0.5rem;
         }
 
@@ -2328,6 +2329,12 @@ video.addEventListener('play', () => {
                 const data = await res.json();
                 if (mySeq !== state.fetchSeq) return;
 
+                if (!res.ok || data.error) {
+                    state.fetchError = true;
+                    return;
+                }
+                state.fetchError = false;
+
                 const items = data.items || [];
                 if (items.length === 0 || (data.pagination && data.pagination.currentPage >= data.pagination.totalPages)) {
                     state.hasMore = false;
@@ -2339,6 +2346,7 @@ video.addEventListener('play', () => {
                     state.items = state.items.concat(items);
                 }
             } catch (e) {
+                state.fetchError = true;
                 console.error(`Error fetching ${section}:`, e);
             } finally {
                 if (mySeq === state.fetchSeq) state.loading = false;
@@ -2424,7 +2432,7 @@ video.addEventListener('play', () => {
                     return;
                 }
                 const hasFilter = state.filters && Object.values(state.filters).some(Boolean);
-                if (state.items.length === 0 && hasFilter && !state.loading) {
+                if (state.items.length === 0 && hasFilter && !state.loading && !state.fetchError) {
                     grid.innerHTML = '<div class="filter-empty">Không tìm thấy phim phù hợp với bộ lọc.</div>';
                     return;
                 }

@@ -163,8 +163,10 @@ Tất cả endpoint trả JSON (trừ proxy & trang chủ). Không có xác th�
 | GET | `/api/search?q=...` | 30 phút | Tìm phim (limit 30). |
 | GET | `/api/movie/{slug}` | 60 phút | Chi tiết phim + danh sách tập `[{name, link_m3u8}]`. |
 | GET | `/api/home/latest?page=N` | 30 phút | Phim mới cập nhật. |
-| GET | `/api/home/phim-le?page=N` | 60 phút | Danh sách phim lẻ. |
-| GET | `/api/home/phim-chieu-rap?page=N` | 60 phút | Danh sách phim chiếu rạp. |
+| GET | `/api/home/phim-le?page=N&category=&country=&year=` | 60 phút | Danh sách phim lẻ, lọc theo thể loại/quốc gia/năm (AND). |
+| GET | `/api/home/phim-chieu-rap?page=N&category=&country=&year=` | 60 phút | Danh sách phim chiếu rạp, lọc theo thể loại/quốc gia/năm (AND). |
+| GET | `/api/home/categories` | 24 giờ | Danh sách thể loại cho bộ lọc. |
+| GET | `/api/home/countries` | 24 giờ | Danh sách quốc gia cho bộ lọc. |
 
 ### Tủ phim (saved)
 | Method | Path | Mô tả |

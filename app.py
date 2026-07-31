@@ -1125,14 +1125,15 @@ def _danh_sach_cache_key(section: str, page: int, category: str = "", country: s
 
 async def _fetch_danh_sach(type_slug: str, page: int, category: str = "", country: str = "", year: str = ""):
     """Fetch + normalize danh sách phim từ phimapi với bộ lọc (AND)."""
-    url = f"https://phimapi.com/v1/api/danh-sach/{type_slug}?page={page}"
+    url = f"https://phimapi.com/v1/api/danh-sach/{type_slug}"
+    params = {"page": page}
     if category:
-        url += f"&category={category}"
+        params["category"] = category
     if country:
-        url += f"&country={country}"
+        params["country"] = country
     if year:
-        url += f"&year={year}"
-    resp = await client.get(url)
+        params["year"] = year
+    resp = await client.get(url, params=params)
     resp.raise_for_status()
     data = resp.json()
     items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
