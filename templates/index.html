@@ -1954,6 +1954,21 @@
                         <div class="grid-tabs-nav">
                             <button class="grid-tab-btn active" data-tab="phim-chieu-rap" onclick="switchHomeTab('phim-chieu-rap')">Phim Chiếu Rạp</button>
                             <button class="grid-tab-btn" data-tab="phim-le" onclick="switchHomeTab('phim-le')">Phim Lẻ</button>
+                            <div class="filter-bar">
+                                <div class="filter-dropdown">
+                                    <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại ▾</button>
+                                    <div class="filter-menu" id="filterMenu-category"></div>
+                                </div>
+                                <div class="filter-dropdown">
+                                    <button class="filter-btn" id="filterBtn-country" onclick="toggleFilterDropdown('country')">Quốc gia ▾</button>
+                                    <div class="filter-menu" id="filterMenu-country"></div>
+                                </div>
+                                <div class="filter-dropdown">
+                                    <button class="filter-btn" id="filterBtn-year" onclick="toggleFilterDropdown('year')">Năm ▾</button>
+                                    <div class="filter-menu" id="filterMenu-year"></div>
+                                </div>
+                                <button class="filter-clear-btn" id="filterClearBtn" onclick="clearAllFilters()" style="display:none;">✕ Xóa lọc</button>
+                            </div>
                         </div>
                         <div id="homeGridContent" class="grid-tab-content"></div>
                     </div>
