@@ -1118,6 +1118,27 @@ def _normalize_movie_list(items: list) -> list:
         })
     return result
 
+def _danh_sach_cache_key(section: str, page: int, category: str = "", country: str = "", year: str = "") -> str:
+    """Cache key cho một danh sách + bộ lọc. Rỗng = không lọc."""
+    return f"home:{section}:{page}:{category}:{country}:{year}"
+
+
+async def _fetch_danh_sach(type_slug: str, page: int, category: str = "", country: str = "", year: str = ""):
+    """Fetch + normalize danh sách phim từ phimapi với bộ lọc (AND)."""
+    url = f"https://phimapi.com/v1/api/danh-sach/{type_slug}?page={page}"
+    if category:
+        url += f"&category={category}"
+    if country:
+        url += f"&country={country}"
+    if year:
+        url += f"&year={year}"
+    resp = await client.get(url)
+    resp.raise_for_status()
+    data = resp.json()
+    items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
+    pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
+    return {"items": _normalize_movie_list(items), "pagination": pagination}
+
 # --- Smart Homepage sections ---
 
 @app.get("/api/home/latest")
@@ -1141,41 +1162,23 @@ async def home_latest(page: int = 1):
         return {"items": [], "pagination": {}, "error": str(e)}
 
 @app.get("/api/home/phim-le")
-async def home_phim_le(page: int = 1):
-    """Phim Lẻ (cache 1 giờ)"""
-    async def _fetch():
-        url = f"https://phimapi.com/v1/api/danh-sach/phim-le?page={page}"
-        resp = await client.get(url)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
-        pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
-        return {
-            "items": _normalize_movie_list(items),
-            "pagination": pagination
-        }
+async def home_phim_le(page: int = 1, category: str = "", country: str = "", year: str = ""):
+    """Phim Lẻ + bộ lọc thể loại/quốc gia/năm (cache 1 giờ theo tổ hợp lọc)"""
     try:
-        return await cached_fetch(f"home:phim-le:{page}", 3600, _fetch)
+        return await cached_fetch(
+            _danh_sach_cache_key("phim-le", page, category, country, year), 3600,
+            lambda: _fetch_danh_sach("phim-le", page, category, country, year))
     except Exception as e:
         logger.error(f"Error fetching home/phim-le: {e}")
         return {"items": [], "pagination": {}, "error": str(e)}
 
 @app.get("/api/home/phim-chieu-rap")
-async def home_phim_chieu_rap(page: int = 1):
-    """Phim Chiếu Rạp (cache 1 giờ)"""
-    async def _fetch():
-        url = f"https://phimapi.com/v1/api/danh-sach/phim-chieu-rap?page={page}"
-        resp = await client.get(url)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
-        pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
-        return {
-            "items": _normalize_movie_list(items),
-            "pagination": pagination
-        }
+async def home_phim_chieu_rap(page: int = 1, category: str = "", country: str = "", year: str = ""):
+    """Phim Chiếu Rạp + bộ lọc thể loại/quốc gia/năm (cache 1 giờ theo tổ hợp lọc)"""
     try:
-        return await cached_fetch(f"home:phim-chieu-rap:{page}", 3600, _fetch)
+        return await cached_fetch(
+            _danh_sach_cache_key("phim-chieu-rap", page, category, country, year), 3600,
+            lambda: _fetch_danh_sach("phim-chieu-rap", page, category, country, year))
     except Exception as e:
         logger.error(f"Error fetching home/phim-chieu-rap: {e}")
         return {"items": [], "pagination": {}, "error": str(e)}
@@ -1202,14 +1205,24 @@ async def _warm_section(section_name: str, page: int, ttl: int, url_template: st
     except Exception as e:
         logger.warning(f"[CacheWarmer] FAIL section={section_name} page={page}: {e}")
 
+async def _warm_danh_sach(section: str, page: int):
+    """Làm nóng cache cho một danh sách (không lọc) với đúng định dạng key mới."""
+    try:
+        await cached_fetch(
+            _danh_sach_cache_key(section, page), 3600,
+            lambda: _fetch_danh_sach(section, page))
+        logger.info(f"[CacheWarmer] OK section={section} page={page}")
+    except Exception as e:
+        logger.warning(f"[CacheWarmer] FAIL section={section} page={page}: {e}")
+
 async def home_cache_warmer():
     """Định kỳ làm mới cache homepage để user luôn có data nhanh."""
     while True:
         logger.info("[CacheWarmer] Bắt đầu làm mới cache homepage...")
         # Page 1 cho cả 3 section (có thể mở rộng thêm page sau)
         await _warm_section("latest", 1, 1800, "https://phimapi.com/v1/api/home?page={page}")
-        await _warm_section("phim-le", 1, 3600, "https://phimapi.com/v1/api/danh-sach/phim-le?page={page}")
-        await _warm_section("phim-chieu-rap", 1, 3600, "https://phimapi.com/v1/api/danh-sach/phim-chieu-rap?page={page}")
+        await _warm_danh_sach("phim-le", 1)
+        await _warm_danh_sach("phim-chieu-rap", 1)
         logger.info(f"[CacheWarmer] Đợi {WARM_CACHE_INTERVAL}s cho lần refresh tiếp theo...")
         await asyncio.sleep(WARM_CACHE_INTERVAL)
 
