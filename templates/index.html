@@ -2295,9 +2295,9 @@ video.addEventListener('play', () => {
 
         // --- Smart Homepage State ---
         let homeState = {
-            latest: { items: [], page: 1, loading: false, hasMore: true },
-            phimLe: { items: [], page: 1, loading: false, hasMore: true },
-            phimChieuRap: { items: [], page: 1, loading: false, hasMore: true },
+            latest: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0 },
+            phimLe: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
+            phimChieuRap: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
             activeGridTab: 'phim-chieu-rap'
         };
 
@@ -2309,12 +2309,26 @@ video.addEventListener('play', () => {
             state.loading = true;
             state.page = page || state.page;
 
-            const endpoint = section === 'latest' ? '/api/home/latest' : section === 'phim-le' ? '/api/home/phim-le' : '/api/home/phim-chieu-rap';
-            try {
-                const res = await fetch(`${endpoint}?page=${state.page}`);
-                const data = await res.json();
-                const items = data.items || [];
+            let endpoint;
+            let query = `page=${state.page}`;
+            if (section === 'latest') {
+                endpoint = '/api/home/latest';
+            } else {
+                endpoint = section === 'phim-le' ? '/api/home/phim-le' : '/api/home/phim-chieu-rap';
+                const f = state.filters;
+                if (f.category) query += `&category=${encodeURIComponent(f.category)}`;
+                if (f.country) query += `&country=${encodeURIComponent(f.country)}`;
+                if (f.year) query += `&year=${encodeURIComponent(f.year)}`;
+            }
 
+            const mySeq = ++state.fetchSeq;
+
+            try {
+                const res = await fetch(`${endpoint}?${query}`);
+                const data = await res.json();
+                if (mySeq !== state.fetchSeq) return;
+
+                const items = data.items || [];
                 if (items.length === 0 || (data.pagination && data.pagination.currentPage >= data.pagination.totalPages)) {
                     state.hasMore = false;
                 }
@@ -2327,8 +2341,22 @@ video.addEventListener('play', () => {
             } catch (e) {
                 console.error(`Error fetching ${section}:`, e);
             } finally {
-                state.loading = false;
+                if (mySeq === state.fetchSeq) state.loading = false;
             }
+        }
+
+        function applyFilter() {
+            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const state = homeState[key];
+            state.items = [];
+            state.page = 1;
+            state.loading = false;
+            state.hasMore = true;
+            updateFilterUI();
+            fetchHomeSection(homeState.activeGridTab, 1).then(() => {
+                renderGridCards(false);
+                setupHomeInfiniteScroll();
+            });
         }
 
         function renderHeroCards() {
@@ -2393,6 +2421,11 @@ video.addEventListener('play', () => {
                             <div class="skeleton-text-short"></div>
                         </div>
                     `).join('');
+                    return;
+                }
+                const hasFilter = state.filters && Object.values(state.filters).some(Boolean);
+                if (state.items.length === 0 && hasFilter && !state.loading) {
+                    grid.innerHTML = '<div class="filter-empty">Không tìm thấy phim phù hợp với bộ lọc.</div>';
                     return;
                 }
                 grid.innerHTML = '';
@@ -2484,6 +2517,7 @@ video.addEventListener('play', () => {
 
         function switchHomeTab(tab) {
             homeState.activeGridTab = tab;
+            updateFilterUI();
 
             document.querySelectorAll('.grid-tab-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tab === tab);
@@ -3404,6 +3438,7 @@ video.addEventListener('play', () => {
         fetchSavedMovies();
         // Initialize Smart Homepage
         (async function initHomepage() {
+            loadFilterData();
             await fetchHomeSection('latest', 1);
             renderHeroCards();
             await fetchHomeSection('phim-chieu-rap', 1);
@@ -3412,6 +3447,103 @@ video.addEventListener('play', () => {
         })();
         fetchDownloadStatuses();
         setInterval(fetchDownloadStatuses, 5000);
+
+        // --- FILTER BAR (THỂ LOẠI / QUỐC GIA / NĂM) ---
+        let filterData = { categories: null, countries: null };
+
+        async function loadFilterData() {
+            try {
+                const [catRes, cntRes] = await Promise.all([
+                    fetch('/api/home/categories').then(r => r.json()),
+                    fetch('/api/home/countries').then(r => r.json())
+                ]);
+                filterData.categories = (catRes.items || []).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+                filterData.countries = (cntRes.items || []).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+            } catch (e) {
+                console.error('Lỗi tải dữ liệu bộ lọc:', e);
+            }
+        }
+
+        function getFilterLabel(type, value) {
+            const list = type === 'category' ? filterData.categories : filterData.countries;
+            const found = list && list.find(it => it.slug === value);
+            return found ? found.name : value;
+        }
+
+        function toggleFilterDropdown(type) {
+            const menu = document.getElementById(`filterMenu-${type}`);
+            const willOpen = !menu.classList.contains('open');
+            closeAllFilterDropdowns();
+            if (willOpen) {
+                renderFilterOptions(type);
+                menu.classList.add('open');
+            }
+        }
+
+        function closeAllFilterDropdowns() {
+            document.querySelectorAll('.filter-menu.open').forEach(m => m.classList.remove('open'));
+        }
+
+        function renderFilterOptions(type) {
+            const menu = document.getElementById(`filterMenu-${type}`);
+            let options = [];
+            if (type === 'category') {
+                options = (filterData.categories || []).map(c => ({ label: c.name, value: c.slug }));
+            } else if (type === 'country') {
+                options = (filterData.countries || []).map(c => ({ label: c.name, value: c.slug }));
+            } else {
+                const y = new Date().getFullYear();
+                for (let i = y; i >= 1990; i--) options.push({ label: String(i), value: String(i) });
+            }
+            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const current = homeState[key].filters[type];
+            const html = [
+                `<button class="filter-option${current === '' ? ' active' : ''}" onclick="setFilter('${type}','')">Tất cả</button>`
+            ].concat(options.map(o =>
+                `<button class="filter-option${o.value === current ? ' active' : ''}" onclick="setFilter('${type}','${o.value}')">${o.label}</button>`
+            )).join('');
+            menu.innerHTML = html;
+        }
+
+        function setFilter(type, value) {
+            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            homeState[key].filters[type] = value;
+            closeAllFilterDropdowns();
+            applyFilter();
+        }
+
+        function clearAllFilters() {
+            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            homeState[key].filters = { category: '', country: '', year: '' };
+            closeAllFilterDropdowns();
+            applyFilter();
+        }
+
+        function updateFilterUI() {
+            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const f = homeState[key].filters;
+            const labels = { category: 'Thể loại', country: 'Quốc gia', year: 'Năm' };
+            let activeCount = 0;
+            for (const type of ['category', 'country', 'year']) {
+                const btn = document.getElementById(`filterBtn-${type}`);
+                if (!btn) continue;
+                const val = f[type];
+                btn.classList.toggle('active', !!val);
+                btn.textContent = (val ? getFilterLabel(type, val) : labels[type]) + ' ▾';
+                if (val) activeCount++;
+            }
+            const clearBtn = document.getElementById('filterClearBtn');
+            if (clearBtn) clearBtn.style.display = activeCount > 0 ? 'inline-block' : 'none';
+        }
+
+        // Đóng dropdown khi click ngoài hoặc nhấn ESC
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.filter-dropdown')) closeAllFilterDropdowns();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeAllFilterDropdowns();
+        });
+
         window.addEventListener('DOMContentLoaded', () => {
             initTabbing();
         });
