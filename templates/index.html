@@ -1955,6 +1955,8 @@
                         <div class="grid-tabs-nav">
                             <button class="grid-tab-btn active" data-tab="phim-chieu-rap" onclick="switchHomeTab('phim-chieu-rap')">Phim Chiếu Rạp</button>
                             <button class="grid-tab-btn" data-tab="phim-le" onclick="switchHomeTab('phim-le')">Phim Lẻ</button>
+                            <button class="grid-tab-btn" data-tab="phim-bo" onclick="switchHomeTab('phim-bo')">Phim Bộ</button>
+                            <button class="grid-tab-btn" data-tab="tv-shows" onclick="switchHomeTab('tv-shows')">TV Shows</button>
                             <div class="filter-bar">
                                 <div class="filter-dropdown">
                                     <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại ▾</button>
@@ -2299,11 +2301,18 @@ video.addEventListener('play', () => {
             latest: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0 },
             phimLe: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
             phimChieuRap: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
+            phimBo: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
+            tvShows: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
             activeGridTab: 'phim-chieu-rap'
         };
 
+        function homeKey(tab) {
+            const map = { 'phim-chieu-rap': 'phimChieuRap', 'phim-le': 'phimLe', 'phim-bo': 'phimBo', 'tv-shows': 'tvShows' };
+            return map[tab] || 'phimChieuRap';
+        }
+
         async function fetchHomeSection(section, page) {
-            const key = section === 'latest' ? 'latest' : section === 'phim-le' ? 'phimLe' : 'phimChieuRap';
+            const key = section === 'latest' ? 'latest' : homeKey(section);
             const state = homeState[key];
             if (state.loading || !state.hasMore) return;
 
@@ -2315,7 +2324,7 @@ video.addEventListener('play', () => {
             if (section === 'latest') {
                 endpoint = '/api/home/latest';
             } else {
-                endpoint = section === 'phim-le' ? '/api/home/phim-le' : '/api/home/phim-chieu-rap';
+                endpoint = section === 'phim-le' ? '/api/home/phim-le' : section === 'phim-bo' ? '/api/home/phim-bo' : section === 'tv-shows' ? '/api/home/tv-shows' : '/api/home/phim-chieu-rap';
                 const f = state.filters;
                 if (f.category) query += `&category=${encodeURIComponent(f.category)}`;
                 if (f.country) query += `&country=${encodeURIComponent(f.country)}`;
@@ -2354,7 +2363,7 @@ video.addEventListener('play', () => {
         }
 
         function applyFilter() {
-            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const key = homeKey(homeState.activeGridTab);
             const state = homeState[key];
             state.items = [];
             state.page = 1;
@@ -2417,7 +2426,7 @@ video.addEventListener('play', () => {
             if (oldLoader) oldLoader.remove();
 
             const tab = homeState.activeGridTab;
-            const key = tab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const key = homeKey(tab);
             const state = homeState[key];
 
             if (!append) {
@@ -2507,7 +2516,7 @@ video.addEventListener('play', () => {
             if (gridContent && loader) {
                 if (homeObservers.grid) homeObservers.grid.disconnect();
                 const tab = homeState.activeGridTab;
-                const key = tab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+                const key = homeKey(tab);
                 const state = homeState[key];
 
                 homeObservers.grid = new IntersectionObserver((entries) => {
@@ -2531,7 +2540,7 @@ video.addEventListener('play', () => {
                 btn.classList.toggle('active', btn.dataset.tab === tab);
             });
 
-            const key = tab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const key = homeKey(tab);
             const state = homeState[key];
 
             if (state.items.length === 0 && !state.loading) {
@@ -3503,7 +3512,7 @@ video.addEventListener('play', () => {
                 const y = new Date().getFullYear();
                 for (let i = y; i >= 1990; i--) options.push({ label: String(i), value: String(i) });
             }
-            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const key = homeKey(homeState.activeGridTab);
             const current = homeState[key].filters[type];
             const html = [
                 `<button class="filter-option${current === '' ? ' active' : ''}" onclick="setFilter('${type}','')">Tất cả</button>`
@@ -3514,21 +3523,21 @@ video.addEventListener('play', () => {
         }
 
         function setFilter(type, value) {
-            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const key = homeKey(homeState.activeGridTab);
             homeState[key].filters[type] = value;
             closeAllFilterDropdowns();
             applyFilter();
         }
 
         function clearAllFilters() {
-            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const key = homeKey(homeState.activeGridTab);
             homeState[key].filters = { category: '', country: '', year: '' };
             closeAllFilterDropdowns();
             applyFilter();
         }
 
         function updateFilterUI() {
-            const key = homeState.activeGridTab === 'phim-chieu-rap' ? 'phimChieuRap' : 'phimLe';
+            const key = homeKey(homeState.activeGridTab);
             const f = homeState[key].filters;
             const labels = { category: 'Thể loại', country: 'Quốc gia', year: 'Năm' };
             let activeCount = 0;
