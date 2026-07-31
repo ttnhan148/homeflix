@@ -507,6 +507,14 @@
             70% { box-shadow: 0 0 0 5px rgba(229, 9, 20, 0); }
             100% { box-shadow: 0 0 0 0 rgba(229, 9, 20, 0); }
         }
+        .detail-episodes {
+            margin-top: 1rem;
+            background: rgba(18, 18, 20, 0.7);
+            border: 1px solid var(--glass-border-strong);
+            border-radius: var(--radius-xl);
+            padding: 1.25rem;
+            backdrop-filter: blur(8px);
+        }
         /* --- PLAYER TOAST --- */
 
         /* TV */
@@ -3270,6 +3278,7 @@ video.addEventListener('play', () => {
                                 }
                             }
                             savedMoviesList[sIdx].episode_states[url] = "watching";
+                            refreshDetailEpisodeList();
                         }
                     }
                 }).catch(err => console.error("Error saving progress:", err));
@@ -3454,6 +3463,7 @@ video.addEventListener('play', () => {
                             <span class="detail-chip">${m.lang}</span>
                         </div>
                         <div class="detail-overview">${m.content || 'Chưa có mô tả cho phim này.'}</div>
+                        <div class="detail-episodes" id="detailEpisodeList"></div>
                         <div class="detail-actions">
                             <button id="btnSaveDetail" class="detail-action-side" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesList.length})">
                                 <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
@@ -3466,12 +3476,45 @@ video.addEventListener('play', () => {
                         </div>
                     `;
                     setTimeout(initTabbing, 100);
+                    if (episodesList.length > 0) {
+                        const savedMovie = savedMoviesList.find(item => item.slug === m.slug);
+                        const watchStates = (savedMovie && savedMovie.episode_states) ? savedMovie.episode_states : {};
+                        renderEpisodeList(document.getElementById('detailEpisodeList'), {
+                            episodes: episodesList,
+                            movieSlug: m.slug,
+                            watchStates,
+                            onPlay: (ep) => {
+                                currentMovie = { slug: m.slug, name: m.name, poster_url: m.poster_url };
+                                playEpisodesListDirect(currentDetailEpisodes, ep.link_m3u8);
+                            }
+                        });
+                    }
                 } else {
                     detailDiv.innerHTML = '<div style="text-align: center; color: var(--accent-color);">Không thể tải thông tin chi tiết phim.</div>';
                 }
             } catch (err) {
                 detailDiv.innerHTML = `<div style="text-align: center; color: var(--accent-color);">Lỗi kết nối: ${err.message}</div>`;
             }
+        }
+
+        function refreshDetailEpisodeList() {
+            const listEl = document.getElementById('detailEpisodeList');
+            if (!listEl || !currentDetailEpisodes || currentDetailEpisodes.length === 0) return;
+            let watchStates = {};
+            let movie = currentMovie;
+            if (movie && movie.slug) {
+                const saved = savedMoviesList.find(item => item.slug === movie.slug);
+                if (saved && saved.episode_states) watchStates = saved.episode_states;
+            }
+            renderEpisodeList(listEl, {
+                episodes: currentDetailEpisodes,
+                movieSlug: movie ? movie.slug : null,
+                watchStates,
+                onPlay: (ep) => {
+                    if (movie) currentMovie = { slug: movie.slug, name: movie.name, poster_url: movie.poster_url };
+                    playEpisodesListDirect(currentDetailEpisodes, ep.link_m3u8);
+                }
+            });
         }
 
         function playSelectedMovieDirect(name, slug) {
