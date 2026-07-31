@@ -50,8 +50,9 @@ function homeKey(tab) {
     return map[tab] || 'phimChieuRap';
 }
 ```
+Lưu ý: `homeKey` **không** dùng cho `latest` — nó chỉ map 4 grid tab. Các call site dùng cho grid tab (không gồm `fetchHomeSection`'s latest branch) đều thay ternary bằng `homeKey(...)`.
 
-**`fetchHomeSection`** — endpoint mapping mở rộng: `'phim-bo' → '/api/home/phim-bo'`, `'tv-shows' → '/api/home/tv-shows'`; key mapping dùng `homeKey(section)`; query filters/lọc params/`fetchSeq`/`fetchError` giữ nguyên logic hiện có.
+**`fetchHomeSection`** — endpoint mapping mở rộng: `'phim-bo' → '/api/home/phim-bo'`, `'tv-shows' → '/api/home/tv-shows'`. Key mapping: **`latest` vẫn special-case trực tiếp** (hero dùng `homeState.latest`, không đi qua `homeKey`) — `section === 'latest' ? 'latest' : homeKey(section)`. `homeKey()` chỉ phục vụ 4 grid tab. Query filters/lọc params/`fetchSeq`/`fetchError` giữ nguyên logic hiện có.
 
 **`switchHomeTab` / `renderGridCards` / filter JS** — thay ternary bằng `homeKey(tab)`. Không đổi logic khác.
 
