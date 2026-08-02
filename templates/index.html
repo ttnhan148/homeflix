@@ -343,21 +343,6 @@
         .episodes-drawer.expanded .episodes-drawer-toggle .drawer-arrow {
             transform: rotate(180deg);
         }
-        .episodes-drawer .episodes-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 0.6rem;
-            padding: 0.75rem 1rem;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        .episodes-drawer .episodes-grid::-webkit-scrollbar {
-            width: 6px;
-        }
-        .episodes-drawer .episodes-grid::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.08);
-            border-radius: 3px;
-        }
         .episodes-drawer .episodes-drawer-grid {
             display: flex;
             flex-direction: column;
@@ -534,7 +519,7 @@
             padding: 0.5rem 0.7rem;
         }
 
-        .device-mobile .episodes-drawer .episodes-grid {
+        .device-mobile .episodes-drawer .ep-list-grid {
             grid-template-columns: repeat(2, 1fr);
             gap: 0.4rem;
         }
@@ -706,64 +691,6 @@
             padding: 0.6rem;
             border-radius: var(--radius-lg);
             border: 1px solid var(--glass-border);
-        }
-
-        /* --- EPISODES SECTION --- */
-        .episodes-section {
-            display: none;
-            flex-direction: column;
-            gap: 0.75rem;
-            background: rgba(18, 18, 20, 0.7);
-            padding: 1.25rem;
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--glass-border-strong);
-            backdrop-filter: blur(8px);
-        }
-
-        .episodes-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 0.6rem;
-            max-height: 240px;
-            overflow-y: auto;
-            padding-right: 0.5rem;
-        }
-
-        .episodes-grid::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .episodes-grid::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.08);
-            border-radius: 3px;
-        }
-
-        .ep-btn {
-            background: rgba(18, 18, 20, 0.7);
-            border: 1px solid var(--glass-border);
-            padding: 0.7rem 0.9rem;
-            color: var(--text-dim);
-            font-size: 0.85rem;
-            font-weight: 500;
-            text-align: center;
-            cursor: pointer;
-            border-radius: var(--radius-md);
-            transition: var(--transition);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .ep-btn:hover {
-            background: rgba(255, 255, 255, 0.04);
-            color: var(--text-main);
-            border-color: var(--glass-border-strong);
-        }
-
-        .ep-btn.active {
-            background: rgba(229, 9, 20, 0.12);
-            color: var(--accent-color);
-            border-color: rgba(229, 9, 20, 0.3);
         }
 
         /* --- SEARCH TAB --- */
@@ -1152,7 +1079,7 @@
             padding: 1rem;
         }
 
-        .device-tv .ep-btn {
+        .device-tv .ep-item {
             font-size: 1.05rem;
             padding: 1rem 1.2rem;
             border-radius: var(--radius-lg);
@@ -1196,7 +1123,7 @@
         .device-tv button:focus, 
         .device-tv .tab-btn:focus, 
         .device-tv .movie-card:focus, 
-        .device-tv .ep-btn:focus {
+        .device-tv .ep-item:focus {
             outline: 4px solid var(--focus-ring) !important;
             outline-offset: 3px;
             transform: scale(1.05);
@@ -1250,7 +1177,7 @@
             height: 2.2rem;
         }
 
-        .device-mobile .ep-btn {
+        .device-mobile .ep-item {
             font-size: 0.9rem;
             padding: 0.6rem 0.8rem;
         }
@@ -1298,8 +1225,7 @@
         .device-mobile .grid-tab-btn,
         .device-mobile .btn-sec,
         .device-mobile .btn-paste,
-        .device-mobile .ep-btn,
-        .device-mobile .saved-ep-btn,
+        .device-mobile .ep-item,
         .device-mobile .episodes-drawer-toggle,
         .device-mobile .search-overlay-close,
         .device-mobile .search-overlay-input,
@@ -1307,7 +1233,6 @@
         .device-mobile textarea,
         .device-mobile .input-card,
         .device-mobile .movie-card,
-        .device-mobile .episodes-section,
         .device-mobile .movie-detail-panel,
         .device-mobile .saved-movie-row,
         .device-mobile .episodes-drawer,
@@ -1804,83 +1729,6 @@
             width: 100%;
         }
 
-        .saved-movie-row .episodes-container::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .saved-movie-row .episodes-container::-webkit-scrollbar-thumb {
-            background: #444;
-            border-radius: 2px;
-        }
-
-        .saved-ep-btn {
-            padding: 0.4rem 0.7rem;
-            font-size: 0.8rem;
-            font-weight: 500;
-            border-radius: var(--radius-md);
-            border: 1px solid var(--glass-border);
-            cursor: pointer;
-            transition: var(--transition);
-            background: rgba(18, 18, 20, 0.6);
-            color: var(--text-dim);
-            min-width: 70px;
-            text-align: center;
-        }
-
-        /* Watched: Green */
-        .saved-ep-btn.watched {
-            background: rgba(40, 167, 69, 0.12);
-            border-color: rgba(40, 167, 69, 0.4);
-            color: #2cd054;
-        }
-
-        .saved-ep-btn.watched:hover {
-            background: rgba(40, 167, 69, 0.25);
-            color: #2cd054;
-        }
-
-        /* Watching: Yellow/Orange pulse */
-        .saved-ep-btn.watching {
-            background: rgba(255, 193, 7, 0.15);
-            border-color: #ffc107;
-            color: #ffc107;
-            box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4);
-            animation: pulse-border-yellow 2s infinite;
-        }
-
-        .saved-ep-btn.watching:hover {
-            background: rgba(255, 193, 7, 0.3);
-        }
-
-        /* Unwatched: Dim Gray */
-        .saved-ep-btn.unwatched {
-            background: rgba(20, 20, 20, 0.5);
-            border-color: rgba(255, 255, 255, 0.06);
-            color: var(--text-dim);
-        }
-
-        .saved-ep-btn.unwatched:hover {
-            background: rgba(255, 255, 255, 0.08);
-            color: white;
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        @keyframes pulse-border-yellow {
-            0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
-            70% { box-shadow: 0 0 0 5px rgba(255, 193, 7, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
-        }
-
-        .ep-btn, .saved-ep-btn {
-            display: inline-flex !important;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-            position: relative;
-        }
-        .ep-btn {
-            min-width: 140px;
-        }
         .ep-dl-indicator {
             display: inline-flex;
             align-items: center;
@@ -2002,8 +1850,7 @@
             aspect-ratio: auto; /* Allow the browser to fit the screen */
             object-fit: contain;
         }
-        body.player-active #statusMessage,
-        body.player-active .episodes-section {
+        body.player-active #statusMessage {
             padding-left: 1.5rem !important;
             padding-right: 1.5rem !important;
         }
