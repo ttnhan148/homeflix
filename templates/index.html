@@ -317,7 +317,7 @@
             max-height: 44px;
         }
         .episodes-drawer.expanded {
-            max-height: 400px;
+            max-height: 480px;
         }
         .episodes-drawer-toggle {
             width: 100%;
@@ -1234,6 +1234,7 @@
         .device-mobile .input-card,
         .device-mobile .movie-card,
         .device-mobile .movie-detail-panel,
+        .device-mobile .detail-episodes,
         .device-mobile .saved-movie-row,
         .device-mobile .episodes-drawer,
         .device-mobile .status-msg,
@@ -2146,12 +2147,6 @@ function toggleEpisodesDrawer() {
 
         // --- Unified Episode List (dùng chung detail + drawer + saved) ---
         const EP_CHUNK = 100;
-
-        function episodeNumber(name) {
-            if (!name) return NaN;
-            const m = String(name).match(/\d+/);
-            return m ? parseInt(m[0], 10) : NaN;
-        }
 
         function el(tag, className, text) {
             const n = document.createElement(tag);
