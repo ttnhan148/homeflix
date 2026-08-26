@@ -11,6 +11,8 @@ env/
 cache/
 downloads/
 *.db
+*.db-shm
+*.db-wal
 *.json.bak
 downloads.json
 saved_movies.json

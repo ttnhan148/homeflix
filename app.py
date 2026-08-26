@@ -9,11 +9,15 @@ import asyncio
 import sqlite3
 import re
 import unicodedata
+import threading
 from datetime import datetime, date
+from contextlib import asynccontextmanager
+from functools import lru_cache
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
@@ -43,45 +47,115 @@ if not os.path.exists(CACHE_DIR):
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+# --- SQLite Connection Pool (thread-safe singleton) ---
+# Thay vì mở/đóng connection cho mỗi query, dùng 1 connection chia sẻ
+# với Lock để đảm bảo thread-safe khi chạy với asyncio.to_thread.
+_db_conn = None
+_db_lock = threading.Lock()
+
+def get_db() -> sqlite3.Connection:
+    """Trả về connection SQLite singleton (thread-safe).
+    
+    Connection được tạo 1 lần và tái sử dụng, tránh overhead mở/đóng
+    liên tục. PRAGMA được thiết lập cho hiệu năng tối đa:
+    - WAL: ghi không block đọc
+    - synchronous=NORMAL: cân bằng tốc độ/an toàn
+    - cache_size=-64MB: cache lớn trong RAM
+    - temp_store=MEMORY: temp table trong RAM
+    - mmap_size=256MB: memory-mapped I/O
+    """
+    global _db_conn
+    if _db_conn is None:
+        with _db_lock:
+            if _db_conn is None:
+                conn = sqlite3.connect(DB_FILE, timeout=30.0, check_same_thread=False)
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+                conn.execute("PRAGMA cache_size=-65536")   # 64MB
+                conn.execute("PRAGMA temp_store=MEMORY")
+                conn.execute("PRAGMA mmap_size=268435456")  # 256MB
+                conn.execute("PRAGMA wal_autocheckpoint=1000")
+                _db_conn = conn
+                logger.info("[DB] SQLite connection pool initialized (WAL, 64MB cache, 256MB mmap)")
+    return _db_conn
+
+def db_execute(sql: str, params=(), commit: bool = True) -> sqlite3.Cursor:
+    """Thực thi SQL với thread-safe lock, trả về cursor."""
+    conn = get_db()
+    with _db_lock:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        if commit:
+            conn.commit()
+        return cursor
+
+def db_query(sql: str, params=()) -> list:
+    """Query SELECT với thread-safe lock, trả về list of rows."""
+    conn = get_db()
+    with _db_lock:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        return cursor.fetchall()
+
+def db_query_one(sql: str, params=()) -> sqlite3.Row | None:
+    """Query SELECT trả về 1 row đầu tiên."""
+    conn = get_db()
+    with _db_lock:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        return cursor.fetchone()
+
 def init_db():
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS saved_movies (
-            slug TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            poster_url TEXT,
-            year TEXT,
-            episode_current TEXT,
-            total_episodes INTEGER,
-            last_watched_episode TEXT,
-            last_watched_url TEXT,
-            episodes TEXT,
-            episode_states TEXT,
-            updated_at TEXT NOT NULL
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS episode_downloads (
-            movie_slug TEXT NOT NULL,
-            episode_name TEXT NOT NULL,
-            status TEXT NOT NULL,
-            error TEXT,
-            delete_at REAL,
-            PRIMARY KEY (movie_slug, episode_name)
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS api_cache (
-            cache_key TEXT PRIMARY KEY,
-            response_json TEXT NOT NULL,
-            cached_at REAL NOT NULL,
-            ttl_seconds INTEGER NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
+    conn = get_db()
+    with _db_lock:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS saved_movies (
+                slug TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                poster_url TEXT,
+                year TEXT,
+                episode_current TEXT,
+                total_episodes INTEGER,
+                last_watched_episode TEXT,
+                last_watched_url TEXT,
+                episodes TEXT,
+                episode_states TEXT,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS episode_downloads (
+                movie_slug TEXT NOT NULL,
+                episode_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                error TEXT,
+                delete_at REAL,
+                PRIMARY KEY (movie_slug, episode_name)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS api_cache (
+                cache_key TEXT PRIMARY KEY,
+                response_json TEXT NOT NULL,
+                cached_at REAL NOT NULL,
+                ttl_seconds INTEGER NOT NULL
+            )
+        """)
+        # --- INDEX: tăng tốc query thường dùng ---
+        # episode_downloads: query theo movie_slug (rất thường xuyên)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ep_dl_slug ON episode_downloads(movie_slug)")
+        # episode_downloads: cleanup worker query theo delete_at
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ep_dl_delete_at ON episode_downloads(delete_at)")
+        # episode_downloads: query status pending/downloading khi restart
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ep_dl_status ON episode_downloads(status)")
+        # saved_movies: ORDER BY updated_at DESC
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_movies_updated ON saved_movies(updated_at DESC)")
+        # api_cache: cleanup theo cached_at
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_cache_cached_at ON api_cache(cached_at)")
+        conn.commit()
+    logger.info("[DB] Tables + indexes initialized")
 
 def migrate_downloads_json_to_db():
     if not os.path.exists(DOWNLOADS_STATUS_FILE):
@@ -90,21 +164,21 @@ def migrate_downloads_json_to_db():
         with open(DOWNLOADS_STATUS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        conn = sqlite3.connect(DB_FILE, timeout=30.0)
-        cursor = conn.cursor()
-        for key, info in data.items():
-            parts = key.split("/", 1)
-            if len(parts) == 2:
-                movie_slug, ep_name = parts
-                status = info.get("status", "not_started")
-                error = info.get("error")
-                delete_at = info.get("delete_at")
-                cursor.execute("""
-                    INSERT OR REPLACE INTO episode_downloads (movie_slug, episode_name, status, error, delete_at)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (movie_slug, ep_name, status, error, delete_at))
-        conn.commit()
-        conn.close()
+        conn = get_db()
+        with _db_lock:
+            cursor = conn.cursor()
+            for key, info in data.items():
+                parts = key.split("/", 1)
+                if len(parts) == 2:
+                    movie_slug, ep_name = parts
+                    status = info.get("status", "not_started")
+                    error = info.get("error")
+                    delete_at = info.get("delete_at")
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO episode_downloads (movie_slug, episode_name, status, error, delete_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (movie_slug, ep_name, status, error, delete_at))
+            conn.commit()
         os.remove(DOWNLOADS_STATUS_FILE)
         logger.info("[Migration] Successfully migrated downloads.json into SQLite DB.")
     except Exception as e:
@@ -112,14 +186,10 @@ def migrate_downloads_json_to_db():
 
 # --- API Cache helpers (SQLite-backed, stale-fallback) ---
 def _db_get_cache(cache_key: str):
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute(
+    row = db_query_one(
         "SELECT response_json, cached_at, ttl_seconds FROM api_cache WHERE cache_key = ?",
         (cache_key,)
     )
-    row = cursor.fetchone()
-    conn.close()
     if row:
         data = json.loads(row[0])
         is_fresh = (time.time() - row[1]) < row[2]
@@ -127,14 +197,10 @@ def _db_get_cache(cache_key: str):
     return None
 
 def _db_set_cache(cache_key: str, response_obj, ttl_seconds: int):
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute("""
+    db_execute("""
         INSERT OR REPLACE INTO api_cache (cache_key, response_json, cached_at, ttl_seconds)
         VALUES (?, ?, ?, ?)
     """, (cache_key, json.dumps(response_obj, ensure_ascii=False), time.time(), ttl_seconds))
-    conn.commit()
-    conn.close()
 
 async def cached_fetch(cache_key: str, ttl_seconds: int, fetch_fn):
     """Cache-aside with stale-fallback: trả cache cũ nếu phimapi.com lỗi."""
@@ -156,13 +222,7 @@ async def cached_fetch(cache_key: str, ttl_seconds: int, fetch_fn):
 
 # Helper SQLite cho saved_movies
 def _db_get_all_movies():
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM saved_movies ORDER BY updated_at DESC")
-    rows = cursor.fetchall()
-    conn.close()
-    
+    rows = db_query("SELECT * FROM saved_movies ORDER BY updated_at DESC")
     movies = []
     for r in rows:
         m = dict(r)
@@ -175,12 +235,7 @@ async def get_all_movies_from_db():
     return await asyncio.to_thread(_db_get_all_movies)
 
 def _db_get_movie(slug):
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM saved_movies WHERE slug = ?", (slug,))
-    row = cursor.fetchone()
-    conn.close()
+    row = db_query_one("SELECT * FROM saved_movies WHERE slug = ?", (slug,))
     if row:
         m = dict(row)
         m["episodes"] = json.loads(m["episodes"]) if m["episodes"] else []
@@ -192,9 +247,6 @@ async def get_movie_from_db(slug):
     return await asyncio.to_thread(_db_get_movie, slug)
 
 def _db_save_movie(movie):
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    
     slug = movie.get("slug")
     name = movie.get("name", "")
     poster_url = movie.get("poster_url", "")
@@ -208,7 +260,7 @@ def _db_save_movie(movie):
     episode_states = json.dumps(movie.get("episode_states", {}), ensure_ascii=False)
     updated_at = datetime.now().isoformat()
     
-    cursor.execute("""
+    db_execute("""
         INSERT INTO saved_movies (
             slug, name, poster_url, year, episode_current, total_episodes,
             last_watched_episode, last_watched_url, episodes, episode_states, updated_at
@@ -228,23 +280,18 @@ def _db_save_movie(movie):
         slug, name, poster_url, year, episode_current, total_episodes,
         last_watched_episode, last_watched_url, episodes, episode_states, updated_at
     ))
-    conn.commit()
-    conn.close()
 
 async def save_movie_to_db(movie):
     await asyncio.to_thread(_db_save_movie, movie)
 
 def _db_delete_movie(slug):
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM saved_movies WHERE slug = ?", (slug,))
-    conn.commit()
-    conn.close()
+    db_execute("DELETE FROM saved_movies WHERE slug = ?", (slug,))
 
 async def delete_movie_from_db(slug):
     await asyncio.to_thread(_db_delete_movie, slug)
 
 # Tải xuống MP4 qua ffmpeg
+@lru_cache(maxsize=512)
 def clean_filename(name: str) -> str:
     # Bỏ dấu tiếng Việt để tránh lỗi filesystem/locale khi truyền vào subprocess ffmpeg
     nfkd_form = unicodedata.normalize('NFKD', name)
@@ -258,22 +305,16 @@ def clean_filename(name: str) -> str:
     return s
 
 def _db_get_download_status(movie_slug: str, ep_name: str) -> dict:
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute(
+    row = db_query_one(
         "SELECT status, error, delete_at FROM episode_downloads WHERE movie_slug = ? AND episode_name = ?",
         (movie_slug, ep_name)
     )
-    row = cursor.fetchone()
-    conn.close()
     if row:
         return {"status": row[0], "error": row[1], "delete_at": row[2]}
     return {"status": "not_started", "error": None, "delete_at": None}
 
 def _db_update_download_status(movie_slug: str, ep_name: str, status: str, error_msg: str = None, delete_at: float = None):
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute("""
+    db_execute("""
         INSERT INTO episode_downloads (movie_slug, episode_name, status, error, delete_at)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(movie_slug, episode_name) DO UPDATE SET
@@ -281,26 +322,22 @@ def _db_update_download_status(movie_slug: str, ep_name: str, status: str, error
             error=excluded.error,
             delete_at=excluded.delete_at
     """, (movie_slug, ep_name, status, error_msg, delete_at))
-    conn.commit()
-    conn.close()
 
 def _db_get_all_downloads_status(movie_slug: str = None) -> dict:
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
     if movie_slug:
-        cursor.execute("SELECT episode_name, status FROM episode_downloads WHERE movie_slug = ?", (movie_slug,))
-        rows = cursor.fetchall()
+        rows = db_query(
+            "SELECT episode_name, status FROM episode_downloads WHERE movie_slug = ?",
+            (movie_slug,)
+        )
         res = {row[0]: row[1] for row in rows}
     else:
-        cursor.execute("SELECT movie_slug, episode_name, status FROM episode_downloads")
-        rows = cursor.fetchall()
+        rows = db_query("SELECT movie_slug, episode_name, status FROM episode_downloads")
         res = {}
         for row in rows:
             m_slug, ep_name, status = row
             if m_slug not in res:
                 res[m_slug] = {}
             res[m_slug][ep_name] = status
-    conn.close()
     return res
 
 async def get_download_status(movie_slug: str, ep_name: str) -> str:
@@ -335,25 +372,16 @@ async def enforce_download_window(movie_slug: str):
     pass
 
 def _db_get_deletable_episodes(now: float) -> list:
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute(
+    return db_query(
         "SELECT movie_slug, episode_name FROM episode_downloads WHERE delete_at IS NOT NULL AND delete_at <= ?",
         (now,)
     )
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
 
 def _db_delete_download_record(movie_slug: str, ep_name: str):
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute(
+    db_execute(
         "DELETE FROM episode_downloads WHERE movie_slug = ? AND episode_name = ?",
         (movie_slug, ep_name)
     )
-    conn.commit()
-    conn.close()
 
 async def delayed_cleanup_worker():
     await asyncio.sleep(10)
@@ -376,24 +404,15 @@ async def delayed_cleanup_worker():
         await asyncio.sleep(60)
 
 def _db_reset_stuck_downloads():
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute(
+    db_execute(
         "UPDATE episode_downloads SET status = 'pending' WHERE status = 'downloading'"
     )
-    conn.commit()
-    conn.close()
     logger.info("[Startup] Reset stuck 'downloading' episodes to 'pending'")
 
 def _db_get_queued_downloads() -> list:
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute(
+    return db_query(
         "SELECT movie_slug, episode_name FROM episode_downloads WHERE status IN ('pending', 'downloading')"
     )
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
 
 async def download_worker():
     await asyncio.sleep(2)
@@ -629,27 +648,61 @@ async def prefetch_episode(segment_urls: list[str], key_url: str | None, sid: st
         await asyncio.gather(*tasks, return_exceptions=True)
         logger.info(f"[Prefetch] Hoàn thành toàn bộ prefetch cho tập phim: {sid}")
 
-app = FastAPI(title="HomeFlix Proxy Player")
+# HTTP client (khởi tạo trong lifespan; None cho đến khi app start)
+client: httpx.AsyncClient | None = None
 
-# Phục vụ các file tĩnh (manifest, icons)
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+# --- Lifespan handler (thay thế @app.on_event deprecated) ---
+# Quản lý startup + shutdown trong 1 context manager duy nhất.
+# Background tasks được track để cancel sạch khi shutdown.
+_bg_tasks: list[asyncio.Task] = []
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: init DB, workers. Shutdown: close httpx client, cancel tasks."""
+    global client
     # Khởi tạo database SQLite
     init_db()
     # Chạy di chuyển dữ liệu downloads.json nếu có
     migrate_downloads_json_to_db()
     # Reset các download bị treo do server restart
     await asyncio.to_thread(_db_reset_stuck_downloads)
-    # Khởi động tác vụ dọn dẹp cache ngầm
-    asyncio.create_task(prune_cache())
-    # Khởi động background worker tải phim MP4
-    asyncio.create_task(download_worker())
-    # Khởi động background worker xóa phim đã xem sau 3h
-    asyncio.create_task(delayed_cleanup_worker())
-    # Khởi động cache warmer cho homepage (pre-warm + refresh định kỳ)
-    asyncio.create_task(home_cache_warmer())
+    # Khởi tạo HTTP client (chuyển vào lifespan để đóng sạch khi shutdown)
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(15.0, connect=5.0, write=5.0, pool=10.0),
+        follow_redirects=True,
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+    )
+    # Khởi động các background worker
+    _bg_tasks.append(asyncio.create_task(prune_cache()))
+    _bg_tasks.append(asyncio.create_task(download_worker()))
+    _bg_tasks.append(asyncio.create_task(delayed_cleanup_worker()))
+    _bg_tasks.append(asyncio.create_task(home_cache_warmer()))
+    logger.info("[Startup] HomeFlix ready — DB, workers, httpx client initialized")
+    yield
+    # Shutdown: hủy background tasks + đóng httpx client
+    for t in _bg_tasks:
+        t.cancel()
+    await asyncio.gather(*_bg_tasks, return_exceptions=True)
+    if client is not None:
+        await client.aclose()
+    logger.info("[Shutdown] HomeFlix stopped — tasks cancelled, httpx client closed")
+
+app = FastAPI(title="HomeFlix Proxy Player", lifespan=lifespan)
+
+# --- CachedStaticFiles: thêm Cache-Control header cho static files ---
+# Static files (icons, manifest, CSS, JS) hiếm khi thay đổi → browser cache
+# giảm RTT và bandwidth. Cache-Control: max-age=7d + immutable cho phép
+# browser sử dụng cached mà không cần revalidate.
+class CachedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        # Chỉ cache response 200 (không cache 404)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+        return response
+
+# Phục vụ các file tĩnh (manifest, icons) với cache headers
+app.mount("/static", CachedStaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
 
 # Khởi tạo Jinja2 templates với đường dẫn tuyệt đối
@@ -664,8 +717,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# HTTP client dùng để proxy
-client = httpx.AsyncClient(timeout=httpx.Timeout(10.0), follow_redirects=True)
+# --- Browser cache cho API responses (GET) ---
+# Các API /api/home/* và /api/search, /api/movie/* đã có server-side cache
+# (cached_fetch). Thêm Cache-Control header để browser cũng cache tạm thời,
+# giảm RTT khi user điều hướng lại trang. max-age ngắn (60s) + stale-while-
+# revalidate để luôn tươi mà không chờ.
+@app.middleware("http")
+async def api_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.method == "GET" and response.status_code == 200:
+        path = request.url.path
+        # Cache ngắn cho homepage sections (data thay đổi mỗi 10-30 phút)
+        if path.startswith("/api/home/"):
+            response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=600"
+        # Cache search & movie detail ngắn hơn (user-specific nhưng ổn định)
+        elif path.startswith("/api/search") or path.startswith("/api/movie/"):
+            response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=300"
+    return response
+
+# GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 def make_proxy_url(request: Request, path: str, target_url: str, sid: str = None) -> str:
     """Tạo URL đi qua proxy của chúng ta"""
@@ -1014,13 +1085,9 @@ async def delete_saved_movie_api(slug: str):
         await delete_movie_from_db(slug)
         
         # 1. Xóa các record tải xuống của phim trong DB
-        def _db_delete_movie_downloads(movie_slug):
-            conn = sqlite3.connect(DB_FILE, timeout=30.0)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM episode_downloads WHERE movie_slug = ?", (movie_slug,))
-            conn.commit()
-            conn.close()
-        await asyncio.to_thread(_db_delete_movie_downloads, slug)
+        await asyncio.to_thread(
+            lambda ms=slug: db_execute("DELETE FROM episode_downloads WHERE movie_slug = ?", (ms,))
+        )
         
         # 2. Xóa các thư mục cache phân đoạn liên quan đến từng tập phim
         for ep in movie.get("episodes", []):
@@ -1280,7 +1347,3 @@ async def home_cache_warmer():
         await _warm_danh_sach("tv-shows", 1)
         logger.info(f"[CacheWarmer] Đợi {WARM_CACHE_INTERVAL}s cho lần refresh tiếp theo...")
         await asyncio.sleep(WARM_CACHE_INTERVAL)
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await client.aclose()
