@@ -1140,6 +1140,9 @@
            ========================================================================== */
         .device-mobile .container {
             padding: 1rem;
+            padding-left: max(1rem, env(safe-area-inset-left));
+            padding-right: max(1rem, env(safe-area-inset-right));
+            padding-bottom: max(1rem, env(safe-area-inset-bottom));
             gap: 1rem;
         }
 
@@ -1810,20 +1813,31 @@
             position: sticky;
             top: 0;
             z-index: 100;
-            background-color: rgba(8, 8, 8, 0.88);
+            background-color: #080808;
+            background-color: rgba(8, 8, 8, 0.95);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             width: 100%;
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
-            padding-top: 1rem;
+            padding-top: calc(1rem + env(safe-area-inset-top, 0px));
             padding-bottom: 0.75rem;
             border-bottom: 1px solid var(--glass-border-strong);
         }
         .sticky-header .tabs-nav {
             border-bottom: none;
             padding-bottom: 0;
+        }
+
+        .device-mobile body {
+            padding-top: env(safe-area-inset-top, 0px);
+        }
+
+        .device-mobile .sticky-header {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            background-color: #080808;
         }
         
         /* 21:9 & Ultra-wide screen optimization for Player */
