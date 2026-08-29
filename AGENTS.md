@@ -5,7 +5,8 @@
 - Install deps: `pip install -r requirements.txt`
 - Deploy (Linux): `sudo ./install.sh`
 - Update (Linux): `sudo ./update.sh`
-- Logs: `sudo journalctl -u homeflix -f`
+- Deploy (Docker): `docker compose up -d --build`
+- Logs: `sudo journalctl -u homeflix -f` hoặc `docker compose logs -f`
 - No tests, no linter, no typechecker, no CI.
 
 ## Architecture
