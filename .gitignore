@@ -17,6 +17,11 @@ downloads/
 downloads.json
 saved_movies.json
 
+# Temporary & Superpowers / Agent Drafts
+.superpowers/
+.opencode/
+opencode.json
+
 # OS
 .DS_Store
 Thumbs.db
