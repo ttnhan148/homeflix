@@ -31,6 +31,7 @@ download_locks = {}
 # Đảm bảo đường dẫn tuyệt đối để chạy ổn định trên Linux/Systemd
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
+POSTER_CACHE_DIR = os.path.join(CACHE_DIR, "posters")
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 DB_FILE = os.path.join(BASE_DIR, "homeflix.db")
 DOWNLOADS_STATUS_FILE = os.path.join(BASE_DIR, "downloads.json")
@@ -43,6 +44,9 @@ prefetch_semaphore = asyncio.Semaphore(PREFETCH_CONCURRENCY)
 
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR, exist_ok=True)
+
+if not os.path.exists(POSTER_CACHE_DIR):
+    os.makedirs(POSTER_CACHE_DIR, exist_ok=True)
 
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -733,10 +737,52 @@ async def api_cache_headers(request: Request, call_next):
         # Cache search & movie detail ngắn hơn (user-specific nhưng ổn định)
         elif path.startswith("/api/search") or path.startswith("/api/movie/"):
             response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=300"
+        elif path.startswith("/proxy/image"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
 
 # GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+@app.get("/proxy/image")
+async def proxy_image(url: str):
+    """Proxy và disk-cache poster/hỉnh ảnh phim để tăng tốc độ tải trên client & PWA"""
+    if not url or not url.startswith("http"):
+        raise HTTPException(status_code=400, detail="Invalid image URL")
+    
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    # Tìm ext thích hợp
+    ext = ".jpg"
+    if ".png" in url.lower():
+        ext = ".png"
+    elif ".webp" in url.lower():
+        ext = ".webp"
+    
+    file_path = os.path.join(POSTER_CACHE_DIR, f"{url_hash}{ext}")
+    
+    if os.path.exists(file_path):
+        media_type = "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "image/jpeg"
+        return FileResponse(file_path, media_type=media_type, headers={"X-Cache": "HIT", "Cache-Control": "public, max-age=31536000, immutable"})
+    
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+        resp = await client.get(url, headers=headers, follow_redirects=True, timeout=15.0)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code, detail="Unable to fetch remote image")
+        
+        content = resp.content
+        part_path = f"{file_path}.part"
+        async with aiofiles.open(part_path, "wb") as f:
+            await f.write(content)
+        if os.path.exists(part_path):
+            os.rename(part_path, file_path)
+            
+        content_type = resp.headers.get("content-type", "image/jpeg")
+        return Response(content=content, media_type=content_type, headers={"X-Cache": "MISS", "Cache-Control": "public, max-age=31536000, immutable"})
+    except Exception as e:
+        logger.warning(f"[ImageProxy] Lỗi tải ảnh {url}: {e}")
+        # Redirect đến url gốc nếu fail
+        return Response(status_code=307, headers={"Location": url})
 
 def make_proxy_url(request: Request, path: str, target_url: str, sid: str = None) -> str:
     """Tạo URL đi qua proxy của chúng ta"""
@@ -966,12 +1012,7 @@ async def get_movie_detail(slug: str):
         movie_raw = data.get("movie", {})
         # Rút gọn thông tin phim cần thiết
         poster_raw = movie_raw.get("poster_url") or ""
-        if poster_raw.startswith("http"):
-            poster_url = poster_raw
-        elif poster_raw:
-            poster_url = f"https://phimimg.com/{poster_raw.lstrip('/')}"
-        else:
-            poster_url = ""
+        poster_url = _make_img_proxy_url(poster_raw)
         movie_clean = {
             "name": movie_raw.get("name"),
             "slug": movie_raw.get("slug"),
@@ -1165,6 +1206,12 @@ async def get_media_file_api(movie_slug: str, episode_name: str):
         raise HTTPException(status_code=404, detail="File video chưa sẵn sàng hoặc không tồn tại.")
     return FileResponse(file_path, media_type="video/mp4")
 
+def _make_img_proxy_url(raw_url: str) -> str:
+    if not raw_url:
+        return ""
+    full_url = raw_url if raw_url.startswith("http") else f"https://phimimg.com/{raw_url.lstrip('/')}"
+    return f"/proxy/image?url={urllib.parse.quote(full_url, safe='')}"
+
 def _normalize_movie_list(items: list) -> list:
     """Normalize KKPhim v1 API items to uniform format."""
     result = []
@@ -1175,8 +1222,8 @@ def _normalize_movie_list(items: list) -> list:
             "slug": item.get("slug"),
             "name": item.get("name"),
             "origin_name": item.get("origin_name"),
-            "poster_url": poster if (poster and poster.startswith("http")) else f"https://phimimg.com/{poster.lstrip('/')}" if poster else "",
-            "thumb_url": thumb if (thumb and thumb.startswith("http")) else f"https://phimimg.com/{thumb.lstrip('/')}" if thumb else "",
+            "poster_url": _make_img_proxy_url(poster),
+            "thumb_url": _make_img_proxy_url(thumb),
             "year": item.get("year", ""),
             "quality": item.get("quality", ""),
             "lang": item.get("lang", ""),
