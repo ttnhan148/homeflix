@@ -10,6 +10,8 @@ import sqlite3
 import re
 import unicodedata
 import threading
+import uuid
+import secrets
 from datetime import datetime, date
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -22,6 +24,8 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
 import json
+from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
+                     household_id, parse_trusted_proxies)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,14 @@ POSTER_CACHE_DIR = os.path.join(CACHE_DIR, "posters")
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 DB_FILE = os.path.join(BASE_DIR, "homeflix.db")
 DOWNLOADS_STATUS_FILE = os.path.join(BASE_DIR, "downloads.json")
+
+# --- Định danh thiết bị (không đăng nhập) ---
+DEVICE_COOKIE = "hf_device"
+DEVICE_COOKIE_MAX_AGE = 63072000  # 2 năm
+# Chỉ cấp cookie ở "/" và các route này; không cấp ở /proxy, /media, /static
+DEVICE_COOKIE_PATHS = ("/api/saved", "/api/device", "/api/cast")
+# IP của reverse proxy tin cậy (cách nhau bằng dấu phẩy) mới được đọc X-Forwarded-For
+TRUSTED_PROXIES = parse_trusted_proxies(os.environ.get("TRUSTED_PROXIES"))
 
 MAX_CACHE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB
 MAX_CACHE_AGE = 6 * 60 * 60              # 6 giờ (giây)
@@ -147,6 +159,48 @@ def init_db():
                 ttl_seconds INTEGER NOT NULL
             )
         """)
+        # --- Thiết bị: mỗi thiết bị có danh sách lưu và tiến độ xem riêng ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS devices (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                household TEXT NOT NULL,
+                user_agent TEXT,
+                last_seen REAL NOT NULL,
+                created_at REAL NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS device_movies (
+                device_id TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                name TEXT NOT NULL,
+                poster_url TEXT,
+                year TEXT,
+                episode_current TEXT,
+                total_episodes INTEGER,
+                last_watched_episode TEXT,
+                last_watched_url TEXT,
+                position_sec REAL,
+                duration_sec REAL,
+                episodes TEXT,
+                episode_states TEXT,
+                saved INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (device_id, slug)
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_household ON devices(household)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_updated ON device_movies(device_id, updated_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_slug ON device_movies(slug)")
         # --- INDEX: tăng tốc query thường dùng ---
         # episode_downloads: query theo movie_slug (rất thường xuyên)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ep_dl_slug ON episode_downloads(movie_slug)")
@@ -223,6 +277,60 @@ async def cached_fetch(cache_key: str, ttl_seconds: int, fetch_fn):
             logger.info(f"[Cache] Trả stale cache cho key={cache_key} (đã hết hạn)")
             return cached["data"]
         raise
+
+# --- Thiết bị ---
+def get_household_salt() -> str:
+    """Salt dùng băm IP thành "nhà". Sinh một lần, lưu trong DB."""
+    conn = get_db()
+    with _db_lock:
+        row = conn.execute("SELECT value FROM app_settings WHERE key = 'household_salt'").fetchone()
+        if row:
+            return row[0]
+        salt = secrets.token_hex(16)
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('household_salt', ?)", (salt,))
+        conn.commit()
+        return salt
+
+DEVICE_LAST_SEEN_THROTTLE = 60  # giây: không ghi last_seen thường hơn mức này
+
+def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str, now: float) -> dict:
+    """Thêm thiết bị nếu chưa có, ngược lại cập nhật last_seen (tối đa mỗi 60 giây)."""
+    conn = get_db()
+    with _db_lock:
+        row = conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        created = row is None
+        if created:
+            conn.execute(
+                "INSERT INTO devices (id, name, kind, household, user_agent, last_seen, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (device_id, default_device_name(kind, user_agent), kind, household, user_agent, now, now),
+            )
+        elif row["household"] != household or now - row["last_seen"] >= DEVICE_LAST_SEEN_THROTTLE:
+            conn.execute("UPDATE devices SET household = ?, last_seen = ? WHERE id = ?",
+                         (household, now, device_id))
+        conn.commit()
+        result = dict(conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone())
+    result["created"] = created
+    return result
+
+def _register_request_device(device_id: str, ip: str, user_agent: str) -> dict:
+    household = household_id(ip, get_household_salt())
+    return _db_touch_device(device_id, household, device_kind(user_agent), user_agent, time.time())
+
+def _public_device(row: dict) -> dict:
+    return {k: row[k] for k in ("id", "name", "kind", "created_at", "last_seen")}
+
+def _valid_device_cookie(value: str | None) -> str | None:
+    """Chỉ nhận UUIDv4 dạng chuẩn có gạch nối; mọi thứ khác bị coi là không có cookie."""
+    if not value:
+        return None
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        return None
+    if parsed.version != 4 or str(parsed) != value.lower():
+        return None
+    return str(parsed)
 
 # Helper SQLite cho saved_movies
 def _db_get_all_movies():
@@ -740,6 +848,55 @@ async def api_cache_headers(request: Request, call_next):
         elif path.startswith("/proxy/image"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
+
+# Cấp và đọc cookie hf_device cho "/" và các route theo thiết bị.
+@app.middleware("http")
+async def device_middleware(request: Request, call_next):
+    path = request.url.path
+    if not (path == "/" or path.startswith(DEVICE_COOKIE_PATHS)):
+        return await call_next(request)
+    device_id = _valid_device_cookie(request.cookies.get(DEVICE_COOKIE))
+    issue_cookie = device_id is None
+    if issue_cookie:
+        device_id = str(uuid.uuid4())
+    ip = client_ip(request.client.host if request.client else None,
+                   request.headers.get("x-forwarded-for"), TRUSTED_PROXIES)
+    row = await asyncio.to_thread(_register_request_device, device_id, ip,
+                                  request.headers.get("user-agent", ""))
+    request.state.device_id = device_id
+    request.state.household = row["household"]
+    response = await call_next(request)
+    if issue_cookie:
+        response.set_cookie(DEVICE_COOKIE, device_id, max_age=DEVICE_COOKIE_MAX_AGE, path="/",
+                            httponly=True, samesite="lax", secure=request.url.scheme == "https")
+    if path != "/":
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Vary"] = "Cookie"
+    return response
+
+@app.get("/api/device")
+async def get_device_api(request: Request):
+    row = await asyncio.to_thread(
+        lambda: dict(db_query_one("SELECT * FROM devices WHERE id = ?", (request.state.device_id,))))
+    return _public_device(row)
+
+@app.patch("/api/device")
+async def patch_device_api(request: Request, body: dict):
+    updates = {}
+    if "name" in body:
+        name = body["name"].strip() if isinstance(body["name"], str) else ""
+        if not 1 <= len(name) <= 40:
+            raise HTTPException(status_code=422, detail="name must be 1-40 characters")
+        updates["name"] = name
+    if "kind" in body:
+        if body["kind"] not in DEVICE_KINDS:
+            raise HTTPException(status_code=422, detail="kind must be one of " + ", ".join(DEVICE_KINDS))
+        updates["kind"] = body["kind"]
+    if updates:
+        sets = ", ".join(f"{col} = ?" for col in updates)
+        await asyncio.to_thread(db_execute, f"UPDATE devices SET {sets} WHERE id = ?",
+                                (*updates.values(), request.state.device_id))
+    return await get_device_api(request)
 
 # GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
 app.add_middleware(GZipMiddleware, minimum_size=1024)
