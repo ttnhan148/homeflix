@@ -345,6 +345,20 @@ def _valid_device_cookie(value: str | None) -> str | None:
         return None
     return str(parsed)
 
+DEVICE_MAX_INACTIVE_DAYS = 180
+
+def _db_prune_inactive_devices(now: float, max_age_days: int = DEVICE_MAX_INACTIVE_DAYS) -> int:
+    """Xóa thiết bị không hoạt động quá max_age_days cùng phim của chúng. Trả số thiết bị đã xóa."""
+    cutoff = now - max_age_days * 86400
+    conn = get_db()
+    with _db_lock:
+        old_ids = [r[0] for r in conn.execute("SELECT id FROM devices WHERE last_seen < ?", (cutoff,))]
+        for device_id in old_ids:
+            conn.execute("DELETE FROM device_movies WHERE device_id = ?", (device_id,))
+            conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+        conn.commit()
+    return len(old_ids)
+
 # --- Phim theo thiết bị (device_movies) ---
 def _device_movie_dict(row) -> dict:
     m = dict(row)
@@ -725,7 +739,13 @@ async def prune_cache():
             await asyncio.to_thread(_cleanup_disk)
         except Exception as e:
             logger.error(f"Lỗi dọn dẹp cache: {e}")
-            
+        try:
+            removed = await asyncio.to_thread(_db_prune_inactive_devices, time.time())
+            if removed:
+                logger.info(f"[Devices] Đã xóa {removed} thiết bị không hoạt động")
+        except Exception as e:
+            logger.error(f"Lỗi dọn thiết bị không hoạt động: {e}")
+
         await asyncio.sleep(3600)  # Chạy mỗi giờ một lần
 
 async def _prefetch_one(target_url: str, sid: str):
