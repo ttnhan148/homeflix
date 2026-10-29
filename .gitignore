@@ -8,10 +8,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
-.venv/
 venv/
+.venv/
+env/
+.env/
 ENV/
 .pytest_cache/
+*.egg-info/
 
 # Node
 node_modules/
@@ -20,6 +23,25 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Build outputs
+dist/
+build/
+
+# App Specific
+cache/
+downloads/
+*.db
+*.db-shm
+*.db-wal
+*.json.bak
+downloads.json
+saved_movies.json
+
+# Temporary & Superpowers / Agent Drafts
+.superpowers/
+.opencode/
+opencode.json
+
 # OS / Editor
 .DS_Store
 Thumbs.db
@@ -27,8 +49,3 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
-# Build outputs
-dist/
-build/
-*.egg-info/

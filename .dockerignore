@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+cache/
+downloads/
+*.db
+*.db-shm
+*.db-wal
+.superpowers/
+.opencode/
+__pycache__/
+*.pyc
