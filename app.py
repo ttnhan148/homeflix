@@ -305,6 +305,18 @@ def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str,
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (device_id, default_device_name(kind, user_agent), kind, household, user_agent, now, now),
             )
+            if conn.execute("SELECT COUNT(*) FROM devices").fetchone()[0] == 1:
+                # Thiết bị đầu tiên nhận toàn bộ tủ phim chung cũ làm danh sách lưu của nó
+                conn.execute("""
+                    INSERT INTO device_movies (
+                        device_id, slug, name, poster_url, year, episode_current, total_episodes,
+                        last_watched_episode, last_watched_url, position_sec, duration_sec,
+                        episodes, episode_states, saved, updated_at)
+                    SELECT ?, slug, name, poster_url, year, episode_current, total_episodes,
+                           last_watched_episode, last_watched_url, NULL, NULL,
+                           episodes, episode_states, 1, updated_at
+                    FROM saved_movies
+                """, (device_id,))
         elif row["household"] != household or now - row["last_seen"] >= DEVICE_LAST_SEEN_THROTTLE:
             conn.execute("UPDATE devices SET household = ?, last_seen = ? WHERE id = ?",
                          (household, now, device_id))
@@ -401,6 +413,91 @@ def _db_delete_movie(slug):
 
 async def delete_movie_from_db(slug):
     await asyncio.to_thread(_db_delete_movie, slug)
+
+# --- Phim theo thiết bị (device_movies) ---
+def _device_movie_dict(row) -> dict:
+    m = dict(row)
+    m["episodes"] = json.loads(m["episodes"]) if m["episodes"] else []
+    m["episode_states"] = json.loads(m["episode_states"]) if m["episode_states"] else {}
+    m["position"] = m.pop("position_sec")
+    m["duration"] = m.pop("duration_sec")
+    m["saved"] = bool(m["saved"])
+    m.pop("device_id", None)
+    return m
+
+def _db_list_device_movies(device_id: str) -> list[dict]:
+    """Phim đã lưu hoặc có tiến độ xem của thiết bị, mới cập nhật nhất trước."""
+    rows = db_query(
+        "SELECT * FROM device_movies WHERE device_id = ? AND (saved = 1 "
+        "OR (last_watched_url IS NOT NULL AND last_watched_url != '') OR position_sec IS NOT NULL) "
+        "ORDER BY updated_at DESC", (device_id,))
+    return [_device_movie_dict(r) for r in rows]
+
+def _db_get_device_movie(device_id: str, slug: str) -> dict | None:
+    row = db_query_one("SELECT * FROM device_movies WHERE device_id = ? AND slug = ?", (device_id, slug))
+    return _device_movie_dict(row) if row else None
+
+def _db_upsert_device_movie(device_id: str, movie: dict) -> None:
+    db_execute("""
+        INSERT INTO device_movies (
+            device_id, slug, name, poster_url, year, episode_current, total_episodes,
+            last_watched_episode, last_watched_url, position_sec, duration_sec,
+            episodes, episode_states, saved, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(device_id, slug) DO UPDATE SET
+            name=excluded.name,
+            poster_url=excluded.poster_url,
+            year=excluded.year,
+            episode_current=excluded.episode_current,
+            total_episodes=excluded.total_episodes,
+            last_watched_episode=excluded.last_watched_episode,
+            last_watched_url=excluded.last_watched_url,
+            position_sec=COALESCE(excluded.position_sec, device_movies.position_sec),
+            duration_sec=COALESCE(excluded.duration_sec, device_movies.duration_sec),
+            episodes=excluded.episodes,
+            episode_states=excluded.episode_states,
+            saved=excluded.saved,
+            updated_at=excluded.updated_at
+    """, (
+        device_id, movie.get("slug"), movie.get("name", ""), movie.get("poster_url", ""),
+        str(movie.get("year", "")), movie.get("episode_current", ""), movie.get("total_episodes"),
+        movie.get("last_watched_episode", ""), movie.get("last_watched_url", ""),
+        movie.get("position"), movie.get("duration"),
+        json.dumps(movie.get("episodes", []), ensure_ascii=False),
+        json.dumps(movie.get("episode_states", {}), ensure_ascii=False),
+        1 if movie.get("saved", True) else 0,
+        datetime.now().isoformat(),
+    ))
+
+def _db_delete_device_movie(device_id: str, slug: str) -> bool:
+    cursor = db_execute("DELETE FROM device_movies WHERE device_id = ? AND slug = ?", (device_id, slug))
+    return cursor.rowcount > 0
+
+def _db_other_devices_hold(device_id: str, slug: str) -> bool:
+    """True nếu còn thiết bị khác giữ phim này (file tải xuống và cache là dùng chung)."""
+    return db_query_one("SELECT 1 FROM device_movies WHERE slug = ? AND device_id != ? LIMIT 1",
+                        (slug, device_id)) is not None
+
+def _db_all_device_movies() -> list[dict]:
+    """Mỗi slug một bản (bản cập nhật mới nhất), dùng cho worker tải xuống."""
+    seen, result = set(), []
+    for r in db_query("SELECT * FROM device_movies ORDER BY updated_at DESC"):
+        if r["slug"] not in seen:
+            seen.add(r["slug"])
+            result.append(_device_movie_dict(r))
+    return result
+
+async def get_device_movies(device_id: str):
+    return await asyncio.to_thread(_db_list_device_movies, device_id)
+
+async def get_device_movie(device_id: str, slug: str):
+    return await asyncio.to_thread(_db_get_device_movie, device_id, slug)
+
+async def save_device_movie(device_id: str, movie: dict):
+    await asyncio.to_thread(_db_upsert_device_movie, device_id, movie)
+
+async def delete_device_movie(device_id: str, slug: str):
+    return await asyncio.to_thread(_db_delete_device_movie, device_id, slug)
 
 # Tải xuống MP4 qua ffmpeg
 @lru_cache(maxsize=512)
