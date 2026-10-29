@@ -627,7 +627,7 @@ async def download_worker():
     await asyncio.sleep(2)
     try:
         queued = await asyncio.to_thread(_db_get_queued_downloads)
-        movies = await get_all_movies_from_db()
+        movies = await asyncio.to_thread(_db_all_device_movies)
         movies_by_slug = {m["slug"]: m for m in movies}
         for movie_slug, ep_name in queued:
             if movie_slug in movies_by_slug:
@@ -1304,17 +1304,17 @@ async def get_movie_detail(slug: str):
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/saved")
-async def get_saved_movies_api():
-    movies = await get_all_movies_from_db()
-    return movies
+async def get_saved_movies_api(request: Request):
+    return await get_device_movies(request.state.device_id)
 
 @app.post("/api/saved")
-async def save_movie_api(movie: dict):
+async def save_movie_api(request: Request, movie: dict):
     slug = movie.get("slug")
     if not slug:
         return {"status": "error", "message": "Missing slug"}
-    
-    existing = await get_movie_from_db(slug)
+
+    device_id = request.state.device_id
+    existing = await get_device_movie(device_id, slug)
     if existing:
         existing.update(movie)
         movie = existing
@@ -1325,12 +1325,13 @@ async def save_movie_api(movie: dict):
             movie["last_watched_url"] = ""
         if "episode_states" not in movie:
             movie["episode_states"] = {}
-            
+    movie["saved"] = True
+
     # Sửa lỗi total_episodes dựa trên độ dài episodes
     if "episodes" in movie and isinstance(movie["episodes"], list):
         movie["total_episodes"] = len(movie["episodes"])
-        
-    await save_movie_to_db(movie)
+
+    await save_device_movie(device_id, movie)
     return {"status": "success", "movie": movie}
 
 @app.post("/api/saved/progress")
@@ -1374,11 +1375,16 @@ async def save_movie_progress_api(progress: dict):
     return {"status": "error", "message": "Movie not in saved list"}
 
 @app.delete("/api/saved/{slug}")
-async def delete_saved_movie_api(slug: str):
-    movie = await get_movie_from_db(slug)
+async def delete_saved_movie_api(request: Request, slug: str):
+    device_id = request.state.device_id
+    movie = await get_device_movie(device_id, slug)
     if movie:
-        await delete_movie_from_db(slug)
-        
+        await delete_device_movie(device_id, slug)
+        # File tải xuống, cache và record tải xuống là dùng chung: chỉ dọn khi
+        # không còn thiết bị nào khác giữ phim này.
+        if await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
+            return {"status": "success"}
+
         # 1. Xóa các record tải xuống của phim trong DB
         await asyncio.to_thread(
             lambda ms=slug: db_execute("DELETE FROM episode_downloads WHERE movie_slug = ?", (ms,))
