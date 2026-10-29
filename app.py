@@ -11,6 +11,7 @@ import re
 import unicodedata
 import threading
 import uuid
+import math
 import secrets
 from datetime import datetime, date
 from contextlib import asynccontextmanager
@@ -343,76 +344,6 @@ def _valid_device_cookie(value: str | None) -> str | None:
     if parsed.version != 4 or str(parsed) != value.lower():
         return None
     return str(parsed)
-
-# Helper SQLite cho saved_movies
-def _db_get_all_movies():
-    rows = db_query("SELECT * FROM saved_movies ORDER BY updated_at DESC")
-    movies = []
-    for r in rows:
-        m = dict(r)
-        m["episodes"] = json.loads(m["episodes"]) if m["episodes"] else []
-        m["episode_states"] = json.loads(m["episode_states"]) if m["episode_states"] else {}
-        movies.append(m)
-    return movies
-
-async def get_all_movies_from_db():
-    return await asyncio.to_thread(_db_get_all_movies)
-
-def _db_get_movie(slug):
-    row = db_query_one("SELECT * FROM saved_movies WHERE slug = ?", (slug,))
-    if row:
-        m = dict(row)
-        m["episodes"] = json.loads(m["episodes"]) if m["episodes"] else []
-        m["episode_states"] = json.loads(m["episode_states"]) if m["episode_states"] else {}
-        return m
-    return None
-
-async def get_movie_from_db(slug):
-    return await asyncio.to_thread(_db_get_movie, slug)
-
-def _db_save_movie(movie):
-    slug = movie.get("slug")
-    name = movie.get("name", "")
-    poster_url = movie.get("poster_url", "")
-    year = str(movie.get("year", ""))
-    episode_current = movie.get("episode_current", "")
-    total_episodes = movie.get("total_episodes")
-    last_watched_episode = movie.get("last_watched_episode", "")
-    last_watched_url = movie.get("last_watched_url", "")
-    
-    episodes = json.dumps(movie.get("episodes", []), ensure_ascii=False)
-    episode_states = json.dumps(movie.get("episode_states", {}), ensure_ascii=False)
-    updated_at = datetime.now().isoformat()
-    
-    db_execute("""
-        INSERT INTO saved_movies (
-            slug, name, poster_url, year, episode_current, total_episodes,
-            last_watched_episode, last_watched_url, episodes, episode_states, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(slug) DO UPDATE SET
-            name=excluded.name,
-            poster_url=excluded.poster_url,
-            year=excluded.year,
-            episode_current=excluded.episode_current,
-            total_episodes=excluded.total_episodes,
-            last_watched_episode=excluded.last_watched_episode,
-            last_watched_url=excluded.last_watched_url,
-            episodes=excluded.episodes,
-            episode_states=excluded.episode_states,
-            updated_at=excluded.updated_at
-    """, (
-        slug, name, poster_url, year, episode_current, total_episodes,
-        last_watched_episode, last_watched_url, episodes, episode_states, updated_at
-    ))
-
-async def save_movie_to_db(movie):
-    await asyncio.to_thread(_db_save_movie, movie)
-
-def _db_delete_movie(slug):
-    db_execute("DELETE FROM saved_movies WHERE slug = ?", (slug,))
-
-async def delete_movie_from_db(slug):
-    await asyncio.to_thread(_db_delete_movie, slug)
 
 # --- Phim theo thiết bị (device_movies) ---
 def _device_movie_dict(row) -> dict:
@@ -1334,31 +1265,82 @@ async def save_movie_api(request: Request, movie: dict):
     await save_device_movie(device_id, movie)
     return {"status": "success", "movie": movie}
 
+def _clean_position(position, duration):
+    """Chuẩn hóa (position, duration) tính bằng giây. Trả None nếu position không hợp lệ.
+
+    position None = client không gửi vị trí. Số âm quy về 0; lớn hơn duration thì bằng duration.
+    duration không hữu hạn hoặc <= 0 bị bỏ qua (None).
+    """
+    def _number(v):
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            return None
+        return float(v)
+
+    clean_duration = _number(duration)
+    if clean_duration is not None and clean_duration <= 0:
+        clean_duration = None
+    if position is None:
+        return None, clean_duration
+    clean_position = _number(position)
+    if clean_position is None:
+        return None
+    clean_position = max(0.0, clean_position)
+    if clean_duration is not None:
+        clean_position = min(clean_position, clean_duration)
+    return clean_position, clean_duration
+
 @app.post("/api/saved/progress")
-async def save_movie_progress_api(progress: dict):
+async def save_movie_progress_api(request: Request, progress: dict):
     slug = progress.get("slug")
     last_ep = progress.get("last_watched_episode")
     last_url = progress.get("last_watched_url")
     if not slug:
         return {"status": "error", "message": "Missing slug"}
-        
-    movie = await get_movie_from_db(slug)
-    if movie:
-        movie["last_watched_episode"] = last_ep
-        movie["last_watched_url"] = last_url
-        
-        if "episode_states" not in movie:
-            movie["episode_states"] = {}
-            
-        previously_watching_urls = []
-        for ep_url, state in list(movie["episode_states"].items()):
-            if state == "watching":
-                movie["episode_states"][ep_url] = "watched"
-                previously_watching_urls.append(ep_url)
-                
-        movie["episode_states"][last_url] = "watching"
-        
-        # Xóa các file tập đã xem sau 3 giờ
+
+    cleaned = _clean_position(progress.get("position"), progress.get("duration"))
+    if cleaned is None:
+        return {"status": "error", "message": "Invalid position"}
+    position, duration = cleaned
+
+    device_id = request.state.device_id
+    movie = await get_device_movie(device_id, slug)
+    if not movie:
+        # Phim chưa lưu: chỉ tạo hàng lịch sử khi client gửi kèm thông tin phim
+        if not progress.get("name"):
+            return {"status": "error", "message": "Movie not in saved list"}
+        episodes = progress.get("episodes") if isinstance(progress.get("episodes"), list) else []
+        movie = {
+            "slug": slug, "name": progress["name"], "poster_url": progress.get("poster_url", ""),
+            "year": progress.get("year", ""), "episodes": episodes, "total_episodes": len(episodes),
+            "episode_states": {}, "last_watched_episode": "", "last_watched_url": "", "saved": False,
+        }
+
+    # Cùng tập đang xem: chỉ cập nhật vị trí, không đổi trạng thái hay lên lịch xóa file.
+    if not last_url or last_url == movie.get("last_watched_url"):
+        if position is not None:
+            movie["position"] = position
+        if duration is not None:
+            movie["duration"] = duration
+        await save_device_movie(device_id, movie)
+        return {"status": "success", "movie": movie}
+
+    movie["last_watched_episode"] = last_ep
+    movie["last_watched_url"] = last_url
+    movie["position"] = position if position is not None else 0.0
+    if duration is not None:
+        movie["duration"] = duration
+    if "episode_states" not in movie:
+        movie["episode_states"] = {}
+
+    previously_watching_urls = []
+    for ep_url, state in list(movie["episode_states"].items()):
+        if state == "watching":
+            movie["episode_states"][ep_url] = "watched"
+            previously_watching_urls.append(ep_url)
+    movie["episode_states"][last_url] = "watching"
+
+    # Xóa các file tập đã xem sau 3 giờ, trừ khi thiết bị khác còn giữ phim (file dùng chung)
+    if previously_watching_urls and not await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
         for ep in movie.get("episodes", []):
             if ep.get("link_m3u8") in previously_watching_urls:
                 clean_ep = clean_filename(ep.get("name"))
@@ -1369,10 +1351,9 @@ async def save_movie_progress_api(progress: dict):
                         logger.info(f"Đã lên lịch xóa file tập đã xem xong sau 3 giờ: {file_path}")
                     except Exception as e:
                         logger.warning(f"Không thể đặt lịch xóa file {file_path}: {e}")
-                        
-        await save_movie_to_db(movie)
-        return {"status": "success", "movie": movie}
-    return {"status": "error", "message": "Movie not in saved list"}
+
+    await save_device_movie(device_id, movie)
+    return {"status": "success", "movie": movie}
 
 @app.delete("/api/saved/{slug}")
 async def delete_saved_movie_api(request: Request, slug: str):
