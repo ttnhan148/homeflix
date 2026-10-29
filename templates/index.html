@@ -2320,6 +2320,16 @@ const POSITION_REPORT_INTERVAL_MS = 10000;
 let positionTrackReady = false;
 video.addEventListener('loadedmetadata', () => { positionTrackReady = true; });
 
+// Listener đặt lại vị trí khi tập sắp phát có vị trí xem dở. Phải gỡ khi đổi tập hoặc thoát,
+// nếu không nó sẽ tua nhầm tập kế tiếp tới giây của tập trước.
+let resumeHandler = null;
+function clearResumeHandler() {
+    if (resumeHandler) {
+        video.removeEventListener('loadedmetadata', resumeHandler);
+        resumeHandler = null;
+    }
+}
+
 function reportPosition(useBeacon) {
     if (!positionTrackReady || !currentMovie || !currentMovie.slug) return;
     if (!document.body.classList.contains('player-active')) return;
@@ -3165,6 +3175,7 @@ document.addEventListener('visibilitychange', () => {
 
             // Vị trí xem dở của thiết bị này (đọc trước khi POST tiến độ làm đổi last_watched_url)
             positionTrackReady = false;
+            clearResumeHandler();
             let resumeAt = 0;
             if (currentMovie && currentMovie.slug) {
                 const saved = savedMoviesList.find(i => i.slug === currentMovie.slug);
@@ -3252,7 +3263,11 @@ document.addEventListener('visibilitychange', () => {
             console.log("[Play] useMp4 =", useMp4, "mp4Url =", mp4Url);
 
             if (resumeAt > 0) {
-                video.addEventListener('loadedmetadata', () => { video.currentTime = resumeAt; }, { once: true });
+                resumeHandler = () => {
+                    video.currentTime = resumeAt;
+                    clearResumeHandler();
+                };
+                video.addEventListener('loadedmetadata', resumeHandler);
             }
 
             // Set poster for AirPlay bg
@@ -3322,6 +3337,7 @@ document.addEventListener('visibilitychange', () => {
         // --- EXIT PLAYER (QUAY LẠI TRANG CHỦ) ---
         function exitPlayer() {
             reportPosition(false);
+            clearResumeHandler();
             video.pause();
             video.onerror = null;
             if (hlsObj) {

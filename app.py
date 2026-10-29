@@ -294,7 +294,8 @@ def get_household_salt() -> str:
 
 DEVICE_LAST_SEEN_THROTTLE = 60  # giây: không ghi last_seen thường hơn mức này
 
-def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str, now: float) -> dict:
+def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str, now: float,
+                     adopt_legacy: bool = True) -> dict:
     """Thêm thiết bị nếu chưa có, ngược lại cập nhật last_seen (tối đa mỗi 60 giây)."""
     conn = get_db()
     with _db_lock:
@@ -306,8 +307,11 @@ def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str,
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (device_id, default_device_name(kind, user_agent), kind, household, user_agent, now, now),
             )
-            if conn.execute("SELECT COUNT(*) FROM devices").fetchone()[0] == 1:
-                # Thiết bị đầu tiên nhận toàn bộ tủ phim chung cũ làm danh sách lưu của nó
+            flagged = conn.execute("SELECT 1 FROM app_settings WHERE key = 'legacy_adopted'").fetchone()
+            if adopt_legacy and not flagged:
+                # Thiết bị đầu tiên (qua /api, không phải bot tải "/") nhận toàn bộ tủ phim chung cũ.
+                # Cờ legacy_adopted đảm bảo chỉ nhập một lần, kể cả sau khi mọi thiết bị bị dọn.
+                conn.execute("INSERT INTO app_settings (key, value) VALUES ('legacy_adopted', '1')")
                 conn.execute("""
                     INSERT INTO device_movies (
                         device_id, slug, name, poster_url, year, episode_current, total_episodes,
@@ -326,9 +330,10 @@ def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str,
     result["created"] = created
     return result
 
-def _register_request_device(device_id: str, ip: str, user_agent: str) -> dict:
+def _register_request_device(device_id: str, ip: str, user_agent: str, adopt_legacy: bool = True) -> dict:
     household = household_id(ip, get_household_salt())
-    return _db_touch_device(device_id, household, device_kind(user_agent), user_agent, time.time())
+    return _db_touch_device(device_id, household, device_kind(user_agent), user_agent, time.time(),
+                            adopt_legacy=adopt_legacy)
 
 def _public_device(row: dict) -> dict:
     return {k: row[k] for k in ("id", "name", "kind", "created_at", "last_seen")}
@@ -910,7 +915,7 @@ async def device_middleware(request: Request, call_next):
     ip = client_ip(request.client.host if request.client else None,
                    request.headers.get("x-forwarded-for"), TRUSTED_PROXIES)
     row = await asyncio.to_thread(_register_request_device, device_id, ip,
-                                  request.headers.get("user-agent", ""))
+                                  request.headers.get("user-agent", ""), path != "/")
     request.state.device_id = device_id
     request.state.household = row["household"]
     response = await call_next(request)
@@ -1263,6 +1268,9 @@ async def save_movie_api(request: Request, movie: dict):
     slug = movie.get("slug")
     if not slug:
         return {"status": "error", "message": "Missing slug"}
+    if not _valid_slug(slug):
+        return {"status": "error", "message": "Invalid slug"}
+    _clean_client_movie(movie)
 
     device_id = request.state.device_id
     existing = await get_device_movie(device_id, slug)
@@ -1284,6 +1292,35 @@ async def save_movie_api(request: Request, movie: dict):
 
     await save_device_movie(device_id, movie)
     return {"status": "success", "movie": movie}
+
+def _valid_slug(slug) -> bool:
+    """Slug phải là chuỗi một đoạn đường dẫn: không rỗng, không '.', '..', '/', '\\' hay NUL."""
+    return (isinstance(slug, str) and 0 < len(slug) <= 200 and slug not in (".", "..")
+            and not any(c in slug for c in "/\\\x00"))
+
+def _safe_rmtree_under(base: str, target: str) -> bool:
+    """rmtree target chỉ khi nó nằm thật sự bên dưới base (sau khi giải symlink và '..')."""
+    real_base = os.path.realpath(base)
+    real_target = os.path.realpath(target)
+    if real_target == real_base or not real_target.startswith(real_base + os.sep):
+        logger.warning(f"Từ chối xóa ngoài {base}: {target}")
+        return False
+    if not os.path.exists(real_target):
+        return False
+    shutil.rmtree(real_target)
+    return True
+
+_SCALAR_MOVIE_FIELDS = ("name", "poster_url", "year", "episode_current", "total_episodes",
+                        "last_watched_episode", "last_watched_url")
+
+def _clean_client_movie(movie: dict) -> dict:
+    """Bỏ các trường server tự quản và các trường không phải số/chuỗi trước khi lưu."""
+    for key in ("position", "duration", "saved"):
+        movie.pop(key, None)
+    for key in _SCALAR_MOVIE_FIELDS:
+        if key in movie and not isinstance(movie[key], (str, int, float, type(None))):
+            del movie[key]
+    return movie
 
 def _clean_position(position, duration):
     """Chuẩn hóa (position, duration) tính bằng giây. Trả None nếu position không hợp lệ.
@@ -1316,6 +1353,10 @@ async def save_movie_progress_api(request: Request, progress: dict):
     last_url = progress.get("last_watched_url")
     if not slug:
         return {"status": "error", "message": "Missing slug"}
+    if not _valid_slug(slug):
+        return {"status": "error", "message": "Invalid slug"}
+    if any(v is not None and not isinstance(v, str) for v in (last_ep, last_url)):
+        return {"status": "error", "message": "Invalid episode"}
 
     cleaned = _clean_position(progress.get("position"), progress.get("duration"))
     if cleaned is None:
@@ -1334,6 +1375,12 @@ async def save_movie_progress_api(request: Request, progress: dict):
             "year": progress.get("year", ""), "episodes": episodes, "total_episodes": len(episodes),
             "episode_states": {}, "last_watched_episode": "", "last_watched_url": "", "saved": False,
         }
+
+    # Báo cáo vị trí đến muộn của một tập đã xem xong (vd. sự kiện pause của tập trước
+    # đến sau khi tập sau đã bắt đầu): bỏ qua, không lùi tiến độ về tập cũ.
+    if (position is not None and last_url and last_url != movie.get("last_watched_url")
+            and movie.get("episode_states", {}).get(last_url) == "watched"):
+        return {"status": "success", "movie": movie}
 
     # Cùng tập đang xem: chỉ cập nhật vị trí, không đổi trạng thái hay lên lịch xóa file.
     if not last_url or last_url == movie.get("last_watched_url"):
@@ -1359,6 +1406,13 @@ async def save_movie_progress_api(request: Request, progress: dict):
             previously_watching_urls.append(ep_url)
     movie["episode_states"][last_url] = "watching"
 
+    # Tập sắp xem không được nằm trong lịch xóa (vd. xem lại tập đã xem xong)
+    for ep in movie.get("episodes", []):
+        if ep.get("link_m3u8") == last_url:
+            st = await asyncio.to_thread(_db_get_download_status, slug, ep.get("name"))
+            if st["delete_at"] is not None:
+                await update_download_status(slug, ep.get("name"), st["status"], delete_at=None)
+
     # Xóa các file tập đã xem sau 3 giờ, trừ khi thiết bị khác còn giữ phim (file dùng chung)
     if previously_watching_urls and not await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
         for ep in movie.get("episodes", []):
@@ -1377,6 +1431,8 @@ async def save_movie_progress_api(request: Request, progress: dict):
 
 @app.delete("/api/saved/{slug}")
 async def delete_saved_movie_api(request: Request, slug: str):
+    if not _valid_slug(slug):
+        return {"status": "error", "message": "Invalid slug"}
     device_id = request.state.device_id
     movie = await get_device_movie(device_id, slug)
     if movie:
@@ -1408,8 +1464,8 @@ async def delete_saved_movie_api(request: Request, slug: str):
         movie_dir = os.path.join(DOWNLOAD_DIR, slug)
         if os.path.exists(movie_dir):
             try:
-                shutil.rmtree(movie_dir)
-                logger.info(f"Đã xóa thư mục tải xuống: {movie_dir}")
+                if _safe_rmtree_under(DOWNLOAD_DIR, movie_dir):
+                    logger.info(f"Đã xóa thư mục tải xuống: {movie_dir}")
             except Exception as e:
                 logger.warning(f"Lỗi khi xóa thư mục {movie_dir}: {e}")
         return {"status": "success"}
