@@ -17,7 +17,7 @@ from datetime import datetime, date
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -1057,6 +1057,63 @@ async def cast_events_api(request: Request):
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"X-Accel-Buffering": "no", "Cache-Control": "private, no-store"})
+
+async def _cast_target(request: Request, target_id: str) -> dict:
+    """Hàng devices của TV đích. 403 nếu không có, khác nhà, không phải tv/desktop, hoặc là chính mình
+    (không phân biệt các trường hợp, để không dò được id)."""
+    row = await asyncio.to_thread(db_query_one, "SELECT * FROM devices WHERE id = ?", (target_id,))
+    if (row is None or row["household"] != request.state.household or row["kind"] not in ("tv", "desktop")
+            or target_id == request.state.device_id):
+        raise HTTPException(status_code=403, detail="forbidden")
+    return dict(row)
+
+async def _device_name(device_id: str) -> str:
+    row = await asyncio.to_thread(db_query_one, "SELECT name FROM devices WHERE id = ?", (device_id,))
+    return row["name"] if row else ""
+
+@app.post("/api/cast/{target_id}/connect")
+async def cast_connect_api(request: Request, target_id: str):
+    await _cast_target(request, target_id)
+    if not await asyncio.to_thread(_db_cast_allow_control, target_id):
+        raise HTTPException(status_code=403, detail="target does not accept control")
+    controller_id = request.state.device_id
+    name = await _device_name(controller_id)
+    if await asyncio.to_thread(_db_cast_is_allowed, target_id, controller_id):
+        cast_hub.link(controller_id, target_id)
+        cast_hub.publish(target_id, "controller_joined", {"controller_id": controller_id, "name": name})
+        return {"status": "connected"}
+    if not cast_hub.has_subscribers(target_id):
+        raise HTTPException(status_code=409, detail="target offline")
+    if cast_hub.add_pending(target_id, controller_id):
+        cast_hub.publish(target_id, "connect_request", {"controller_id": controller_id, "controller_name": name})
+    return JSONResponse({"status": "pending"}, status_code=202)
+
+@app.post("/api/cast/requests/{controller_id}")
+async def cast_answer_request_api(request: Request, controller_id: str, body: dict):
+    """TV trả lời yêu cầu kết nối của một controller."""
+    tv_id = request.state.device_id
+    allow = body.get("allow")
+    if not isinstance(allow, bool):
+        raise HTTPException(status_code=422, detail="allow must be boolean")
+    controller = await asyncio.to_thread(db_query_one, "SELECT household FROM devices WHERE id = ?", (controller_id,))
+    if controller is None or controller["household"] != request.state.household:
+        raise HTTPException(status_code=403, detail="forbidden")
+    if not cast_hub.pop_pending(tv_id, controller_id):
+        raise HTTPException(status_code=403, detail="no pending request")
+    if allow:
+        await asyncio.to_thread(_db_cast_allow, tv_id, controller_id)
+        cast_hub.link(controller_id, tv_id)
+        cast_hub.publish(tv_id, "controller_joined", {"controller_id": controller_id, "name": await _device_name(controller_id)})
+    cast_hub.publish(controller_id, "connect_result", {"target_id": tv_id, "allowed": allow})
+    return {"status": "ok"}
+
+@app.delete("/api/cast/link")
+async def cast_unlink_api(request: Request):
+    controller_id = request.state.device_id
+    target_id = cast_hub.unlink(controller_id)
+    if target_id:
+        cast_hub.publish(target_id, "controller_left", {"controller_id": controller_id})
+    return {"status": "ok"}
 
 # GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
 app.add_middleware(GZipMiddleware, minimum_size=1024)
