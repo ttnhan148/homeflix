@@ -95,6 +95,176 @@
         if (HFCast.kind() !== 'phone') HFCast.openEvents();
     };
 
+    // ---------- Dùng chung: nhãn nút Phát, định tuyến Phát lên TV ----------
+    function playLabel() { return HFCast.linked ? 'Phát lên TV' : 'Phát'; }
+
+    window.refreshPlayLabels = function () {
+        document.querySelectorAll('.hero-btn-play').forEach(b => { b.textContent = playLabel(); });
+        document.querySelectorAll('.detail-action-play .btn-label').forEach(n => { n.textContent = playLabel(); });
+    };
+
+    let toastTimer = null;
+    HFCast.notify = function (message) {
+        const toast = document.getElementById('castToast');
+        if (!toast) return;
+        toast.textContent = message;
+        toast.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { toast.hidden = true; }, 3500);
+    };
+
+    // Trả true khi đã gửi lệnh phát lên TV (chặn phát cục bộ). Kết quả đến sau: lỗi thì báo và quay về phát trên iPhone.
+    HFCast.markUnresponsive = HFCast.markUnresponsive || function () {};
+    window.maybeCast = function (slug, episodeUrl) {
+        const target = HFCast.linked;
+        if (!target) return false;
+        HFCast.api('POST', `/api/cast/${encodeURIComponent(target.id)}/command`,
+            { type: 'play', slug, episode_url: episodeUrl || null })
+            .then(res => { if (res.status !== 200) HFCast.markUnresponsive(); })
+            .catch(() => HFCast.markUnresponsive());
+        return true;
+    };
+
+    // ---------- Bên điều khiển (iPhone): nút cast, tờ "Phát lên", kết nối ----------
+    function initController() {
+        const $ = (id) => document.getElementById(id);
+        const STORE_KEY = 'hf_cast_last_tv';
+        const inflight = new Set();
+        let devices = [];
+        HFCast.pending = null;   // {id, name} TV đang chờ cho phép
+
+        function remember(dev) {
+            try { localStorage.setItem(STORE_KEY, JSON.stringify({ id: dev.id, name: dev.name })); } catch (e) { /* bỏ qua */ }
+        }
+        function recall() {
+            try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { return null; }
+        }
+        function sheetOpen() { return !$('castSheet').hidden; }
+
+        function render() {
+            const list = $('castDeviceList');
+            list.replaceChildren();
+            devices.forEach(d => {
+                const btn = el('button', 'cast-device');
+                btn.type = 'button';
+                btn.dataset.id = d.id;
+                btn.appendChild(el('span', 'cast-device-name', d.name));
+                const status = HFCast.linked && HFCast.linked.id === d.id ? 'Đã kết nối'
+                    : HFCast.pending && HFCast.pending.id === d.id ? 'Chờ TV cho phép…' : 'Sẵn sàng';
+                btn.appendChild(el('span', 'cast-device-status', status));
+                btn.addEventListener('click', () => connectAndReport(d));
+                list.appendChild(btn);
+            });
+            $('castEmpty').hidden = devices.length > 0;
+        }
+
+        function refreshUi() {
+            $('castDot').hidden = !HFCast.linked;
+            refreshPlayLabels();
+            render();
+        }
+
+        function releaseEventsIfIdle() {
+            if (!HFCast.linked && !HFCast.pending && !sheetOpen()) HFCast.closeEvents();
+        }
+
+        function setLinked(dev) {
+            HFCast.linked = { id: dev.id, name: dev.name };
+            HFCast.pending = null;
+            remember(dev);
+            if (!HFCast.es) HFCast.openEvents();
+            refreshUi();
+            HFCast.emit('linked', HFCast.linked);
+        }
+
+        HFCast.markUnresponsive = function () {
+            HFCast.notify('TV không phản hồi');
+            HFCast.linked = null;
+            HFCast.pending = null;
+            releaseEventsIfIdle();
+            refreshUi();
+            HFCast.emit('unlinked', {});
+        };
+
+        // 'connected' | 'pending' | 'denied' | 'offline' | 'error'
+        HFCast.connect = async function (device) {
+            if (inflight.has(device.id) || (HFCast.pending && HFCast.pending.id === device.id)) return 'pending';
+            if (HFCast.linked && HFCast.linked.id === device.id) return 'connected';
+            inflight.add(device.id);
+            try {
+                const res = await HFCast.api('POST', `/api/cast/${encodeURIComponent(device.id)}/connect`);
+                if (res.status === 200) { setLinked(device); return 'connected'; }
+                if (res.status === 202) { HFCast.pending = device; render(); return 'pending'; }
+                if (res.status === 409) return 'offline';
+                if (res.status === 403) return 'denied';
+                return 'error';
+            } catch (e) {
+                return 'error';
+            } finally {
+                inflight.delete(device.id);
+            }
+        };
+
+        async function connectAndReport(device) {
+            if (!HFCast.es) HFCast.openEvents();
+            const outcome = await HFCast.connect(device);
+            if (outcome === 'offline') HFCast.notify('TV không phản hồi');
+            else if (outcome === 'denied') HFCast.notify('TV không cho phép điều khiển');
+            else if (outcome === 'error') HFCast.notify('Không kết nối được. Thử lại.');
+        }
+
+        HFCast.disconnect = async function () {
+            HFCast.api('DELETE', '/api/cast/link').catch(() => null);
+            HFCast.linked = null;
+            HFCast.pending = null;
+            releaseEventsIfIdle();
+            refreshUi();
+            HFCast.emit('unlinked', {});
+        };
+
+        HFCast.on('connect_result', (d) => {
+            if (!HFCast.pending || d.target_id !== HFCast.pending.id) return;
+            if (d.allowed) return setLinked(HFCast.pending);
+            HFCast.pending = null;
+            HFCast.notify('TV đã từ chối kết nối');
+            releaseEventsIfIdle();
+            render();
+        });
+
+        async function loadDevices() {
+            const res = await HFCast.api('GET', '/api/devices/nearby').catch(() => null);
+            devices = res && res.status === 200 && Array.isArray(res.data) ? res.data : [];
+            render();
+            return devices;
+        }
+
+        async function openSheet() {
+            $('castSheet').hidden = false;
+            $('castScrim').hidden = false;
+            if (!HFCast.es) HFCast.openEvents();
+            await loadDevices();
+        }
+        function closeSheet() {
+            $('castSheet').hidden = true;
+            $('castScrim').hidden = true;
+            releaseEventsIfIdle();
+        }
+        $('castBtn').addEventListener('click', openSheet);
+        $('castSheetClose').addEventListener('click', closeSheet);
+        $('castScrim').addEventListener('click', closeSheet);
+
+        // Nối lại TV lần trước nếu còn trực tuyến. Im lặng: không tờ, không thông báo, không để trạng thái chờ.
+        (async function silentReconnect() {
+            const last = recall();
+            if (!last || !last.id) return;
+            const res = await HFCast.api('GET', '/api/devices/nearby').catch(() => null);
+            const dev = res && Array.isArray(res.data) ? res.data.find(d => d.id === last.id) : null;
+            if (!dev) return;
+            const outcome = await HFCast.connect(dev);
+            if (outcome === 'pending') HFCast.pending = null;
+        })();
+    }
+
     // ---------- Bên nhận (TV, máy tính): nhận lệnh, hỏi xác nhận, báo trạng thái ----------
     function initReceiver() {
         const $ = (id) => document.getElementById(id);
@@ -255,4 +425,5 @@
 
     HFCast.start();
     if (HFCast.kind() !== 'phone') initReceiver();
+    else initController();
 })();

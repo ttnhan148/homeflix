@@ -1882,6 +1882,10 @@
         <div id="stickyHeader" class="sticky-header">
             <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h1>HomeFlix</h1>
+                <button type="button" id="castBtn" class="cast-top-btn" aria-label="Phát lên TV">
+                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2 8V6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2h-6M2 12a9 9 0 019 9M2 16a5 5 0 015 5M2 20h.01"/></svg>
+                    <span id="castDot" class="cast-dot" hidden></span>
+                </button>
                 <button type="button" id="castSettingsBtn" class="cast-settings-btn" aria-label="Cài đặt điều khiển từ xa">⚙</button>
             </header>
 
@@ -2086,6 +2090,21 @@
     <div id="castSettings" class="cast-panel glass" hidden>
         <label class="cast-switch"><input type="checkbox" id="castAllowControl" checked><span>Cho phép điều khiển từ thiết bị khác</span></label>
     </div>
+
+    <!-- CAST (iPhone điều khiển): tờ "Phát lên" và thông báo -->
+    <div id="castScrim" class="cast-scrim" hidden></div>
+    <div id="castSheet" class="cast-sheet glass" role="dialog" aria-label="Phát lên" hidden>
+        <div class="cast-sheet-head">
+            <h2>Phát lên</h2>
+            <button type="button" id="castSheetClose" class="cast-sheet-close" aria-label="Đóng">✕</button>
+        </div>
+        <div id="castDeviceList" class="cast-device-list"></div>
+        <div id="castEmpty" class="cast-empty" hidden>
+            <p>Không thấy TV nào cùng mạng</p>
+            <p class="cast-hint">Mở HomeFlix trên TV (cùng Wi‑Fi) rồi thử lại.</p>
+        </div>
+    </div>
+    <div id="castToast" class="cast-toast glass" role="status" hidden></div>
 
     <!-- TAB BAR NỔI (iPhone): Khám phá, Tủ phim, và nút Tìm kiếm tách riêng -->
     <nav id="floatTabBar" class="float-tabbar" aria-label="Điều hướng chính">
@@ -2749,6 +2768,7 @@ document.addEventListener('visibilitychange', () => {
 
         // Phát ngay trong cú chạm: chi tiết đã tải trước nên không có await nào chen giữa.
         function heroPlay(slug) {
+            if (maybeCast(slug, null)) return;
             const d = heroState.details[slug];
             if (!d) {
                 // Chưa tải xong: báo đang tải, người dùng chạm lại khi xong (không phát bất đồng bộ, iOS sẽ chặn)
@@ -2843,6 +2863,7 @@ document.addEventListener('visibilitychange', () => {
                 slides[next].querySelector('.hero-btn-play').focus({ preventScroll: true });
             };
             updateHeroSaveLabels();
+            if (window.refreshPlayLabels) refreshPlayLabels();
             showHeroSlide(0);
         }
 
@@ -3579,7 +3600,7 @@ document.addEventListener('visibilitychange', () => {
             const btn = el('button', className);
             btn.type = 'button';
             btn.innerHTML = svg; // chỉ SVG tĩnh
-            btn.appendChild(document.createTextNode(label));
+            btn.appendChild(el('span', 'btn-label', label));
             btn.addEventListener('click', onClick);
             return btn;
         }
@@ -3648,6 +3669,7 @@ document.addEventListener('visibilitychange', () => {
                     const isSaved = checkIsSaved(m.slug);
                     
                     detailDiv.replaceChildren(buildDetailView(m, episodesList, isSaved));
+                    if (window.refreshPlayLabels) refreshPlayLabels();
                     setTimeout(initTabbing, 100);
                     if (episodesList.length > 0) {
                         const savedMovie = savedMoviesList.find(item => item.slug === m.slug);
@@ -3657,6 +3679,7 @@ document.addEventListener('visibilitychange', () => {
                             movieSlug: m.slug,
                             watchStates,
                             onPlay: (ep) => {
+                                if (maybeCast(m.slug, ep.link_m3u8)) return;
                                 currentMovie = { slug: m.slug, name: m.name, poster_url: m.poster_url, year: m.year };
                                 playEpisodesListDirect(currentDetailEpisodes, ep.link_m3u8);
                             }
@@ -3684,6 +3707,7 @@ document.addEventListener('visibilitychange', () => {
                 movieSlug: movie ? movie.slug : null,
                 watchStates,
                 onPlay: (ep) => {
+                    if (movie && maybeCast(movie.slug, ep.link_m3u8)) return;
                     if (movie) currentMovie = { slug: movie.slug, name: movie.name, poster_url: movie.poster_url };
                     playEpisodesListDirect(currentDetailEpisodes, ep.link_m3u8);
                 }
@@ -3691,6 +3715,7 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function playSelectedMovieDirect(name, slug) {
+            if (maybeCast(slug, null)) return;
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
             const meta = currentDetailMeta && currentDetailMeta.slug === slug ? currentDetailMeta : null;
             currentMovie = {
@@ -3894,12 +3919,14 @@ document.addEventListener('visibilitychange', () => {
         function playEpisodeFromSaved(slug, epIdx) {
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
             if (!savedMovie || !savedMovie.episodes || savedMovie.episodes.length === 0) return;
+            if (maybeCast(slug, savedMovie.episodes[epIdx] ? savedMovie.episodes[epIdx].link_m3u8 : null)) return;
             
             currentMovie = { slug: savedMovie.slug, name: savedMovie.name, poster_url: savedMovie.poster_url };
             playEpisodesListDirect(savedMovie.episodes, epIdx);
         }
 
         async function playResumeSavedMovie(slug) {
+            if (maybeCast(slug, null)) return;
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
             if (!savedMovie) return;
             

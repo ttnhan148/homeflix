@@ -788,3 +788,145 @@ body.device-mobile .cast-settings-btn {
     width: 28px;
     height: 28px;
 }
+
+/* --- Cast: bên điều khiển (iPhone) --- */
+.cast-sheet[hidden],
+.cast-scrim[hidden],
+.cast-toast[hidden],
+.cast-dot[hidden],
+.cast-empty[hidden] {
+    display: none !important;
+}
+
+body:not(.device-mobile) .cast-top-btn {
+    display: none;
+}
+
+.cast-top-btn {
+    position: relative;
+    min-width: var(--tap);
+    min-height: var(--tap);
+    padding: 0;
+    border: 1px solid var(--glass-border-light);
+    border-radius: var(--pill);
+    background: rgba(8, 8, 8, 0.35);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.cast-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #30d158;
+    box-shadow: 0 0 0 2px rgba(8, 8, 8, 0.8);
+}
+
+body.device-mobile .sticky-header header {
+    align-items: center;
+}
+
+.cast-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 940;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.cast-sheet {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--safe-bottom) + 8px + 64px + 12px);
+    max-height: calc(100svh - var(--safe-top) - var(--safe-bottom) - 64px - 8px - 12px - 24px);
+    overflow-y: auto;
+    z-index: 950;
+    padding: 20px 16px 16px;
+    border-radius: 28px;
+    background: rgba(28, 28, 30, 0.9);
+}
+
+.cast-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.cast-sheet-head h2 {
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.cast-sheet-close {
+    min-width: var(--tap);
+    min-height: var(--tap);
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 16px;
+}
+
+.cast-device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cast-device {
+    min-height: 56px;
+    padding: 0 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid var(--glass-border-light);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: left;
+}
+
+.cast-device-status {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+}
+
+.cast-empty {
+    text-align: center;
+    padding: 16px 8px;
+    color: var(--text-dim);
+}
+
+.cast-empty p:first-child {
+    color: #fff;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.cast-hint {
+    font-size: 14px;
+}
+
+.cast-toast {
+    position: fixed;
+    left: 50%;
+    top: calc(var(--safe-top) + 64px);
+    transform: translateX(-50%);
+    z-index: 990;
+    padding: 10px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    background: rgba(28, 28, 30, 0.92);
+    max-width: calc(100vw - 32px);
+}
