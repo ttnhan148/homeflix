@@ -1207,6 +1207,12 @@ async def search_movies(q: str):
         logger.error(f"Error searching movies: {e}")
         return {"status": "error", "message": str(e)}
 
+def _names(value) -> list[str]:
+    """Tên hiển thị từ danh sách [{"name", "slug"}] của phimapi; dữ liệu lạ cho []."""
+    if not isinstance(value, list):
+        return []
+    return [i["name"] for i in value if isinstance(i, dict) and isinstance(i.get("name"), str) and i["name"]]
+
 @app.get("/api/movie/{slug}")
 async def get_movie_detail(slug: str):
     """Proxy và chuẩn hóa chi tiết phim để tối ưu hiệu năng client (cached 60 phút, stale-fallback)"""
@@ -1233,7 +1239,9 @@ async def get_movie_detail(slug: str):
             "time": movie_raw.get("time"),
             "quality": movie_raw.get("quality"),
             "lang": movie_raw.get("lang"),
-            "content": movie_raw.get("content")
+            "content": movie_raw.get("content"),
+            "category": _names(movie_raw.get("category")),
+            "country": _names(movie_raw.get("country"))
         }
         
         # Rút gọn danh sách tập phim (chỉ lấy server đầu tiên có dữ liệu)
