@@ -632,3 +632,29 @@ body.device-mobile .detail-actions .detail-action-side {
 body.device-mobile #movieDetailContainer {
     padding-bottom: calc(var(--safe-bottom) + 8px + 64px + 12px + 64px);
 }
+
+/* --- Khung trình phát: tôn trọng vùng an toàn khi xoay ngang (Dynamic Island, thanh Home) --- */
+body.player-active #playerHeader {
+    padding: max(8px, var(--safe-top)) max(16px, var(--safe-right)) 8px max(16px, var(--safe-left)) !important;
+}
+
+body.player-active #playerHeader .btn-overlay-back {
+    min-height: var(--tap);
+    min-width: var(--tap);
+}
+
+body.player-active #episodesDrawerEl {
+    width: auto;
+    margin: 0 max(16px, var(--safe-right)) max(16px, var(--safe-bottom)) max(16px, var(--safe-left));
+}
+
+.airplay-remote-overlay {
+    padding: max(2rem, var(--safe-top)) max(2rem, var(--safe-right)) max(2rem, var(--safe-bottom)) max(2rem, var(--safe-left));
+}
+
+.airplay-disconnect-btn {
+    top: max(1rem, var(--safe-top));
+    right: max(1rem, var(--safe-right));
+    min-height: var(--tap);
+    padding: 0 1rem;
+}
