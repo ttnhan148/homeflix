@@ -1,4 +1,5 @@
 import base64
+import re
 import time
 
 import pytest
@@ -49,6 +50,17 @@ def open_app(app_module, browser):
         page.set_default_timeout(4000)
         page.requests, page.console_errors, page.taps, page.is_touch = [], [], 0, not tv
 
+        # hls.js (CDN) bị chặn trong test: thay bằng bản giả ghi nhận việc gắn nguồn, và chặn phát thật
+        page.add_init_script("""
+            window.Hls = class { static isSupported() { return true; } loadSource() {} on() {} destroy() {}
+                attachMedia() { window.__hlsAttached = true; } };
+            window.Hls.Events = { MANIFEST_PARSED: 'manifestParsed', ERROR: 'error' };
+            window.Hls.ErrorTypes = {};
+            HTMLMediaElement.prototype.play = function () { window.__plays = (window.__plays || 0) + 1; return Promise.resolve(); };
+            HTMLMediaElement.prototype.pause = function () {};
+            HTMLMediaElement.prototype.canPlayType = function () { return ''; }; // ép đường hls.js, Chromium mới có HLS gốc
+        """)
+
         if any(safe):
             props = dict(zip(SAFE_VARS, (f"{v}px" for v in safe)))
             page.add_init_script(
@@ -74,7 +86,7 @@ def open_app(app_module, browser):
             r = bridge.request(req.method, path, headers=headers, content=req.post_data_buffer)
             route.fulfill(status=r.status_code, headers={k: v for k, v in r.headers.items() if k != "content-length"}, body=r.content)
 
-        page.route("https://**", lambda route: route.abort())
+        page.route(re.compile(r"^https?://(?!homeflix\.test)"), lambda route: route.abort())  # hermetic: không mạng ngoài
         page.route(f"{HOST}/**", bridge_handler)
         page.route(f"{HOST}/proxy/image**", lambda route: route.fulfill(status=200, content_type="image/png", body=PNG_1X1))
         return page

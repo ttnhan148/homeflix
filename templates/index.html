@@ -2726,8 +2726,26 @@ document.addEventListener('visibilitychange', () => {
             updateHeroSaveLabels();
         }
 
+        // Phát ngay trong cú chạm: chi tiết đã tải trước nên không có await nào chen giữa.
         function heroPlay(slug) {
-            showMovieDetailBySlug(slug);
+            const d = heroState.details[slug];
+            if (!d) {
+                // Chưa tải xong: báo đang tải, người dùng chạm lại khi xong (không phát bất đồng bộ, iOS sẽ chặn)
+                const btn = heroSlideEl(slug).querySelector('.hero-btn-play');
+                btn.classList.add('is-loading');
+                btn.disabled = true;
+                loadHeroDetail(slug).then(detail => {
+                    btn.classList.remove('is-loading');
+                    btn.disabled = false;
+                    if (!detail) showMovieDetailBySlug(slug); // tải lỗi: mở trang chi tiết để thử tiếp
+                });
+                return;
+            }
+            const m = d.movie;
+            const row = savedMoviesList.find(i => i.slug === slug);
+            const { index } = HFUtils.resumeTarget(row, d.episodes);
+            currentMovie = { slug, name: m.name, poster_url: m.poster_url, year: m.year };
+            playEpisodesListDirect(d.episodes, index);
         }
 
         function buildHeroSlide(m) {
@@ -3404,23 +3422,14 @@ document.addEventListener('visibilitychange', () => {
                 hlsObj = null;
             }
 
-            // Kiểm tra xem tập phim này đã được tải về đĩa MP4 chưa
+            // Tập đã tải về đĩa MP4 chưa? Đọc từ trạng thái đã poll sẵn: không await mạng ở đây,
+            // để việc gắn nguồn và phát chạy ngay trong cú chạm (iOS cần thao tác người dùng).
             let useMp4 = false;
             let mp4Url = "";
-            if (currentMovie && currentMovie.slug) {
-                try {
-                    const checkUrl = `/api/download/status/${currentMovie.slug}/${encodeURIComponent(title)}`;
-                    console.log("[Play] Kiểm tra trạng thái tải MP4:", checkUrl);
-                    const statusRes = await fetch(checkUrl);
-                    const statusData = await statusRes.json();
-                    console.log("[Play] Kết quả trạng thái tải MP4:", statusData);
-                    if (statusData.status === "completed") {
-                        useMp4 = true;
-                        mp4Url = `/media/${currentMovie.slug}/${encodeURIComponent(title)}.mp4`;
-                    }
-                } catch (e) {
-                    console.error("Lỗi kiểm tra trạng thái tải MP4:", e);
-                }
+            const dl = currentMovie && currentMovie.slug ? downloadStatuses[currentMovie.slug] : null;
+            if (dl && dl[title] === "completed") {
+                useMp4 = true;
+                mp4Url = `/media/${currentMovie.slug}/${encodeURIComponent(title)}.mp4`;
             }
 
             video.onerror = () => {
@@ -3596,7 +3605,7 @@ document.addEventListener('visibilitychange', () => {
                             </button>
                             <button class="detail-action-play" onclick="playSelectedMovieDirect(\`${safeName}\`, \`${m.slug}\`)">
                                 <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                Phát Ngay
+                                Phát
                             </button>
                         </div>
                     `;

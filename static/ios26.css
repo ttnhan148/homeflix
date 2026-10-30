@@ -576,3 +576,59 @@ body.device-tv .grid-load-more {
     height: 100%;
     background: var(--accent-color);
 }
+
+/* --- Nút Phát: trạng thái đang tải --- */
+.hero-btn-play.is-loading {
+    opacity: 0.6;
+    position: relative;
+}
+
+.hero-btn-play.is-loading::after {
+    content: "";
+    width: 14px;
+    height: 14px;
+    margin-left: 8px;
+    display: inline-block;
+    vertical-align: -2px;
+    border: 2px solid rgba(0, 0, 0, 0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: hf-spin 0.8s linear infinite;
+}
+
+@keyframes hf-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* --- Trang chi tiết iPhone: nút Phát cố định trong tầm ngón cái, trên tab bar --- */
+body.device-mobile .detail-actions {
+    position: fixed;
+    left: max(16px, var(--safe-left));
+    right: max(16px, var(--safe-right));
+    bottom: calc(var(--safe-bottom) + 8px + 64px + 12px);
+    z-index: 850;
+    display: flex;
+    gap: 12px;
+    padding: 8px;
+    border-radius: var(--pill);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border-light);
+    box-shadow: var(--glass-shadow);
+}
+
+body.device-mobile .detail-actions .detail-action-play {
+    flex: 1;
+    min-height: var(--tap);
+    border-radius: var(--pill);
+}
+
+body.device-mobile .detail-actions .detail-action-side {
+    min-height: var(--tap);
+    border-radius: var(--pill);
+}
+
+body.device-mobile #movieDetailContainer {
+    padding-bottom: calc(var(--safe-bottom) + 8px + 64px + 12px + 64px);
+}
