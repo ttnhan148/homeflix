@@ -17,6 +17,7 @@ from datetime import datetime, date
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
 import json
-from cast import CastHub
+from cast import CastHub, format_sse
 from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
                      household_id, parse_trusted_proxies)
 logging.basicConfig(level=logging.INFO)
@@ -1022,6 +1023,40 @@ async def patch_cast_settings_api(request: Request, body: dict):
         raise HTTPException(status_code=422, detail="allow_control must be boolean")
     await asyncio.to_thread(_db_cast_set_allow_control, request.state.device_id, value)
     return {"allow_control": value}
+
+CAST_PING_SECONDS = 15
+
+def _db_device_names(ids: list[str]) -> dict[str, str]:
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    return {r["id"]: r["name"] for r in db_query(f"SELECT id, name FROM devices WHERE id IN ({marks})", tuple(ids))}
+
+@app.get("/api/cast/events")
+async def cast_events_api(request: Request):
+    """Luồng SSE của một thiết bị: lệnh, yêu cầu kết nối, trạng thái. Một dòng ': ping' mỗi CAST_PING_SECONDS."""
+    device_id = request.state.device_id
+
+    async def stream():
+        # Đăng ký bên trong generator: nếu client ngắt trước khi luồng bắt đầu thì không có gì để dọn
+        sub = cast_hub.subscribe(device_id)
+        try:
+            ids = cast_hub.controllers_of(device_id)
+            names = await asyncio.to_thread(_db_device_names, ids)
+            yield format_sse("hello", {"device_id": device_id,
+                                       "controllers": [{"id": i, "name": names.get(i, "")} for i in ids]})
+            while not sub.closed:
+                events = await sub.next(CAST_PING_SECONDS)
+                if events:
+                    for name, data in events:
+                        yield format_sse(name, data)
+                elif not sub.closed:
+                    yield ": ping\n\n"
+        finally:
+            cast_hub.unsubscribe(sub)
+
+    return StreamingResponse(stream(), media_type="text/event-stream",
+                             headers={"X-Accel-Buffering": "no", "Cache-Control": "private, no-store"})
 
 # GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
 app.add_middleware(GZipMiddleware, minimum_size=1024)
