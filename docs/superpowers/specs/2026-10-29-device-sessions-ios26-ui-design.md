@@ -143,6 +143,14 @@ TV và iPhone đều là client của server. Không có kết nối trực ti�
 
 Server chạy một tiến trình uvicorn (`install.sh` và `Dockerfile` không đặt `--workers`). Hàng đợi lệnh và danh sách thiết bị trực tuyến nằm trong bộ nhớ. Triển khai nhiều worker sẽ làm hỏng cast, và spec này không hỗ trợ trường hợp đó.
 
+### Quyết định khi lập kế hoạch Gói 3
+
+- Heartbeat chỉ gửi `kind`, không gửi tên: tên đã ở server (mặc định theo User-Agent, đổi bằng `PATCH /api/device`), gửi lại sẽ ghi đè tên người dùng đã đổi.
+- `play` có `episode_url` và `position` tùy chọn: TV tự quyết tập và vị trí từ tiến độ riêng của nó, vì tiến độ ghi ở TV.
+- Nhãn trên TV dùng tên thiết bị của controller ("iPhone đang kết nối"), vì server không biết tên người.
+- Quyền lưu bền trong bảng `cast_allowed`; công tắc của TV ở `app_settings`. Liên kết, hiện diện và trạng thái chỉ ở bộ nhớ; lệnh hợp lệ tự lập lại liên kết.
+- Khi lệnh phát lên TV thất bại, iPhone báo "TV không phản hồi" và đưa nút Phát về phát cục bộ nhưng không tự phát (phát bất đồng bộ làm mất cử chỉ người dùng trên iOS).
+
 ## Gói 4 — Tự động hóa trình phát
 
 - **Tự qua tập:** hết tập thì đếm ngược 10 giây rồi phát tập kế, có nút Hủy. Cài đặt theo thiết bị.
