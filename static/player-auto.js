@@ -5,6 +5,7 @@
   let video = null, getEpisodes = null, playNext = null, storage = null;
   let prefs = U.DEFAULT_PREFS;
   let timer = null, secondsLeft = 0;
+  let introHandled = false; // đã tự nhảy intro trong tập này
 
   const $ = (id) => document.getElementById(id);
 
@@ -49,7 +50,27 @@
     }, cfg.tickMs);
   }
 
-  function onEpisodeStart() { cancelCountdown(); }
+  function skipIntro() {
+    if (!U.showSkipIntro(video.currentTime, video.duration, prefs)) return false;
+    video.currentTime = U.introTarget(video.duration, prefs);
+    updateSkipButton();
+    return true;
+  }
+
+  function updateSkipButton() {
+    const show = U.showSkipIntro(video.currentTime, video.duration, prefs);
+    $('skipIntroBtn').hidden = !show;
+    if (show && prefs.autoIntro && !introHandled) {
+      introHandled = true;
+      skipIntro();
+    }
+  }
+
+  function onEpisodeStart() {
+    cancelCountdown();
+    introHandled = false;
+    $('skipIntroBtn').hidden = true;
+  }
 
   function init(opts) {
     video = opts.video;
@@ -61,7 +82,10 @@
     video.addEventListener('play', cancelCountdown);
     $('autoNextCancel').addEventListener('click', cancelCountdown);
     $('autoNextNow').addEventListener('click', finishCountdown);
+    $('skipIntroBtn').addEventListener('click', skipIntro);
+    ['timeupdate', 'loadedmetadata', 'seeked'].forEach((ev) => video.addEventListener(ev, updateSkipButton));
+    document.addEventListener('hf-prefs', updateSkipButton);
   }
 
-  root.HFPlayerAuto = { init, getPrefs, setPrefs, onEnded, onEpisodeStart, cancelCountdown };
+  root.HFPlayerAuto = { init, getPrefs, setPrefs, onEnded, onEpisodeStart, cancelCountdown, skipIntro };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

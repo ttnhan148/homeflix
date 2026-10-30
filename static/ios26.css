@@ -1140,3 +1140,21 @@ body.device-mobile .sticky-header header {
     font-weight: 700;
     padding-left: 6px;
 }
+
+/* --- Bỏ qua mở đầu: góc dưới phải, tầm ngón cái, trên thanh điều khiển video --- */
+.skip-intro {
+    position: absolute;
+    right: calc(12px + var(--safe-right, 0px));
+    bottom: calc(56px + var(--safe-bottom, 0px));
+    z-index: 5;
+    min-height: var(--tap);
+    padding: 0 18px;
+    border-radius: var(--pill);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.skip-intro[hidden] {
+    display: none;
+}

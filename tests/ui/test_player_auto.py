@@ -104,3 +104,60 @@ def test_autonext_off_no_countdown(open_app):
     ended(page)
     page.wait_for_timeout(300)
     assert page.locator(OVERLAY).is_hidden() and index(page) == 0
+
+
+SKIP = "#skipIntroBtn"
+
+
+def set_time(page, t, duration=1400):
+    page.evaluate("""([t, d]) => {
+        Object.defineProperty(video, 'duration', {configurable: true, value: d});
+        Object.defineProperty(video, 'currentTime', {configurable: true, writable: true, value: t});
+        video.dispatchEvent(new Event('timeupdate'));
+    }""", [t, duration])
+
+
+def test_skip_button_visible_first_90s(open_app):
+    page = open_player(open_app)
+    set_time(page, 10)
+    assert page.locator(SKIP).is_visible()
+    set_time(page, 95)
+    assert page.locator(SKIP).is_hidden()
+
+
+def test_skip_jumps_to_85(open_app):
+    page = open_player(open_app)
+    set_time(page, 10)
+    tap(page, SKIP)
+    assert page.evaluate("video.currentTime") == 85
+    assert page.locator(SKIP).is_hidden()
+
+
+def test_skip_uses_custom_seconds(open_app):
+    page = open_player(open_app, prefs={"introSeconds": 60})
+    set_time(page, 10)
+    tap(page, SKIP)
+    assert page.evaluate("video.currentTime") == 60
+
+
+def test_short_video_hides_button(open_app):
+    page = open_player(open_app)
+    set_time(page, 10, duration=60)
+    assert page.locator(SKIP).is_hidden()
+
+
+def test_button_hides_when_no_metadata(open_app):
+    page = open_player(open_app)
+    page.evaluate("video.dispatchEvent(new Event('timeupdate'))")  # duration chưa có (NaN)
+    assert page.locator(SKIP).is_hidden()
+
+
+def test_auto_intro_skips_once_per_episode(open_app):
+    page = open_player(open_app, prefs={"autoIntro": True})
+    set_time(page, 3)
+    assert page.evaluate("video.currentTime") == 85
+    set_time(page, 5)                                    # tua lùi: không nhảy lần hai
+    assert page.evaluate("video.currentTime") == 5
+    page.evaluate("play(playbackEpisodes[1].link_m3u8, playbackEpisodes[1].name, 1)")
+    set_time(page, 3)
+    assert page.evaluate("video.currentTime") == 85
