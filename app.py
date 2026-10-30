@@ -986,6 +986,43 @@ async def patch_device_api(request: Request, body: dict):
                                 (*updates.values(), request.state.device_id))
     return await get_device_api(request)
 
+# --- Cast: hiện diện và thiết bị gần đây ---
+@app.post("/api/devices/heartbeat")
+async def devices_heartbeat_api(request: Request, body: dict | None = None):
+    device_id = request.state.device_id
+    body = body or {}
+    kind = body.get("kind")
+    if kind is not None:
+        if kind not in DEVICE_KINDS:
+            raise HTTPException(status_code=422, detail="kind must be one of " + ", ".join(DEVICE_KINDS))
+        await asyncio.to_thread(db_execute, "UPDATE devices SET kind = ? WHERE id = ?", (kind, device_id))
+    else:
+        row = await asyncio.to_thread(db_query_one, "SELECT kind FROM devices WHERE id = ?", (device_id,))
+        kind = row["kind"] if row else "desktop"
+    cast_hub.heartbeat(device_id, kind)
+    return {"status": "ok"}
+
+@app.get("/api/devices/nearby")
+async def devices_nearby_api(request: Request):
+    rows = await asyncio.to_thread(
+        db_query,
+        "SELECT id, name, kind FROM devices WHERE household = ? AND id != ? AND kind IN ('tv', 'desktop')",
+        (request.state.household, request.state.device_id))
+    return [{"id": r["id"], "name": r["name"], "kind": r["kind"], "online": True}
+            for r in rows if cast_hub.is_online(r["id"])]
+
+@app.get("/api/cast/settings")
+async def cast_settings_api(request: Request):
+    return {"allow_control": await asyncio.to_thread(_db_cast_allow_control, request.state.device_id)}
+
+@app.patch("/api/cast/settings")
+async def patch_cast_settings_api(request: Request, body: dict):
+    value = body.get("allow_control")
+    if not isinstance(value, bool):
+        raise HTTPException(status_code=422, detail="allow_control must be boolean")
+    await asyncio.to_thread(_db_cast_set_allow_control, request.state.device_id, value)
+    return {"allow_control": value}
+
 # GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
