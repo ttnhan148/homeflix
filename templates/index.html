@@ -21,6 +21,8 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="/static/home-utils.js"></script>
     <script src="/static/cast-utils.js"></script>
+    <script src="/static/player-utils.js"></script>
+    <script src="/static/player-auto.js"></script>
     <style>
         :root {
             --bg-color: #080808;
@@ -2050,6 +2052,11 @@
 
             <div class="player-wrapper">
                 <video id="videoPlayer" playsinline webkit-playsinline controls x-webkit-airplay="allow" airplay="allow"></video>
+                <div id="autoNextOverlay" class="auto-next glass" hidden>
+                    <span id="autoNextText" class="auto-next-text"></span>
+                    <button type="button" id="autoNextNow" class="cast-pill">Phát ngay</button>
+                    <button type="button" id="autoNextCancel" class="cast-pill">Hủy</button>
+                </div>
                 <!-- AirPlay Remote Control Overlay -->
                 <div class="airplay-remote-overlay" id="airplayOverlay">
                     <img class="airplay-bg-poster" id="airplayBgPoster" src="" alt="">
@@ -3429,6 +3436,7 @@ document.addEventListener('visibilitychange', () => {
         async function play(url, title, idx) {
             console.log("[Play] Bắt đầu phát tập:", title, "URL:", url, "currentMovie:", currentMovie);
             currentPlaybackIndex = idx;
+            HFPlayerAuto.onEpisodeStart();
             syncDrawerToPlaying(url);
 
             // Vị trí xem dở của thiết bị này (đọc trước khi POST tiến độ làm đổi last_watched_url)
@@ -3597,6 +3605,7 @@ document.addEventListener('visibilitychange', () => {
 
         // --- EXIT PLAYER (QUAY LẠI TRANG CHỦ) ---
         function exitPlayer() {
+            HFPlayerAuto.cancelCountdown();
             reportPosition(false);
             clearResumeHandler();
             video.pause();
@@ -4005,13 +4014,13 @@ document.addEventListener('visibilitychange', () => {
             }
         }
 
-        // Tự động chuyển tập khi xem hết phim
-        video.onended = () => {
-            if (playbackEpisodes.length > 1 && currentPlaybackIndex < playbackEpisodes.length - 1) {
-                console.log("Video ended. Auto playing next episode.");
-                playNextEpisode();
-            }
-        };
+        // Hết tập: đếm ngược rồi tự qua tập kế (có nút Hủy), theo cài đặt của thiết bị
+        HFPlayerAuto.init({
+            video,
+            getEpisodes: () => ({ list: playbackEpisodes, index: currentPlaybackIndex }),
+            playNext: playNextEpisode,
+        });
+        video.onended = () => HFPlayerAuto.onEnded();
 
         detectDevice();
         fetchSavedMovies();

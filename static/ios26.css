@@ -1115,3 +1115,28 @@ body.device-mobile .sticky-header header {
 .cast-pill-danger {
     color: #ff6961;
 }
+
+/* --- Tự qua tập: lớp đếm ngược nằm dưới video, ngoài vùng an toàn --- */
+.auto-next {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: calc(56px + var(--safe-bottom, 0px));
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--pill);
+}
+
+.auto-next[hidden] {
+    display: none;
+}
+
+.auto-next-text {
+    flex: 2;
+    font-size: 15px;
+    font-weight: 700;
+    padding-left: 6px;
+}
