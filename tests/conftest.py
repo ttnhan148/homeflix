@@ -1,4 +1,6 @@
 import pytest
+
+from cast import CastHub
 from fastapi.testclient import TestClient
 
 IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"
@@ -12,6 +14,7 @@ def app_module(tmp_path, monkeypatch):
     monkeypatch.setattr(m, "_db_conn", None)
     (tmp_path / "downloads").mkdir()
     (tmp_path / "cache").mkdir()
+    monkeypatch.setattr(m, "cast_hub", CastHub())
     m.init_db()
     yield m
     if m._db_conn is not None:

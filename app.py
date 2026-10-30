@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
 import json
+from cast import CastHub
 from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
                      household_id, parse_trusted_proxies)
 logging.basicConfig(level=logging.INFO)
@@ -198,6 +199,14 @@ def init_db():
                 PRIMARY KEY (device_id, slug)
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cast_allowed (
+                target_id TEXT NOT NULL,
+                controller_id TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                PRIMARY KEY (target_id, controller_id)
+            )
+        """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_household ON devices(household)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_updated ON device_movies(device_id, updated_at DESC)")
@@ -360,9 +369,35 @@ def _db_prune_inactive_devices(now: float, max_age_days: int = DEVICE_MAX_INACTI
         old_ids = [r[0] for r in conn.execute("SELECT id FROM devices WHERE last_seen < ?", (cutoff,))]
         for device_id in old_ids:
             conn.execute("DELETE FROM device_movies WHERE device_id = ?", (device_id,))
+            conn.execute("DELETE FROM cast_allowed WHERE target_id = ? OR controller_id = ?", (device_id, device_id))
+            conn.execute("DELETE FROM app_settings WHERE key = ?", (_cast_allow_key(device_id),))
             conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
         conn.commit()
     return len(old_ids)
+
+# --- Cast: quyền điều khiển và công tắc của TV ---
+# Hàng đợi SSE, hiện diện, liên kết và trạng thái nằm trong bộ nhớ (cast.py), chỉ đúng với một worker.
+cast_hub = CastHub()
+
+def _cast_allow_key(device_id: str) -> str:
+    return f"cast_allow_control:{device_id}"
+
+def _db_cast_is_allowed(target_id: str, controller_id: str) -> bool:
+    return db_query_one("SELECT 1 FROM cast_allowed WHERE target_id = ? AND controller_id = ?",
+                        (target_id, controller_id)) is not None
+
+def _db_cast_allow(target_id: str, controller_id: str) -> None:
+    db_execute("INSERT OR IGNORE INTO cast_allowed (target_id, controller_id, created_at) VALUES (?, ?, ?)",
+               (target_id, controller_id, time.time()))
+
+def _db_cast_allow_control(device_id: str) -> bool:
+    row = db_query_one("SELECT value FROM app_settings WHERE key = ?", (_cast_allow_key(device_id),))
+    return row is None or row[0] != "0"
+
+def _db_cast_set_allow_control(device_id: str, value: bool) -> None:
+    db_execute("INSERT INTO app_settings (key, value) VALUES (?, ?) "
+               "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+               (_cast_allow_key(device_id), "1" if value else "0"))
 
 # --- Phim theo thiết bị (device_movies) ---
 def _device_movie_dict(row) -> dict:
