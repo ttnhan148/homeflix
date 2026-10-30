@@ -19,6 +19,7 @@
 
     <!-- HLS.js cho thiết bị không Apple -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="/static/home-utils.js"></script>
     <style>
         :root {
             --bg-color: #080808;
@@ -1871,6 +1872,7 @@
             padding-right: 1.5rem !important;
         }
     </style>
+    <link rel="stylesheet" href="/static/ios26.css">
 </head>
 
 <body>
@@ -1965,33 +1967,39 @@
 
                 <!-- Homepage content -->
                 <div id="homepageContent" style="display: flex; flex-direction: column; gap: 2rem;">
-                    <!-- Hero section: Latest -->
-                    <div id="heroSection" class="hero-scroll-section">
-                        <div class="reco-theme-title">Phim Mới Cập Nhật</div>
-                        <div id="heroGrid" class="hero-scroll-grid"></div>
-                    </div>
+                    <!-- Hero: phim hot chiếu rạp, poster phủ nền -->
+                    <section id="hero" class="hero" hidden aria-label="Phim chiếu rạp nổi bật">
+                        <div id="heroTrack" class="hero-track"></div>
+                        <div id="heroDots" class="hero-dots" hidden></div>
+                    </section>
 
                     <!-- Grid tabs section -->
                     <div class="grid-tabs-section">
-                        <div class="grid-tabs-nav">
-                            <button class="grid-tab-btn active" data-tab="phim-chieu-rap" onclick="switchHomeTab('phim-chieu-rap')">Phim Chiếu Rạp</button>
-                            <button class="grid-tab-btn" data-tab="phim-le" onclick="switchHomeTab('phim-le')">Phim Lẻ</button>
-                            <button class="grid-tab-btn" data-tab="phim-bo" onclick="switchHomeTab('phim-bo')">Phim Bộ</button>
-                            <button class="grid-tab-btn" data-tab="tv-shows" onclick="switchHomeTab('tv-shows')">TV Shows</button>
-                            <div class="filter-bar">
-                                <div class="filter-dropdown">
-                                    <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại ▾</button>
-                                    <div class="filter-menu" id="filterMenu-category"></div>
+                        <div id="filterBar" class="filter-bar-wrap">
+                            <div class="grid-tabs-nav type-row">
+                                <button class="grid-tab-btn active" data-tab="all" onclick="switchHomeTab('all')">Tất cả</button>
+                                <button class="grid-tab-btn" data-tab="phim-chieu-rap" onclick="switchHomeTab('phim-chieu-rap')">Chiếu rạp</button>
+                                <button class="grid-tab-btn" data-tab="phim-le" onclick="switchHomeTab('phim-le')">Phim lẻ</button>
+                                <button class="grid-tab-btn" data-tab="phim-bo" onclick="switchHomeTab('phim-bo')">Phim bộ</button>
+                                <button class="grid-tab-btn" data-tab="tv-shows" onclick="switchHomeTab('tv-shows')">TV Shows</button>
+                            </div>
+                            <div class="chip-row">
+                                <div class="filter-bar">
+                                    <div class="filter-dropdown">
+                                        <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại ▾</button>
+                                        <div class="filter-menu" id="filterMenu-category"></div>
+                                    </div>
+                                    <div class="filter-dropdown">
+                                        <button class="filter-btn" id="filterBtn-country" onclick="toggleFilterDropdown('country')">Quốc gia ▾</button>
+                                        <div class="filter-menu" id="filterMenu-country"></div>
+                                    </div>
+                                    <div class="filter-dropdown">
+                                        <button class="filter-btn" id="filterBtn-year" onclick="toggleFilterDropdown('year')">Năm ▾</button>
+                                        <div class="filter-menu" id="filterMenu-year"></div>
+                                    </div>
+                                    <button class="filter-clear-btn" id="filterClearBtn" onclick="clearAllFilters()" style="display:none;">✕ Xóa lọc</button>
                                 </div>
-                                <div class="filter-dropdown">
-                                    <button class="filter-btn" id="filterBtn-country" onclick="toggleFilterDropdown('country')">Quốc gia ▾</button>
-                                    <div class="filter-menu" id="filterMenu-country"></div>
-                                </div>
-                                <div class="filter-dropdown">
-                                    <button class="filter-btn" id="filterBtn-year" onclick="toggleFilterDropdown('year')">Năm ▾</button>
-                                    <div class="filter-menu" id="filterMenu-year"></div>
-                                </div>
-                                <button class="filter-clear-btn" id="filterClearBtn" onclick="clearAllFilters()" style="display:none;">✕ Xóa lọc</button>
+                                <span id="resultCount" class="result-count"></span>
                             </div>
                         </div>
                         <div id="homeGridContent" class="grid-tab-content"></div>
@@ -2006,7 +2014,16 @@
         <!-- TAB CONTENT 3: SAVED -->
         <div id="saved-tab" class="tab-content">
             <div class="search-container">
-                <div id="savedMoviesGrid" class="saved-movies-list-container"></div>
+                <button type="button" id="manualUrlLink" class="manual-url-link" onclick="switchTab('player-tab')">Nhập URL phim</button>
+                <section id="continueSection" class="library-section" hidden>
+                    <h2 class="library-title">Tiếp tục xem</h2>
+                    <div id="continueRow" class="continue-row"></div>
+                </section>
+                <section id="savedSection" class="library-section" hidden>
+                    <h2 class="library-title">Đã lưu</h2>
+                    <div id="savedMoviesGrid" class="saved-movies-list-container"></div>
+                </section>
+                <div id="libraryEmpty" class="library-empty" hidden>Tủ phim trống. Hãy tìm phim và nhấn Lưu nhé!</div>
             </div>
         </div>
 
@@ -2050,6 +2067,23 @@
 
         </div>
     </div>
+
+    <!-- TAB BAR NỔI (iPhone): Khám phá, Tủ phim, và nút Tìm kiếm tách riêng -->
+    <nav id="floatTabBar" class="float-tabbar" aria-label="Điều hướng chính">
+        <div class="fab-capsule glass">
+            <button type="button" class="fab-tab active" id="fabTabExplore" onclick="switchTab('search-tab')">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9z"/></svg>
+                <span>Khám phá</span>
+            </button>
+            <button type="button" class="fab-tab" id="fabTabLibrary" onclick="switchTab('saved-tab')">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+                <span>Tủ phim</span>
+            </button>
+        </div>
+        <button type="button" class="fab-search glass" id="fabTabSearch" aria-label="Tìm kiếm" onclick="openSearchOverlay()">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </button>
+    </nav>
 
     <script>
         const inputArea = document.getElementById('m3u8InputRaw');
@@ -2513,6 +2547,7 @@ document.addEventListener('visibilitychange', () => {
         let savedMoviesList = [];
         // Danh sách tập phim đang xem ở phần chi tiết
         let currentDetailEpisodes = [];
+        let currentDetailMeta = null; // movie của trang chi tiết đang mở
         // Theo dõi danh sách tập đang phát và vị trí hiện tại
         let playbackEpisodes = [];
         let currentPlaybackIndex = -1;
@@ -2520,137 +2555,326 @@ document.addEventListener('visibilitychange', () => {
         let downloadStatuses = {};
 
         // --- Smart Homepage State ---
+        const newListState = () => ({ items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, total: null, fetchError: false, deadTypes: new Set(), filters: { category: '', country: '', year: '' } });
         let homeState = {
-            latest: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0 },
-            phimLe: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
-            phimChieuRap: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
-            phimBo: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
-            tvShows: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
-            activeGridTab: 'phim-chieu-rap'
+            all: newListState(),
+            phimLe: newListState(),
+            phimChieuRap: newListState(),
+            phimBo: newListState(),
+            tvShows: newListState(),
+            activeGridTab: 'all'
         };
 
         function homeKey(tab) {
-            const map = { 'phim-chieu-rap': 'phimChieuRap', 'phim-le': 'phimLe', 'phim-bo': 'phimBo', 'tv-shows': 'tvShows' };
-            return map[tab] || 'phimChieuRap';
+            const map = { 'all': 'all', 'phim-chieu-rap': 'phimChieuRap', 'phim-le': 'phimLe', 'phim-bo': 'phimBo', 'tv-shows': 'tvShows' };
+            return map[tab] || 'all';
+        }
+
+        const TYPE_ENDPOINTS = {
+            'phim-chieu-rap': '/api/home/phim-chieu-rap',
+            'phim-le': '/api/home/phim-le',
+            'phim-bo': '/api/home/phim-bo',
+            'tv-shows': '/api/home/tv-shows'
+        };
+        // "Tất cả" có bộ lọc: /api/home/latest không lọc được nên hỏi song song ba loại rồi gộp
+        const FANOUT_TYPES = ['phim-le', 'phim-bo', 'tv-shows'];
+
+        function hasActiveFilter(f) {
+            return !!(f && (f.category || f.country || f.year));
+        }
+
+        function filterQuery(f) {
+            let q = '';
+            if (f.category) q += `&category=${encodeURIComponent(f.category)}`;
+            if (f.country) q += `&country=${encodeURIComponent(f.country)}`;
+            if (f.year) q += `&year=${encodeURIComponent(f.year)}`;
+            return q;
+        }
+
+        async function fetchListJson(url) {
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                return res.ok && !data.error ? data : null;
+            } catch (e) {
+                console.warn('Lỗi tải danh sách', url, e);
+                return null;
+            }
         }
 
         async function fetchHomeSection(section, page) {
-            const key = section === 'latest' ? 'latest' : homeKey(section);
-            const state = homeState[key];
+            const state = homeState[homeKey(section)];
             if (state.loading || !state.hasMore) return;
 
             state.loading = true;
             state.page = page || state.page;
-
-            let endpoint;
-            let query = `page=${state.page}`;
-            if (section === 'latest') {
-                endpoint = '/api/home/latest';
-            } else {
-                endpoint = section === 'phim-le' ? '/api/home/phim-le' : section === 'phim-bo' ? '/api/home/phim-bo' : section === 'tv-shows' ? '/api/home/tv-shows' : '/api/home/phim-chieu-rap';
-                const f = state.filters;
-                if (f.category) query += `&category=${encodeURIComponent(f.category)}`;
-                if (f.country) query += `&country=${encodeURIComponent(f.country)}`;
-                if (f.year) query += `&year=${encodeURIComponent(f.year)}`;
-            }
-
             const mySeq = ++state.fetchSeq;
 
             try {
-                const res = await fetch(`${endpoint}?${query}`);
-                const data = await res.json();
-                if (mySeq !== state.fetchSeq) return;
+                let items, hasMore, total, failed;
+                if (section === 'all' && hasActiveFilter(state.filters)) {
+                    const types = FANOUT_TYPES.filter(t => !state.deadTypes.has(t));
+                    const pages = await Promise.all(types.map(t =>
+                        fetchListJson(`${TYPE_ENDPOINTS[t]}?page=${state.page}${filterQuery(state.filters)}`)));
+                    if (mySeq !== state.fetchSeq) return;
+                    types.forEach((t, i) => { if (!pages[i]) state.deadTypes.add(t); });
+                    ({ items, hasMore, total } = HFUtils.mergeTypePages(pages));
+                    failed = pages.every(p => !p);
+                } else {
+                    const url = section === 'all'
+                        ? `/api/home/latest?page=${state.page}`
+                        : `${TYPE_ENDPOINTS[section]}?page=${state.page}${filterQuery(state.filters)}`;
+                    const data = await fetchListJson(url);
+                    if (mySeq !== state.fetchSeq) return;
+                    failed = !data;
+                    items = data ? (data.items || []) : [];
+                    const pag = (data && data.pagination) || {};
+                    hasMore = items.length > 0 && !(pag.currentPage >= pag.totalPages);
+                    total = Number.isFinite(pag.totalItems) ? pag.totalItems : null;
+                }
 
-                if (!res.ok || data.error) {
-                    state.fetchError = true;
+                state.fetchError = failed;
+                if (failed) {
+                    state.hasMore = false; // không thử lại vô hạn khi cuộn
                     return;
                 }
-                state.fetchError = false;
-
-                const items = data.items || [];
-                if (items.length === 0 || (data.pagination && data.pagination.currentPage >= data.pagination.totalPages)) {
-                    state.hasMore = false;
-                }
-
-                if (state.page === 1) {
-                    state.items = items;
-                } else {
-                    state.items = state.items.concat(items);
-                }
-            } catch (e) {
-                state.fetchError = true;
-                console.error(`Error fetching ${section}:`, e);
+                state.hasMore = hasMore;
+                state.total = total;
+                state.items = state.page === 1 ? items : state.items.concat(items);
             } finally {
                 if (mySeq === state.fetchSeq) state.loading = false;
             }
         }
 
         function applyFilter() {
-            const key = homeKey(homeState.activeGridTab);
-            const state = homeState[key];
-            state.items = [];
-            state.page = 1;
-            state.loading = false;
-            state.hasMore = true;
+            const tab = homeState.activeGridTab;
+            const state = homeState[homeKey(tab)];
+            Object.assign(state, { items: [], page: 1, loading: false, hasMore: true, total: null, fetchError: false, deadTypes: new Set() });
             updateFilterUI();
-            fetchHomeSection(homeState.activeGridTab, 1).then(() => {
+            const pending = fetchHomeSection(tab, 1);
+            renderGridCards(false); // hiện skeleton ngay
+            pending.then(() => {
                 renderGridCards(false);
                 setupHomeInfiniteScroll();
             });
         }
 
-        function renderHeroCards() {
-            const grid = document.getElementById('heroGrid');
-            if (!grid) return;
+        // --- HERO (phim hot chiếu rạp) ---
+        const HERO_IMAGE_FIELD = 'thumb_url'; // đổi sang 'poster_url' nếu hướng ảnh không hợp
+        const HERO_COUNT = 5;
+        const heroState = { items: [], details: {}, pending: {}, index: 0, loaded: false };
 
-            const state = homeState.latest;
-            if (state.items.length === 0 && state.loading) {
-                grid.innerHTML = Array(5).fill(0).map(() => `
-                    <div class="skeleton-card">
-                        <div class="skeleton-img"></div>
-                        <div class="skeleton-text"></div>
-                        <div class="skeleton-text-short"></div>
-                    </div>
-                `).join('');
+        async function loadHeroItems() {
+            for (const path of ['/api/home/phim-chieu-rap', '/api/home/phim-le']) {
+                try {
+                    const res = await fetch(`${path}?page=1`);
+                    const data = await res.json();
+                    if (res.ok && !data.error && (data.items || []).length) {
+                        heroState.items = data.items.slice(0, HERO_COUNT);
+                        break;
+                    }
+                } catch (e) { console.warn('Hero: lỗi tải', path, e); }
+            }
+            heroState.loaded = true;
+            renderHero();
+        }
+
+        function heroImage(m) {
+            return m[HERO_IMAGE_FIELD] || m.poster_url || m.thumb_url || '';
+        }
+
+        function heroSlideEl(slug) {
+            return [...document.querySelectorAll('.hero-slide')].find(s => s.dataset.slug === slug) || null;
+        }
+
+        function fillHeroSlide(slug) {
+            const slide = heroSlideEl(slug);
+            const d = heroState.details[slug];
+            if (!slide || !d) return;
+            slide.querySelector('.hero-meta').textContent = HFUtils.heroMeta(d.movie);
+            slide.querySelector('.hero-desc').textContent = HFUtils.stripHtml(d.movie.content);
+        }
+
+        function loadHeroDetail(slug) {
+            if (heroState.details[slug]) return Promise.resolve(heroState.details[slug]);
+            if (!heroState.pending[slug]) {
+                heroState.pending[slug] = fetch(`/api/movie/${encodeURIComponent(slug)}`)
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.status !== 'success' || !d.movie) return null;
+                        heroState.details[slug] = d;
+                        fillHeroSlide(slug);
+                        return d;
+                    })
+                    .catch(e => { console.warn('Hero: lỗi tải chi tiết', slug, e); return null; })
+                    .finally(() => { delete heroState.pending[slug]; });
+            }
+            return heroState.pending[slug];
+        }
+
+        function updateHeroSaveLabels() {
+            document.querySelectorAll('.hero-slide').forEach(slide => {
+                slide.querySelector('.hero-btn-save').textContent = checkIsSaved(slide.dataset.slug) ? 'Đã lưu' : 'Lưu';
+            });
+        }
+
+        async function heroToggleSave(slug) {
+            const d = await loadHeroDetail(slug);
+            if (!d) return;
+            const m = d.movie;
+            await toggleSaveMovie(slug, m.name, m.poster_url, m.year, m.episode_current, d.episodes.length, d.episodes);
+            updateHeroSaveLabels();
+        }
+
+        // Phát ngay trong cú chạm: chi tiết đã tải trước nên không có await nào chen giữa.
+        function heroPlay(slug) {
+            const d = heroState.details[slug];
+            if (!d) {
+                // Chưa tải xong: báo đang tải, người dùng chạm lại khi xong (không phát bất đồng bộ, iOS sẽ chặn)
+                const btn = heroSlideEl(slug).querySelector('.hero-btn-play');
+                btn.classList.add('is-loading');
+                btn.disabled = true;
+                loadHeroDetail(slug).then(detail => {
+                    btn.classList.remove('is-loading');
+                    btn.disabled = false;
+                    if (!detail) showMovieDetailBySlug(slug); // tải lỗi: mở trang chi tiết để thử tiếp
+                });
                 return;
             }
+            const m = d.movie;
+            const row = savedMoviesList.find(i => i.slug === slug);
+            const { index } = HFUtils.resumeTarget(row, d.episodes);
+            currentMovie = { slug, name: m.name, poster_url: m.poster_url, year: m.year };
+            playEpisodesListDirect(d.episodes, index);
+        }
 
-            grid.innerHTML = state.items.map(movie => {
-                const poster = movie.poster_url || '';
-                const chips = [movie.quality, movie.lang].filter(Boolean).join(' · ');
-                return `
-                    <div class="hero-card" onclick="showMovieDetailBySlug('${movie.slug}')" ${document.body.classList.contains('device-mobile') ? '' : 'tabindex="0"'}>
-                        <div class="poster-wrap">
-                            <img class="movie-poster" src="${poster}" alt="${movie.name}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>'">
-                            <div class="poster-overlay-top">
-                                ${chips ? `<span class="badge-chip">${chips}</span>` : ''}
-                            </div>
-                            <div class="poster-overlay-bottom">
-                                <div class="overlay-ep">${movie.episode_current || ''}</div>
-                            </div>
-                        </div>
-                        <div class="movie-info">
-                            <div class="movie-title">${movie.name}</div>
-                            <div class="movie-meta">
-                                <span>${movie.year}</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+        function buildHeroSlide(m) {
+            const slide = el('article', 'hero-slide');
+            slide.dataset.slug = m.slug;
+            const img = el('img', 'hero-bg');
+            img.alt = '';
+            img.src = heroImage(m);
+            slide.appendChild(img);
+            slide.appendChild(el('div', 'hero-gradient'));
+            const content = el('div', 'hero-content');
+            content.appendChild(el('span', 'hero-badge', 'Đang chiếu rạp'));
+            content.appendChild(el('h2', 'hero-title', m.name));
+            content.appendChild(el('div', 'hero-meta', HFUtils.heroMeta({ year: m.year })));
+            content.appendChild(el('p', 'hero-desc'));
+            const actions = el('div', 'hero-actions');
+            const play = el('button', 'hero-btn-play', 'Phát');
+            play.type = 'button';
+            play.addEventListener('click', () => heroPlay(m.slug));
+            const save = el('button', 'hero-btn-save glass', 'Lưu');
+            save.type = 'button';
+            save.addEventListener('click', () => heroToggleSave(m.slug));
+            actions.append(play, save);
+            content.appendChild(actions);
+            slide.appendChild(content);
+            return slide;
+        }
+
+        function showHeroSlide(i, opts) {
+            const n = heroState.items.length;
+            if (!n) return;
+            i = Math.max(0, Math.min(n - 1, i));
+            heroState.index = i;
+            document.querySelectorAll('.hero-dot').forEach((d, k) => d.classList.toggle('active', k === i));
+            if (opts && opts.scroll) {
+                const track = document.getElementById('heroTrack');
+                track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
+            }
+            loadHeroDetail(heroState.items[i].slug);
+            if (i + 1 < n) loadHeroDetail(heroState.items[i + 1].slug);
+        }
+
+        function renderHero() {
+            const hero = document.getElementById('hero');
+            const track = document.getElementById('heroTrack');
+            const dots = document.getElementById('heroDots');
+            track.innerHTML = '';
+            dots.innerHTML = '';
+            const n = heroState.items.length;
+            hero.hidden = n === 0;
+            if (!n) return;
+            const slides = heroState.items.map(buildHeroSlide);
+            slides.forEach((slide, k) => {
+                track.appendChild(slide);
+                dots.appendChild(el('span', 'hero-dot' + (k === 0 ? ' active' : '')));
+            });
+            dots.hidden = n < 2;
+            const io = new IntersectionObserver(entries => entries.forEach(e => {
+                if (e.isIntersecting) showHeroSlide(slides.indexOf(e.target));
+            }), { root: track, threshold: 0.6 });
+            slides.forEach(sl => io.observe(sl));
+            hero.onkeydown = (e) => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                e.preventDefault();
+                const slide = slides[heroState.index];
+                const play = slide.querySelector('.hero-btn-play');
+                const save = slide.querySelector('.hero-btn-save');
+                // Phát và Lưu nằm cạnh nhau: mũi tên chuyển giữa hai nút trước, hết nút mới đổi slide
+                if (e.key === 'ArrowRight' && e.target === play) return save.focus();
+                if (e.key === 'ArrowLeft' && e.target === save) return play.focus();
+                const next = heroState.index + (e.key === 'ArrowRight' ? 1 : -1);
+                if (next < 0 || next >= n) return;
+                showHeroSlide(next, { scroll: true });
+                slides[next].querySelector('.hero-btn-play').focus({ preventScroll: true });
+            };
+            updateHeroSaveLabels();
+            showHeroSlide(0);
+        }
+
+        const POSTER_PLACEHOLDER = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>';
+
+        function updateResultCount() {
+            const node = document.getElementById('resultCount');
+            if (!node) return;
+            const state = homeState[homeKey(homeState.activeGridTab)];
+            if (!state.items.length) node.textContent = '';
+            else node.textContent = Number.isFinite(state.total) ? `${state.total} phim` : `${state.items.length}+ phim`;
+        }
+
+        function buildMovieCard(movie) {
+            const card = el('div', 'movie-card');
+            card.dataset.slug = movie.slug;
+            if (!document.body.classList.contains('device-mobile')) card.setAttribute('tabindex', '0');
+
+            const wrap = el('div', 'poster-wrap');
+            const img = el('img', 'movie-poster');
+            img.alt = movie.name || '';
+            img.loading = 'lazy';
+            img.src = movie.poster_url || '';
+            img.onerror = () => { img.onerror = null; img.src = POSTER_PLACEHOLDER; };
+            wrap.appendChild(img);
+            const chips = [movie.quality, movie.lang].filter(Boolean).join(' · ');
+            const top = el('div', 'poster-overlay-top');
+            if (chips) top.appendChild(el('span', 'badge-chip', chips));
+            wrap.appendChild(top);
+            const bottom = el('div', 'poster-overlay-bottom');
+            bottom.appendChild(el('div', 'overlay-ep', movie.episode_current || ''));
+            wrap.appendChild(bottom);
+            card.appendChild(wrap);
+
+            const info = el('div', 'movie-info');
+            info.appendChild(el('div', 'movie-title', movie.name));
+            const meta = el('div', 'movie-meta');
+            meta.appendChild(el('span', '', `Năm: ${movie.year}`));
+            info.appendChild(meta);
+            card.appendChild(info);
+
+            card.addEventListener('click', () => showMovieDetailBySlug(movie.slug));
+            return card;
         }
 
         function renderGridCards(append) {
             const grid = document.getElementById('homeGridContent');
             if (!grid) return;
 
-            // Remove old loader sentinel
             const oldLoader = document.getElementById('gridLoader');
             if (oldLoader) oldLoader.remove();
 
-            const tab = homeState.activeGridTab;
-            const key = homeKey(tab);
-            const state = homeState[key];
+            const state = homeState[homeKey(homeState.activeGridTab)];
 
             if (!append) {
                 if (state.items.length === 0 && state.loading) {
@@ -2661,78 +2885,35 @@ document.addEventListener('visibilitychange', () => {
                             <div class="skeleton-text-short"></div>
                         </div>
                     `).join('');
+                    updateResultCount();
                     return;
                 }
-                const hasFilter = state.filters && Object.values(state.filters).some(Boolean);
-                if (state.items.length === 0 && hasFilter && !state.loading && !state.fetchError) {
-                    grid.innerHTML = '<div class="filter-empty">Không tìm thấy phim phù hợp với bộ lọc.</div>';
+                if (state.items.length === 0) {
+                    const msg = state.fetchError ? 'Không tải được danh sách phim. Kiểm tra mạng rồi thử lại.'
+                        : hasActiveFilter(state.filters) ? 'Không tìm thấy phim phù hợp với bộ lọc.'
+                        : 'Chưa có phim để hiển thị.';
+                    grid.innerHTML = '';
+                    grid.appendChild(el('div', 'filter-empty', msg));
+                    updateResultCount();
                     return;
                 }
                 grid.innerHTML = '';
             }
 
-            const startIdx = append ? grid.children.length : 0;
-            for (let i = startIdx; i < state.items.length; i++) {
-                const movie = state.items[i];
-                const card = document.createElement('div');
-                card.className = 'movie-card';
-                if (!document.body.classList.contains('device-mobile')) {
-                    card.setAttribute('tabindex', '0');
-                }
+            const startIdx = append ? grid.querySelectorAll('.movie-card').length : 0;
+            for (let i = startIdx; i < state.items.length; i++) grid.appendChild(buildMovieCard(state.items[i]));
 
-                const poster = movie.poster_url || '';
-                const chips = [movie.quality, movie.lang].filter(Boolean).join(' · ');
-                card.innerHTML = `
-                    <div class="poster-wrap">
-                        <img class="movie-poster" src="${poster}" alt="${movie.name}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>'">
-                        <div class="poster-overlay-top">
-                            ${chips ? `<span class="badge-chip">${chips}</span>` : ''}
-                        </div>
-                        <div class="poster-overlay-bottom">
-                            <div class="overlay-ep">${movie.episode_current || ''}</div>
-                        </div>
-                    </div>
-                    <div class="movie-info">
-                        <div class="movie-title">${movie.name}</div>
-                        <div class="movie-meta">
-                            <span>Năm: ${movie.year}</span>
-                        </div>
-                    </div>
-                `;
-                card.onclick = () => showMovieDetailBySlug(movie.slug);
-                grid.appendChild(card);
-            }
-
-            // Add loader sentinel for infinite scroll if more pages exist
             if (state.hasMore) {
-                const loader = document.createElement('div');
-                loader.className = 'grid-load-more';
+                const loader = el('div', 'grid-load-more');
                 loader.id = 'gridLoader';
-                loader.textContent = '';
                 grid.appendChild(loader);
             }
+            updateResultCount();
         }
 
         let homeObservers = {};
 
         function setupHomeInfiniteScroll() {
-            // Hero observer
-            const heroGrid = document.getElementById('heroGrid');
-            if (heroGrid && homeState.latest.hasMore) {
-                if (homeObservers.hero) homeObservers.hero.disconnect();
-                homeObservers.hero = new IntersectionObserver((entries) => {
-                    if (entries[0].isIntersecting && homeState.latest.hasMore && !homeState.latest.loading) {
-                        homeState.latest.page++;
-                        fetchHomeSection('latest', homeState.latest.page).then(() => {
-                            renderHeroCards();
-                            setupHomeInfiniteScroll();
-                        });
-                    }
-                }, { rootMargin: '300px' });
-                const lastCard = heroGrid.lastElementChild;
-                if (lastCard) homeObservers.hero.observe(lastCard);
-            }
-
             // Grid observer
             const gridContent = document.getElementById('homeGridContent');
             const loader = document.getElementById('gridLoader');
@@ -2765,6 +2946,10 @@ document.addEventListener('visibilitychange', () => {
 
             const key = homeKey(tab);
             const state = homeState[key];
+            // Trang 1 đã lỗi: cho thử lại khi người dùng quay lại tab (cuộn tải thêm thì không thử lại)
+            if (state.fetchError && state.items.length === 0) {
+                Object.assign(state, { hasMore: true, fetchError: false, deadTypes: new Set() });
+            }
 
             if (state.items.length === 0 && !state.loading) {
                 fetchHomeSection(tab, 1).then(() => {
@@ -2793,6 +2978,7 @@ document.addEventListener('visibilitychange', () => {
             document.getElementById('searchOverlay').classList.remove('active');
             const homepageContent = document.getElementById('homepageContent');
             if (homepageContent) homepageContent.style.display = 'flex';
+            updateHeroSaveLabels();
         }
 
         // Monkey-patch backToSearchResults to handle home context
@@ -2854,32 +3040,13 @@ document.addEventListener('visibilitychange', () => {
                     resultsDiv.innerHTML = '';
                     const cdnDomain = data.data.APP_DOMAIN_CDN_IMAGE || 'https://phimimg.com';
                     data.data.items.forEach(item => {
-                        const card = document.createElement('div');
-                        card.className = 'movie-card';
-                        if (!document.body.classList.contains('device-mobile')) {
-                            card.setAttribute('tabindex', '0');
-                        }
                         const posterPath = item.poster_url.startsWith('http') ? item.poster_url : `${cdnDomain}/${item.poster_url}`;
-                        const chips = [item.quality, item.lang].filter(Boolean).join(' · ');
-                        card.innerHTML = `
-                            <div class="poster-wrap">
-                                <img class="movie-poster" src="${posterPath}" alt="${item.name}" loading="lazy">
-                                <div class="poster-overlay-top">
-                                    ${chips ? `<span class="badge-chip">${chips}</span>` : ''}
-                                </div>
-                                <div class="poster-overlay-bottom">
-                                    <div class="overlay-ep">${item.episode_current || (item.type === 'single' ? 'Phim Lẻ' : '')}</div>
-                                </div>
-                            </div>
-                            <div class="movie-info">
-                                <div class="movie-title">${item.name}</div>
-                                <div class="movie-meta">
-                                    <span>Năm: ${item.year}</span>
-                                    <span class="badge-type">${item.type === 'single' ? 'Phim Lẻ' : 'Phim Bộ'}</span>
-                                </div>
-                            </div>
-                        `;
-                        card.onclick = () => showMovieDetailBySlug(item.slug);
+                        const card = buildMovieCard({
+                            slug: item.slug, name: item.name, poster_url: posterPath, year: item.year,
+                            quality: item.quality, lang: item.lang,
+                            episode_current: item.episode_current || (item.type === 'single' ? 'Phim Lẻ' : '')
+                        });
+                        card.querySelector('.movie-meta').appendChild(el('span', 'badge-type', item.type === 'single' ? 'Phim Lẻ' : 'Phim Bộ'));
                         resultsDiv.appendChild(card);
                     });
                     setTimeout(initTabbing, 100);
@@ -3039,6 +3206,17 @@ document.addEventListener('visibilitychange', () => {
         });
 
         // --- TAB SYSTEM ---
+        function syncFloatTabs(tabId) {
+            const active = { 'search-tab': 'fabTabExplore', 'saved-tab': 'fabTabLibrary' }[tabId];
+            document.querySelectorAll('.fab-tab').forEach(b => b.classList.toggle('active', b.id === active));
+        }
+
+        function openSearchOverlay() {
+            switchTab('search-tab');
+            document.getElementById('searchOverlay').classList.add('active');
+            document.getElementById('searchOverlayInput').focus();
+        }
+
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
@@ -3047,6 +3225,7 @@ document.addEventListener('visibilitychange', () => {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             
             document.getElementById(tabId).classList.add('active');
+            syncFloatTabs(tabId);
             
             if (tabId === 'player-tab') document.getElementById('tabBtnPlayer').classList.add('active');
             if (tabId === 'search-tab') {
@@ -3194,7 +3373,12 @@ document.addEventListener('visibilitychange', () => {
                     body: JSON.stringify({
                         slug: currentMovie.slug,
                         last_watched_episode: title,
-                        last_watched_url: url
+                        last_watched_url: url,
+                        // Thông tin để server tạo hàng lịch sử cho phim chưa lưu
+                        name: currentMovie.name,
+                        poster_url: currentMovie.poster_url,
+                        year: currentMovie.year,
+                        episodes: playbackEpisodes
                     })
                 }).then(res => res.json()).then(data => {
                     console.log("[Play] Lưu tiến trình xem thành công:", data);
@@ -3218,6 +3402,9 @@ document.addEventListener('visibilitychange', () => {
                             }
                             savedMoviesList[sIdx].episode_states[url] = "watching";
                             refreshDetailEpisodeList();
+                        } else if (data.movie) {
+                            savedMoviesList.push(data.movie);
+                            refreshDetailEpisodeList();
                         }
                     }
                 }).catch(err => console.error("Error saving progress:", err));
@@ -3229,23 +3416,14 @@ document.addEventListener('visibilitychange', () => {
                 hlsObj = null;
             }
 
-            // Kiểm tra xem tập phim này đã được tải về đĩa MP4 chưa
+            // Tập đã tải về đĩa MP4 chưa? Đọc từ trạng thái đã poll sẵn: không await mạng ở đây,
+            // để việc gắn nguồn và phát chạy ngay trong cú chạm (iOS cần thao tác người dùng).
             let useMp4 = false;
             let mp4Url = "";
-            if (currentMovie && currentMovie.slug) {
-                try {
-                    const checkUrl = `/api/download/status/${currentMovie.slug}/${encodeURIComponent(title)}`;
-                    console.log("[Play] Kiểm tra trạng thái tải MP4:", checkUrl);
-                    const statusRes = await fetch(checkUrl);
-                    const statusData = await statusRes.json();
-                    console.log("[Play] Kết quả trạng thái tải MP4:", statusData);
-                    if (statusData.status === "completed") {
-                        useMp4 = true;
-                        mp4Url = `/media/${currentMovie.slug}/${encodeURIComponent(title)}.mp4`;
-                    }
-                } catch (e) {
-                    console.error("Lỗi kiểm tra trạng thái tải MP4:", e);
-                }
+            const dl = currentMovie && currentMovie.slug ? downloadStatuses[currentMovie.slug] : null;
+            if (dl && dl[title] === "completed") {
+                useMp4 = true;
+                mp4Url = `/media/${currentMovie.slug}/${encodeURIComponent(title)}.mp4`;
             }
 
             video.onerror = () => {
@@ -3368,6 +3546,60 @@ document.addEventListener('visibilitychange', () => {
             else switchTab('player-tab');
         }
 
+        const SVG_BACK = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>';
+        const SVG_BOOKMARK = '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>';
+        const SVG_PLAY = '<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+
+        function iconButton(className, svg, label, onClick) {
+            const btn = el('button', className);
+            btn.type = 'button';
+            btn.innerHTML = svg; // chỉ SVG tĩnh
+            btn.appendChild(document.createTextNode(label));
+            btn.addEventListener('click', onClick);
+            return btn;
+        }
+
+        // Dữ liệu phim (tên, mô tả HTML, slug) chỉ đi vào DOM qua textContent/thuộc tính, không qua innerHTML hay onclick
+        function buildDetailView(m, episodesList, isSaved) {
+            const frag = document.createDocumentFragment();
+            frag.appendChild(iconButton('detail-back-btn', SVG_BACK, ' Quay lại', () => backToSearchResults()));
+
+            const hero = el('div', 'detail-hero');
+            const img = el('img', 'detail-backdrop');
+            img.src = m.poster_url || '';
+            img.alt = m.name || '';
+            hero.appendChild(img);
+            hero.appendChild(el('div', 'detail-hero-gradient'));
+            const heroContent = el('div', 'detail-hero-content');
+            heroContent.appendChild(el('div', 'detail-hero-title', m.name));
+            heroContent.appendChild(el('div', 'detail-hero-subtitle', `${m.origin_name || ''} (${m.year})`));
+            hero.appendChild(heroContent);
+            frag.appendChild(hero);
+
+            const chips = el('div', 'detail-chips');
+            [m.episode_current, m.time, m.quality, m.lang].filter(Boolean).forEach(c => chips.appendChild(el('span', 'detail-chip', c)));
+            frag.appendChild(chips);
+
+            frag.appendChild(el('div', 'detail-overview', HFUtils.stripHtml(m.content) || 'Chưa có mô tả cho phim này.'));
+            const eps = el('div', 'detail-episodes');
+            eps.id = 'detailEpisodeList';
+            frag.appendChild(eps);
+
+            const actions = el('div', 'detail-actions');
+            const save = el('button', 'detail-action-side');
+            save.type = 'button';
+            save.id = 'btnSaveDetail';
+            save.innerHTML = SVG_BOOKMARK;
+            const label = el('span', '', isSaved ? 'Đã lưu' : 'Lưu phim');
+            label.id = 'saveBtnText';
+            save.appendChild(label);
+            save.addEventListener('click', () => toggleSaveMovie(m.slug, m.name, m.poster_url, m.year, m.episode_current, episodesList.length));
+            actions.appendChild(save);
+            actions.appendChild(iconButton('detail-action-play', SVG_PLAY, 'Phát', () => playSelectedMovieDirect(m.name, m.slug)));
+            frag.appendChild(actions);
+            return frag;
+        }
+
         async function showMovieDetail(slug) {
             const detailDiv = document.getElementById('movieDetailContainer');
             const resultsDiv = document.getElementById('searchResults');
@@ -3386,44 +3618,11 @@ document.addEventListener('visibilitychange', () => {
                     const m = data.movie;
                     const episodesList = data.episodes || [];
                     currentDetailEpisodes = episodesList;
+                    currentDetailMeta = m;
                     
                     const isSaved = checkIsSaved(m.slug);
                     
-                    const safeName = m.name.replace(/`/g, '\\`').replace(/\$/g, '\\$');
-                    const safePoster = m.poster_url.replace(/`/g, '\\`').replace(/\$/g, '\\$');
-                    
-                    detailDiv.innerHTML = `
-                        <button class="detail-back-btn" onclick="backToSearchResults()">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-                            Quay lại
-                        </button>
-                        <div class="detail-hero">
-                            <img class="detail-backdrop" src="${m.poster_url}" alt="${m.name}">
-                            <div class="detail-hero-gradient"></div>
-                            <div class="detail-hero-content">
-                                <div class="detail-hero-title">${m.name}</div>
-                                <div class="detail-hero-subtitle">${m.origin_name} (${m.year})</div>
-                            </div>
-                        </div>
-                        <div class="detail-chips">
-                            <span class="detail-chip">${m.episode_current}</span>
-                            <span class="detail-chip">${m.time}</span>
-                            <span class="detail-chip">${m.quality}</span>
-                            <span class="detail-chip">${m.lang}</span>
-                        </div>
-                        <div class="detail-overview">${m.content || 'Chưa có mô tả cho phim này.'}</div>
-                        <div class="detail-episodes" id="detailEpisodeList"></div>
-                        <div class="detail-actions">
-                            <button id="btnSaveDetail" class="detail-action-side" onclick="toggleSaveMovie(\`${m.slug}\`, \`${safeName}\`, \`${safePoster}\`, \`${m.year}\`, \`${m.episode_current}\`, ${episodesList.length})">
-                                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
-                                <span id="saveBtnText">${isSaved ? 'Đã lưu' : 'Lưu phim'}</span>
-                            </button>
-                            <button class="detail-action-play" onclick="playSelectedMovieDirect(\`${safeName}\`, \`${m.slug}\`)">
-                                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                Phát Ngay
-                            </button>
-                        </div>
-                    `;
+                    detailDiv.replaceChildren(buildDetailView(m, episodesList, isSaved));
                     setTimeout(initTabbing, 100);
                     if (episodesList.length > 0) {
                         const savedMovie = savedMoviesList.find(item => item.slug === m.slug);
@@ -3433,7 +3632,7 @@ document.addEventListener('visibilitychange', () => {
                             movieSlug: m.slug,
                             watchStates,
                             onPlay: (ep) => {
-                                currentMovie = { slug: m.slug, name: m.name, poster_url: m.poster_url };
+                                currentMovie = { slug: m.slug, name: m.name, poster_url: m.poster_url, year: m.year };
                                 playEpisodesListDirect(currentDetailEpisodes, ep.link_m3u8);
                             }
                         });
@@ -3468,7 +3667,12 @@ document.addEventListener('visibilitychange', () => {
 
         function playSelectedMovieDirect(name, slug) {
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
-            currentMovie = { slug, name, poster_url: savedMovie ? savedMovie.poster_url : null };
+            const meta = currentDetailMeta && currentDetailMeta.slug === slug ? currentDetailMeta : null;
+            currentMovie = {
+                slug, name,
+                poster_url: (savedMovie && savedMovie.poster_url) || (meta && meta.poster_url) || null,
+                year: (savedMovie && savedMovie.year) || (meta && meta.year) || ''
+            };
             const targetUrl = savedMovie ? savedMovie.last_watched_url : null;
             playEpisodesListDirect(currentDetailEpisodes, targetUrl);
         }
@@ -3479,16 +3683,17 @@ document.addEventListener('visibilitychange', () => {
             try {
                 const res = await fetch('/api/saved');
                 savedMoviesList = await res.json();
+                if (typeof updateHeroSaveLabels === 'function') updateHeroSaveLabels();
             } catch(e) {
                 console.error("Lỗi lấy danh sách tủ phim:", e);
             }
         }
 
         function checkIsSaved(slug) {
-            return savedMoviesList.some(item => item.slug === slug);
+            return savedMoviesList.some(item => item.slug === slug && item.saved === true);
         }
 
-        async function toggleSaveMovie(slug, name, poster_url, year, episode_current, total_episodes) {
+        async function toggleSaveMovie(slug, name, poster_url, year, episode_current, total_episodes, episodes = currentDetailEpisodes) {
             const btn = document.getElementById('btnSaveDetail');
             const txt = document.getElementById('saveBtnText');
             const isSaved = checkIsSaved(slug);
@@ -3517,12 +3722,12 @@ document.addEventListener('visibilitychange', () => {
                             year, 
                             episode_current, 
                             total_episodes,
-                            episodes: currentDetailEpisodes
+                            episodes
                         })
                     });
                     const data = await res.json();
                     if (data.status === 'success') {
-                        savedMoviesList.push(data.movie);
+                        savedMoviesList = savedMoviesList.filter(item => item.slug !== slug).concat(data.movie);
                         if (btn) {
                             btn.className = "detail-action-side";
                             txt.textContent = "Đã lưu";
@@ -3530,6 +3735,7 @@ document.addEventListener('visibilitychange', () => {
                     }
                 } catch(e) { alert("Không thể lưu phim: " + e.message); }
             }
+            updateHeroSaveLabels();
         }
 
         async function deleteSavedMovie(slug) {
@@ -3538,6 +3744,7 @@ document.addEventListener('visibilitychange', () => {
                 const data = await res.json();
                 if (data.status === 'success') {
                     savedMoviesList = savedMoviesList.filter(item => item.slug !== slug);
+                    updateHeroSaveLabels();
                     renderSavedMovies();
                 }
             } catch(e) { alert("Lỗi xóa phim: " + e.message); }
@@ -3564,76 +3771,95 @@ document.addEventListener('visibilitychange', () => {
             }
         }
 
+        function renderContinueRow(rows) {
+            const row = document.getElementById('continueRow');
+            row.innerHTML = '';
+            rows.forEach(m => {
+                const card = el('button', 'continue-card');
+                card.type = 'button';
+                card.dataset.slug = m.slug;
+                const img = el('img', 'continue-poster');
+                img.alt = '';
+                img.src = m.poster_url || '';
+                card.appendChild(img);
+                card.appendChild(el('div', 'continue-title', m.name));
+                card.appendChild(el('div', 'continue-ep', m.last_watched_episode || ''));
+                const bar = el('div', 'continue-progress');
+                const fill = el('div', 'continue-progress-fill');
+                fill.style.width = HFUtils.progressPct(m) + '%';
+                bar.appendChild(fill);
+                card.appendChild(bar);
+                card.addEventListener('click', () => playResumeSavedMovie(m.slug));
+                row.appendChild(card);
+            });
+        }
+
         async function renderSavedMovies() {
             const grid = document.getElementById('savedMoviesGrid');
-            grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 3rem 0;">Đang tải tủ phim từ máy chủ...</div>';
-            
             await fetchSavedMovies();
-            
-            if (savedMoviesList.length === 0) {
-                grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 3rem 0; font-size: 1.1rem;">Tủ phim trống. Hãy tìm phim và nhấn Lưu nhé!</div>';
-                return;
-            }
-            
+
+            const { continueWatching, saved } = HFUtils.splitLibrary(savedMoviesList);
+            document.getElementById('continueSection').hidden = continueWatching.length === 0;
+            document.getElementById('savedSection').hidden = saved.length === 0;
+            document.getElementById('libraryEmpty').hidden = continueWatching.length + saved.length > 0;
+            renderContinueRow(continueWatching);
             grid.innerHTML = '';
-            savedMoviesList.forEach(m => {
+            if (saved.length === 0) return;
+
+            saved.forEach(m => {
                 const card = document.createElement('div');
                 card.className = 'saved-movie-row';
+                card.dataset.slug = m.slug;
                 if (!document.body.classList.contains('device-mobile')) {
                     card.setAttribute('tabindex', '0');
                 }
                 
                 const totalEpsText = m.total_episodes ? `${m.total_episodes} tập` : m.episode_current;
                 
-                let epsContainer = null;
-                if (m.episodes && m.episodes.length > 0) {
-                    epsContainer = document.createElement('div');
-                    epsContainer.className = 'episodes-container';
-                } else {
-                    epsContainer = document.createElement('div');
-                    epsContainer.className = 'episodes-container';
-                    epsContainer.innerHTML = `<span style="font-size: 0.85rem; color: var(--text-dim);">Chưa có danh sách tập phim. <a href="#" style="color: var(--accent-color); text-decoration: underline;" onclick="event.stopPropagation(); syncEpisodesForMovie(\`${m.slug}\`)">Đồng bộ ngay</a></span>`;
+                const epsContainer = el('div', 'episodes-container');
+                if (!(m.episodes && m.episodes.length > 0)) {
+                    const hint = el('span', '', 'Chưa có danh sách tập phim. ');
+                    hint.style.cssText = 'font-size: 0.85rem; color: var(--text-dim);';
+                    const link = el('a', '', 'Đồng bộ ngay');
+                    link.href = '#';
+                    link.style.cssText = 'color: var(--accent-color); text-decoration: underline;';
+                    link.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); syncEpisodesForMovie(m.slug); });
+                    hint.appendChild(link);
+                    epsContainer.appendChild(hint);
                 }
 
-                card.innerHTML = `
-                    <img class="movie-poster" src="${m.poster_url}" alt="${m.name}">
-                    <div class="movie-info-row">
-                        <div class="movie-title">${m.name}</div>
-                        <div class="movie-meta">
-                            <span>Năm: ${m.year} (${totalEpsText})</span>
-                        </div>
-                        <div class="eps-host"></div>
-                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                            <button class="btn-main" style="padding: 0.5rem 1.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.25rem;" onclick="event.stopPropagation(); playResumeSavedMovie(\`${m.slug}\`)">
-                                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                                Xem tiếp
-                            </button>
-                            <button class="btn-sec" style="padding: 0.5rem 1.25rem; font-size: 0.85rem; margin: 0; border-color: #555; display: flex; align-items: center; gap: 0.25rem;" onclick="event.stopPropagation(); deleteSavedMovie(\`${m.slug}\`)">
-                                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                                Xóa phim
-                            </button>
-                        </div>
-                    </div>
-                `;
+                const poster = el('img', 'movie-poster');
+                poster.src = m.poster_url || '';
+                poster.alt = m.name || '';
+                card.appendChild(poster);
+                const infoRow = el('div', 'movie-info-row');
+                infoRow.appendChild(el('div', 'movie-title', m.name));
+                const meta = el('div', 'movie-meta');
+                meta.appendChild(el('span', '', `Năm: ${m.year || ''} (${totalEpsText || ''})`));
+                infoRow.appendChild(meta);
+                infoRow.appendChild(epsContainer);
+                const btnRow = el('div');
+                btnRow.style.cssText = 'display: flex; gap: 0.5rem; margin-top: 0.5rem;';
+                const resume = iconButton('btn-main', '<svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>', ' Xem tiếp', (e) => { e.stopPropagation(); playResumeSavedMovie(m.slug); });
+                resume.style.cssText = 'padding: 0.5rem 1.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.25rem;';
+                const del = iconButton('btn-sec', '<svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>', ' Xóa phim', (e) => { e.stopPropagation(); deleteSavedMovie(m.slug); });
+                del.style.cssText = 'padding: 0.5rem 1.25rem; font-size: 0.85rem; margin: 0; border-color: #555; display: flex; align-items: center; gap: 0.25rem;';
+                btnRow.append(resume, del);
+                infoRow.appendChild(btnRow);
+                card.appendChild(infoRow);
                 card.onclick = () => {
                     switchTab('search-tab');
                     showMovieDetail(m.slug);
                 };
                 grid.appendChild(card);
 
-                const epsHost = card.querySelector('.eps-host');
-                if (epsHost) {
-                    if (m.episodes && m.episodes.length > 0) {
-                        epsHost.replaceWith(epsContainer);
-                        renderEpisodeList(epsContainer, {
-                            episodes: m.episodes,
-                            movieSlug: m.slug,
-                            watchStates: m.episode_states || {},
-                            onPlay: (ep, idx) => playEpisodeFromSaved(m.slug, idx)
-                        });
-                    } else {
-                        epsHost.replaceWith(epsContainer);
-                    }
+                if (m.episodes && m.episodes.length > 0) {
+                    renderEpisodeList(epsContainer, {
+                        episodes: m.episodes,
+                        movieSlug: m.slug,
+                        watchStates: m.episode_states || {},
+                        onPlay: (ep, idx) => playEpisodeFromSaved(m.slug, idx)
+                    });
                 }
             });
             updateDownloadIndicatorsUI();
@@ -3658,45 +3884,10 @@ document.addEventListener('visibilitychange', () => {
                 return;
             }
             
-            let targetUrl = null;
-            let targetIdx = 0;
-            
-            if (savedMovie.episode_states && savedMovie.episodes.length > 0) {
-                // 1. Tìm tập đang xem (watching)
-                for (let i = 0; i < savedMovie.episodes.length; i++) {
-                    const ep = savedMovie.episodes[i];
-                    if (savedMovie.episode_states[ep.link_m3u8] === "watching") {
-                        targetUrl = ep.link_m3u8;
-                        targetIdx = i;
-                        break;
-                    }
-                }
-                
-                // 2. Nếu không có tập nào đang xem, tìm tập chưa xem gần nhất (tập đầu tiên không phải watched)
-                if (!targetUrl) {
-                    for (let i = 0; i < savedMovie.episodes.length; i++) {
-                        const ep = savedMovie.episodes[i];
-                        if (savedMovie.episode_states[ep.link_m3u8] !== "watched") {
-                            targetUrl = ep.link_m3u8;
-                            targetIdx = i;
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            // 3. Fallback dự phòng
-            if (!targetUrl) {
-                targetUrl = savedMovie.last_watched_url || (savedMovie.episodes.length > 0 ? savedMovie.episodes[0].link_m3u8 : null);
-                if (targetUrl) {
-                    targetIdx = savedMovie.episodes.findIndex(ep => ep.link_m3u8 === targetUrl);
-                    if (targetIdx === -1) targetIdx = 0;
-                }
-            }
-            
+            const { index: targetIdx, url: targetUrl } = HFUtils.resumeTarget(savedMovie, savedMovie.episodes);
             if (!targetUrl) return alert("Không tìm thấy tập phim nào.");
-            
-            currentMovie = { slug: savedMovie.slug, name: savedMovie.name, poster_url: savedMovie.poster_url };
+
+            currentMovie = { slug: savedMovie.slug, name: savedMovie.name, poster_url: savedMovie.poster_url, year: savedMovie.year };
             playEpisodesListDirect(savedMovie.episodes, targetIdx);
         }
 
@@ -3738,9 +3929,8 @@ document.addEventListener('visibilitychange', () => {
         // Initialize Smart Homepage
         (async function initHomepage() {
             loadFilterData();
-            await fetchHomeSection('latest', 1);
-            renderHeroCards();
-            await fetchHomeSection('phim-chieu-rap', 1);
+            loadHeroItems();
+            await fetchHomeSection('all', 1);
             renderGridCards(false);
             setupHomeInfiniteScroll();
         })();
@@ -3796,12 +3986,13 @@ document.addEventListener('visibilitychange', () => {
             }
             const key = homeKey(homeState.activeGridTab);
             const current = homeState[key].filters[type];
-            const html = [
-                `<button class="filter-option${current === '' ? ' active' : ''}" onclick="setFilter('${type}','')">Tất cả</button>`
-            ].concat(options.map(o =>
-                `<button class="filter-option${o.value === current ? ' active' : ''}" onclick="setFilter('${type}','${o.value}')">${o.label}</button>`
-            )).join('');
-            menu.innerHTML = html;
+            menu.innerHTML = '';
+            [{ label: 'Tất cả', value: '' }].concat(options).forEach(o => {
+                const btn = el('button', 'filter-option' + (o.value === current ? ' active' : ''), o.label);
+                btn.type = 'button';
+                btn.addEventListener('click', () => setFilter(type, o.value));
+                menu.appendChild(btn);
+            });
         }
 
         function setFilter(type, value) {
