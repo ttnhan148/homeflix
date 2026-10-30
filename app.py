@@ -1326,6 +1326,17 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
             headers={"Cache-Control": "no-cache"}
         )
         
+    except httpx.HTTPStatusError as e:
+        # Nguồn trả lỗi (thường là CDN chặn IP ngoài Việt Nam): báo 502 kèm lý do để client tự phát thẳng
+        status = e.response.status_code
+        headers = {"X-Upstream-Status": str(status), "Cache-Control": "no-store"}
+        if "mạng trong nước" in e.response.text:
+            headers["X-Upstream-Block"] = "geo"
+        logger.error(f"Upstream {status} for proxy m3u8 '{url}' (block={headers.get('X-Upstream-Block', '-')})")
+        return PlainTextResponse(f"Nguồn phim trả lỗi {status}", status_code=502, headers=headers)
+    except httpx.HTTPError as e:
+        logger.error(f"Cannot reach upstream for proxy m3u8 '{url}': {e}")
+        return PlainTextResponse("Không kết nối được nguồn phim", status_code=502, headers={"Cache-Control": "no-store"})
     except Exception as e:
         logger.error(f"Error fetching proxy m3u8 '{url}': {e}")
         return PlainTextResponse(f"Proxy Error: {str(e)}", status_code=500)
