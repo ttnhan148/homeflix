@@ -253,6 +253,73 @@
         $('castSheetClose').addEventListener('click', closeSheet);
         $('castScrim').addEventListener('click', closeSheet);
 
+        // --- Thanh nhỏ và bảng điều khiển ---
+        let remote = null;      // trạng thái phát mới nhất của TV đang liên kết
+        let lastStateTs = null;
+
+        function renderRemote() {
+            const v = HFCastUtils.remoteView(remote);
+            const active = !!(HFCast.linked && remote && remote.slug);
+            $('castMiniBar').hidden = !active;
+            if (!active) $('castRemote').hidden = true;
+            $('castMiniTitle').textContent = v.title;
+            $('castMiniEp').textContent = v.episode;
+            $('castMiniFill').style.width = v.pct + '%';
+            $('castMiniState').textContent = v.playing ? '❚❚' : '▶';
+            $('castRemoteTitle').textContent = v.title;
+            $('castRemoteEp').textContent = v.episode;
+            $('castRemoteFill').style.width = v.pct + '%';
+            $('castRemotePos').textContent = v.positionText;
+            $('castRemoteDur').textContent = v.durationText;
+            $('castPlayPause').textContent = v.playing ? '❚❚' : '▶';
+        }
+
+        function applyState(state) {
+            remote = state;
+            lastStateTs = Date.now();
+            renderRemote();
+        }
+
+        async function refreshRemote(strict) {
+            if (!HFCast.linked) return;
+            const res = await HFCast.api('GET', `/api/cast/state/${encodeURIComponent(HFCast.linked.id)}`).catch(() => null);
+            if (res && res.status === 200 && res.data && res.data.target_id) applyState(res.data);
+            else if (strict) HFCast.markUnresponsive();   // sau khi iPhone thức dậy: không có trạng thái = TV đã mất
+        }
+
+        HFCast.on('state', (state) => {
+            if (HFCastUtils.acceptState(state, HFCast.linked && HFCast.linked.id)) applyState(state);
+        });
+        HFCast.on('linked', () => { remote = null; lastStateTs = null; renderRemote(); refreshRemote(false); });
+        HFCast.on('unlinked', () => { remote = null; renderRemote(); });
+        HFCast.on('resume', () => refreshRemote(true));
+
+        // Đang phát mà TV im lặng quá lâu: coi như mất kết nối (TV dừng thì không có state nên không tính)
+        setInterval(() => {
+            if (HFCast.linked && remote && remote.playing && HFCastUtils.isStale(lastStateTs, Date.now(), HFCast.config.silenceMs)) {
+                HFCast.markUnresponsive();
+            }
+        }, 200);
+
+        function sendCmd(cmd) {
+            if (!HFCast.linked) return;
+            HFCast.api('POST', `/api/cast/${encodeURIComponent(HFCast.linked.id)}/command`, cmd)
+                .then(res => { if (res.status !== 200) HFCast.markUnresponsive(); })
+                .catch(() => HFCast.markUnresponsive());
+        }
+
+        $('castMiniBar').addEventListener('click', () => { $('castRemote').hidden = false; });
+        $('castRemoteClose').addEventListener('click', () => { $('castRemote').hidden = true; });
+        $('castPlayPause').addEventListener('click', () => sendCmd({ type: remote && remote.playing ? 'pause' : 'resume' }));
+        $('castBack10').addEventListener('click', () => sendCmd({ type: 'seek', delta: -10 }));
+        $('castFwd10').addEventListener('click', () => sendCmd({ type: 'seek', delta: 10 }));
+        $('castPrevEp').addEventListener('click', () => sendCmd({ type: 'episode', delta: -1 }));
+        $('castNextEp').addEventListener('click', () => sendCmd({ type: 'episode', delta: 1 }));
+        $('castAutoNext').addEventListener('change', (e) => sendCmd({ type: 'options', autoNext: e.target.checked }));
+        $('castAutoIntro').addEventListener('change', (e) => sendCmd({ type: 'options', autoIntro: e.target.checked }));
+        $('castStop').addEventListener('click', () => sendCmd({ type: 'stop' }));
+        $('castDisconnect').addEventListener('click', () => { HFCast.disconnect(); $('castRemote').hidden = true; });
+
         // Nối lại TV lần trước nếu còn trực tuyến. Im lặng: không tờ, không thông báo, không để trạng thái chờ.
         (async function silentReconnect() {
             const last = recall();

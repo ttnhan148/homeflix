@@ -2105,6 +2105,38 @@
         </div>
     </div>
     <div id="castToast" class="cast-toast glass" role="status" hidden></div>
+    <button type="button" id="castMiniBar" class="cast-mini glass" aria-label="Mở điều khiển TV" hidden>
+        <span class="cast-mini-info">
+            <span id="castMiniTitle" class="cast-mini-title"></span>
+            <span id="castMiniEp" class="cast-mini-ep"></span>
+        </span>
+        <span id="castMiniState" class="cast-mini-state">▶</span>
+        <span class="cast-mini-progress"><span id="castMiniFill" class="cast-mini-fill"></span></span>
+    </button>
+    <div id="castRemote" class="cast-remote glass" role="dialog" aria-label="Điều khiển TV" hidden>
+        <div class="cast-remote-head">
+            <div class="cast-remote-meta">
+                <div id="castRemoteTitle" class="cast-remote-title"></div>
+                <div id="castRemoteEp" class="cast-remote-ep"></div>
+            </div>
+            <button type="button" id="castRemoteClose" class="cast-sheet-close" aria-label="Đóng">✕</button>
+        </div>
+        <div class="cast-remote-progress"><div id="castRemoteFill" class="cast-remote-fill"></div></div>
+        <div class="cast-remote-times"><span id="castRemotePos">0:00</span><span id="castRemoteDur">0:00</span></div>
+        <div class="cast-remote-row">
+            <button type="button" id="castPrevEp" class="cast-round" aria-label="Tập trước">⏮</button>
+            <button type="button" id="castBack10" class="cast-round" aria-label="Lùi 10 giây">−10</button>
+            <button type="button" id="castPlayPause" class="cast-round cast-round-main" aria-label="Phát hoặc dừng">❚❚</button>
+            <button type="button" id="castFwd10" class="cast-round" aria-label="Tới 10 giây">+10</button>
+            <button type="button" id="castNextEp" class="cast-round" aria-label="Tập sau">⏭</button>
+        </div>
+        <label class="cast-option"><input type="checkbox" id="castAutoNext"><span>Tự qua tập</span></label>
+        <label class="cast-option"><input type="checkbox" id="castAutoIntro"><span>Bỏ qua intro</span></label>
+        <div class="cast-remote-actions">
+            <button type="button" id="castStop" class="cast-pill">Dừng trên TV</button>
+            <button type="button" id="castDisconnect" class="cast-pill cast-pill-danger">Ngắt kết nối</button>
+        </div>
+    </div>
 
     <!-- TAB BAR NỔI (iPhone): Khám phá, Tủ phim, và nút Tìm kiếm tách riêng -->
     <nav id="floatTabBar" class="float-tabbar" aria-label="Điều hướng chính">
