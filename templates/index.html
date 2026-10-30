@@ -1967,11 +1967,11 @@
 
                 <!-- Homepage content -->
                 <div id="homepageContent" style="display: flex; flex-direction: column; gap: 2rem;">
-                    <!-- Hero section: Latest -->
-                    <div id="heroSection" class="hero-scroll-section">
-                        <div class="reco-theme-title">Phim Mới Cập Nhật</div>
-                        <div id="heroGrid" class="hero-scroll-grid"></div>
-                    </div>
+                    <!-- Hero: phim hot chiếu rạp, poster phủ nền -->
+                    <section id="hero" class="hero" hidden aria-label="Phim chiếu rạp nổi bật">
+                        <div id="heroTrack" class="hero-track"></div>
+                        <div id="heroDots" class="hero-dots" hidden></div>
+                    </section>
 
                     <!-- Grid tabs section -->
                     <div class="grid-tabs-section">
@@ -2619,45 +2619,144 @@ document.addEventListener('visibilitychange', () => {
             });
         }
 
-        function renderHeroCards() {
-            const grid = document.getElementById('heroGrid');
-            if (!grid) return;
+        // --- HERO (phim hot chiếu rạp) ---
+        const HERO_IMAGE_FIELD = 'thumb_url'; // đổi sang 'poster_url' nếu hướng ảnh không hợp
+        const HERO_COUNT = 5;
+        const heroState = { items: [], details: {}, pending: {}, index: 0, loaded: false };
 
-            const state = homeState.latest;
-            if (state.items.length === 0 && state.loading) {
-                grid.innerHTML = Array(5).fill(0).map(() => `
-                    <div class="skeleton-card">
-                        <div class="skeleton-img"></div>
-                        <div class="skeleton-text"></div>
-                        <div class="skeleton-text-short"></div>
-                    </div>
-                `).join('');
-                return;
+        async function loadHeroItems() {
+            for (const path of ['/api/home/phim-chieu-rap', '/api/home/phim-le']) {
+                try {
+                    const res = await fetch(`${path}?page=1`);
+                    const data = await res.json();
+                    if (res.ok && !data.error && (data.items || []).length) {
+                        heroState.items = data.items.slice(0, HERO_COUNT);
+                        break;
+                    }
+                } catch (e) { console.warn('Hero: lỗi tải', path, e); }
             }
+            heroState.loaded = true;
+            renderHero();
+        }
 
-            grid.innerHTML = state.items.map(movie => {
-                const poster = movie.poster_url || '';
-                const chips = [movie.quality, movie.lang].filter(Boolean).join(' · ');
-                return `
-                    <div class="hero-card" onclick="showMovieDetailBySlug('${movie.slug}')" ${document.body.classList.contains('device-mobile') ? '' : 'tabindex="0"'}>
-                        <div class="poster-wrap">
-                            <img class="movie-poster" src="${poster}" alt="${movie.name}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>'">
-                            <div class="poster-overlay-top">
-                                ${chips ? `<span class="badge-chip">${chips}</span>` : ''}
-                            </div>
-                            <div class="poster-overlay-bottom">
-                                <div class="overlay-ep">${movie.episode_current || ''}</div>
-                            </div>
-                        </div>
-                        <div class="movie-info">
-                            <div class="movie-title">${movie.name}</div>
-                            <div class="movie-meta">
-                                <span>${movie.year}</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+        function heroImage(m) {
+            return m[HERO_IMAGE_FIELD] || m.poster_url || m.thumb_url || '';
+        }
+
+        function heroSlideEl(slug) {
+            return [...document.querySelectorAll('.hero-slide')].find(s => s.dataset.slug === slug) || null;
+        }
+
+        function fillHeroSlide(slug) {
+            const slide = heroSlideEl(slug);
+            const d = heroState.details[slug];
+            if (!slide || !d) return;
+            slide.querySelector('.hero-meta').textContent = HFUtils.heroMeta(d.movie);
+            slide.querySelector('.hero-desc').textContent = HFUtils.stripHtml(d.movie.content);
+        }
+
+        function loadHeroDetail(slug) {
+            if (heroState.details[slug]) return Promise.resolve(heroState.details[slug]);
+            if (!heroState.pending[slug]) {
+                heroState.pending[slug] = fetch(`/api/movie/${encodeURIComponent(slug)}`)
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.status !== 'success' || !d.movie) return null;
+                        heroState.details[slug] = d;
+                        fillHeroSlide(slug);
+                        return d;
+                    })
+                    .catch(e => { console.warn('Hero: lỗi tải chi tiết', slug, e); return null; })
+                    .finally(() => { delete heroState.pending[slug]; });
+            }
+            return heroState.pending[slug];
+        }
+
+        function updateHeroSaveLabels() {
+            document.querySelectorAll('.hero-slide').forEach(slide => {
+                slide.querySelector('.hero-btn-save').textContent = checkIsSaved(slide.dataset.slug) ? 'Đã lưu' : 'Lưu';
+            });
+        }
+
+        async function heroToggleSave(slug) {
+            const d = await loadHeroDetail(slug);
+            if (!d) return;
+            const m = d.movie;
+            await toggleSaveMovie(slug, m.name, m.poster_url, m.year, m.episode_current, d.episodes.length, d.episodes);
+            updateHeroSaveLabels();
+        }
+
+        function heroPlay(slug) {
+            showMovieDetailBySlug(slug);
+        }
+
+        function buildHeroSlide(m) {
+            const slide = el('article', 'hero-slide');
+            slide.dataset.slug = m.slug;
+            const img = el('img', 'hero-bg');
+            img.alt = '';
+            img.src = heroImage(m);
+            slide.appendChild(img);
+            slide.appendChild(el('div', 'hero-gradient'));
+            const content = el('div', 'hero-content');
+            content.appendChild(el('span', 'hero-badge', 'Đang chiếu rạp'));
+            content.appendChild(el('h2', 'hero-title', m.name));
+            content.appendChild(el('div', 'hero-meta', HFUtils.heroMeta({ year: m.year })));
+            content.appendChild(el('p', 'hero-desc'));
+            const actions = el('div', 'hero-actions');
+            const play = el('button', 'hero-btn-play', 'Phát');
+            play.type = 'button';
+            play.addEventListener('click', () => heroPlay(m.slug));
+            const save = el('button', 'hero-btn-save glass', 'Lưu');
+            save.type = 'button';
+            save.addEventListener('click', () => heroToggleSave(m.slug));
+            actions.append(play, save);
+            content.appendChild(actions);
+            slide.appendChild(content);
+            return slide;
+        }
+
+        function showHeroSlide(i, opts) {
+            const n = heroState.items.length;
+            if (!n) return;
+            i = Math.max(0, Math.min(n - 1, i));
+            heroState.index = i;
+            document.querySelectorAll('.hero-dot').forEach((d, k) => d.classList.toggle('active', k === i));
+            if (opts && opts.scroll) {
+                const track = document.getElementById('heroTrack');
+                track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
+            }
+            loadHeroDetail(heroState.items[i].slug);
+            if (i + 1 < n) loadHeroDetail(heroState.items[i + 1].slug);
+        }
+
+        function renderHero() {
+            const hero = document.getElementById('hero');
+            const track = document.getElementById('heroTrack');
+            const dots = document.getElementById('heroDots');
+            track.innerHTML = '';
+            dots.innerHTML = '';
+            const n = heroState.items.length;
+            hero.hidden = n === 0;
+            if (!n) return;
+            const slides = heroState.items.map(buildHeroSlide);
+            slides.forEach((slide, k) => {
+                track.appendChild(slide);
+                dots.appendChild(el('span', 'hero-dot' + (k === 0 ? ' active' : '')));
+            });
+            dots.hidden = n < 2;
+            const io = new IntersectionObserver(entries => entries.forEach(e => {
+                if (e.isIntersecting) showHeroSlide(slides.indexOf(e.target));
+            }), { root: track, threshold: 0.6 });
+            slides.forEach(sl => io.observe(sl));
+            hero.onkeydown = (e) => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                e.preventDefault();
+                showHeroSlide(heroState.index + (e.key === 'ArrowRight' ? 1 : -1), { scroll: true });
+                slides[heroState.index].querySelector('.hero-btn-play').focus({ preventScroll: true });
+            };
+            updateHeroSaveLabels();
+            showHeroSlide(0);
         }
 
         function renderGridCards(append) {
@@ -2736,23 +2835,6 @@ document.addEventListener('visibilitychange', () => {
         let homeObservers = {};
 
         function setupHomeInfiniteScroll() {
-            // Hero observer
-            const heroGrid = document.getElementById('heroGrid');
-            if (heroGrid && homeState.latest.hasMore) {
-                if (homeObservers.hero) homeObservers.hero.disconnect();
-                homeObservers.hero = new IntersectionObserver((entries) => {
-                    if (entries[0].isIntersecting && homeState.latest.hasMore && !homeState.latest.loading) {
-                        homeState.latest.page++;
-                        fetchHomeSection('latest', homeState.latest.page).then(() => {
-                            renderHeroCards();
-                            setupHomeInfiniteScroll();
-                        });
-                    }
-                }, { rootMargin: '300px' });
-                const lastCard = heroGrid.lastElementChild;
-                if (lastCard) homeObservers.hero.observe(lastCard);
-            }
-
             // Grid observer
             const gridContent = document.getElementById('homeGridContent');
             const loader = document.getElementById('gridLoader');
@@ -3511,6 +3593,7 @@ document.addEventListener('visibilitychange', () => {
             try {
                 const res = await fetch('/api/saved');
                 savedMoviesList = await res.json();
+                if (typeof updateHeroSaveLabels === 'function') updateHeroSaveLabels();
             } catch(e) {
                 console.error("Lỗi lấy danh sách tủ phim:", e);
             }
@@ -3520,7 +3603,7 @@ document.addEventListener('visibilitychange', () => {
             return savedMoviesList.some(item => item.slug === slug);
         }
 
-        async function toggleSaveMovie(slug, name, poster_url, year, episode_current, total_episodes) {
+        async function toggleSaveMovie(slug, name, poster_url, year, episode_current, total_episodes, episodes = currentDetailEpisodes) {
             const btn = document.getElementById('btnSaveDetail');
             const txt = document.getElementById('saveBtnText');
             const isSaved = checkIsSaved(slug);
@@ -3549,7 +3632,7 @@ document.addEventListener('visibilitychange', () => {
                             year, 
                             episode_current, 
                             total_episodes,
-                            episodes: currentDetailEpisodes
+                            episodes
                         })
                     });
                     const data = await res.json();
@@ -3770,8 +3853,8 @@ document.addEventListener('visibilitychange', () => {
         // Initialize Smart Homepage
         (async function initHomepage() {
             loadFilterData();
+            loadHeroItems();
             await fetchHomeSection('latest', 1);
-            renderHeroCards();
             await fetchHomeSection('phim-chieu-rap', 1);
             renderGridCards(false);
             setupHomeInfiniteScroll();

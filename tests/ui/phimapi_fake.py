@@ -17,9 +17,9 @@ def _item(slug, name=None):
             "episode_current": "Full", "tmdb": {}}
 
 
-def _page(prefix, page):
+def _page(prefix, page, count=PER_PAGE):
     items = []
-    for i in range(PER_PAGE):
+    for i in range(count):
         n = (page - 1) * PER_PAGE + i + 1
         slug = "phim-chung" if (page == 1 and i == 2 and prefix in ("phim-le", "phim-bo")) else f"{prefix}-{n}"
         items.append(_item(slug))
@@ -30,7 +30,8 @@ def _page(prefix, page):
 class FakePhimapi:
     """Thay httpx.AsyncClient của app: trả dữ liệu phimapi cố định, không gọi mạng."""
 
-    def __init__(self, fail=(), content=None, names=None):
+    def __init__(self, fail=(), content=None, names=None, counts=None):
+        self.counts = counts or {}
         self.fail = tuple(fail)
         self.content = content or {}
         self.names = names or {}
@@ -45,9 +46,10 @@ class FakePhimapi:
             params = {**q, **params}
         page = int(params.get("page", 1))
         if "/v1/api/home" in url:
-            return _Resp(_page("latest", page))
+            return _Resp(_page("latest", page, self.counts.get("latest", PER_PAGE)))
         if "/v1/api/danh-sach/" in url:
-            return _Resp(self._with_names(_page(url.rsplit("/", 1)[1], page)))
+            kind = url.rsplit("/", 1)[1]
+            return _Resp(self._with_names(_page(kind, page, self.counts.get(kind, PER_PAGE))))
         if url.endswith("/v1/api/the-loai"):
             return _Resp({"data": {"items": [{"name": "Hành Động", "slug": "hanh-dong"}, {"name": "Tình Cảm", "slug": "tinh-cam"}]}})
         if url.endswith("/v1/api/quoc-gia"):

@@ -138,3 +138,212 @@ body.device-mobile .manual-url-link {
     color: var(--text-dim);
     font-size: 14px;
 }
+
+/* --- Hero: poster phủ nền, chữ đè lên --- */
+.hero[hidden],
+.hero-dots[hidden] {
+    display: none !important;
+}
+
+.hero {
+    position: relative;
+    width: 100%;
+    height: 56vh;
+    min-height: 340px;
+    overflow: hidden;
+    border-radius: 28px;
+    background: #111;
+}
+
+.hero-track {
+    display: flex;
+    height: 100%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+}
+
+.hero-track::-webkit-scrollbar {
+    display: none;
+}
+
+.hero-slide {
+    position: relative;
+    flex: 0 0 100%;
+    height: 100%;
+    scroll-snap-align: start;
+}
+
+.hero-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.hero-gradient {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(8, 8, 8, 0.96) 0%, rgba(8, 8, 8, 0.6) 38%, rgba(8, 8, 8, 0) 72%);
+}
+
+/* Chữ nằm dưới dải Dynamic Island và trên đáy hero */
+.hero-content {
+    position: absolute;
+    left: max(16px, var(--safe-left));
+    right: max(16px, var(--safe-right));
+    top: 24px;
+    bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.hero-badge {
+    align-self: flex-start;
+    padding: 4px 12px;
+    border-radius: var(--pill);
+    background: rgba(229, 9, 20, 0.85);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.hero-title {
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.hero-meta {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.hero-desc {
+    font-size: 14px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.85);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.hero-desc:empty {
+    display: none;
+}
+
+.hero-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.hero-btn-play,
+.hero-btn-save {
+    min-height: var(--tap);
+    padding: 0 28px;
+    border: 0;
+    border-radius: var(--pill);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.hero-btn-play {
+    background: #fff;
+    color: #000;
+}
+
+.hero-btn-save {
+    color: #fff;
+    border: 1px solid var(--glass-border-light);
+}
+
+.hero-dots {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 14px;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.hero-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--pill);
+    background: rgba(255, 255, 255, 0.4);
+    transition: width 0.2s, background 0.2s;
+}
+
+.hero-dot.active {
+    width: 18px;
+    background: #fff;
+}
+
+/* iPhone: hero kéo tràn dưới thanh trạng thái, logo nổi trên đó */
+body.device-mobile .hero {
+    height: calc(100svh - 150px);
+    margin: -1rem -1rem 0;
+    width: auto;
+    border-radius: 0;
+}
+
+body.device-mobile .hero-content {
+    top: calc(var(--safe-top) + 60px);
+}
+
+body.device-mobile .sticky-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    background: linear-gradient(rgba(8, 8, 8, 0.7), rgba(8, 8, 8, 0));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    padding-top: calc(var(--safe-top) + 8px);
+    padding-bottom: 8px;
+    pointer-events: none;
+}
+
+body.device-mobile .sticky-header header {
+    border: 0;
+    padding: 0 16px;
+}
+
+body.device-mobile .search-bar {
+    display: none;
+}
+
+body.device-mobile .tab-content:not(#search-tab),
+body.device-mobile #movieDetailContainer {
+    padding-top: calc(var(--safe-top) + 56px);
+}
+
+/* TV: hero ngang, chữ bên trái */
+body.device-tv .hero-content {
+    left: 48px;
+    right: auto;
+    width: 45%;
+    top: 24px;
+    bottom: 56px;
+}
+
+body.device-tv .hero-title {
+    font-size: 44px;
+}
+
+body.device-tv .hero-desc,
+body.device-tv .hero-meta {
+    font-size: 20px;
+}
