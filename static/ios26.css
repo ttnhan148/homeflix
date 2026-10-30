@@ -495,3 +495,84 @@ body.device-tv .grid-tab-content {
 body.device-tv .grid-load-more {
     grid-column: auto;
 }
+
+/* --- Tủ phim: Tiếp tục xem + Đã lưu --- */
+.library-section[hidden],
+.library-empty[hidden] {
+    display: none !important;
+}
+
+.library-section {
+    margin-bottom: 24px;
+}
+
+.library-title {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 12px;
+}
+
+.library-empty {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 3rem 0;
+    font-size: 1.1rem;
+}
+
+.continue-row {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+}
+
+.continue-row::-webkit-scrollbar {
+    display: none;
+}
+
+.continue-card {
+    flex: 0 0 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.continue-poster {
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    border-radius: 16px;
+    background: #1a1a1c;
+}
+
+.continue-title {
+    font-size: 13px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.continue-ep {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.continue-progress {
+    height: 4px;
+    border-radius: var(--pill);
+    background: rgba(255, 255, 255, 0.2);
+    overflow: hidden;
+}
+
+.continue-progress-fill {
+    height: 100%;
+    background: var(--accent-color);
+}

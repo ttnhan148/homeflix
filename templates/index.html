@@ -2015,7 +2015,15 @@
         <div id="saved-tab" class="tab-content">
             <div class="search-container">
                 <button type="button" id="manualUrlLink" class="manual-url-link" onclick="switchTab('player-tab')">Nhập URL phim</button>
-                <div id="savedMoviesGrid" class="saved-movies-list-container"></div>
+                <section id="continueSection" class="library-section" hidden>
+                    <h2 class="library-title">Tiếp tục xem</h2>
+                    <div id="continueRow" class="continue-row"></div>
+                </section>
+                <section id="savedSection" class="library-section" hidden>
+                    <h2 class="library-title">Đã lưu</h2>
+                    <div id="savedMoviesGrid" class="saved-movies-list-container"></div>
+                </section>
+                <div id="libraryEmpty" class="library-empty" hidden>Tủ phim trống. Hãy tìm phim và nhấn Lưu nhé!</div>
             </div>
         </div>
 
@@ -2539,6 +2547,7 @@ document.addEventListener('visibilitychange', () => {
         let savedMoviesList = [];
         // Danh sách tập phim đang xem ở phần chi tiết
         let currentDetailEpisodes = [];
+        let currentDetailMeta = null; // movie của trang chi tiết đang mở
         // Theo dõi danh sách tập đang phát và vị trí hiện tại
         let playbackEpisodes = [];
         let currentPlaybackIndex = -1;
@@ -3352,7 +3361,12 @@ document.addEventListener('visibilitychange', () => {
                     body: JSON.stringify({
                         slug: currentMovie.slug,
                         last_watched_episode: title,
-                        last_watched_url: url
+                        last_watched_url: url,
+                        // Thông tin để server tạo hàng lịch sử cho phim chưa lưu
+                        name: currentMovie.name,
+                        poster_url: currentMovie.poster_url,
+                        year: currentMovie.year,
+                        episodes: playbackEpisodes
                     })
                 }).then(res => res.json()).then(data => {
                     console.log("[Play] Lưu tiến trình xem thành công:", data);
@@ -3375,6 +3389,9 @@ document.addEventListener('visibilitychange', () => {
                                 }
                             }
                             savedMoviesList[sIdx].episode_states[url] = "watching";
+                            refreshDetailEpisodeList();
+                        } else if (data.movie) {
+                            savedMoviesList.push(data.movie);
                             refreshDetailEpisodeList();
                         }
                     }
@@ -3544,6 +3561,7 @@ document.addEventListener('visibilitychange', () => {
                     const m = data.movie;
                     const episodesList = data.episodes || [];
                     currentDetailEpisodes = episodesList;
+                    currentDetailMeta = m;
                     
                     const isSaved = checkIsSaved(m.slug);
                     
@@ -3591,7 +3609,7 @@ document.addEventListener('visibilitychange', () => {
                             movieSlug: m.slug,
                             watchStates,
                             onPlay: (ep) => {
-                                currentMovie = { slug: m.slug, name: m.name, poster_url: m.poster_url };
+                                currentMovie = { slug: m.slug, name: m.name, poster_url: m.poster_url, year: m.year };
                                 playEpisodesListDirect(currentDetailEpisodes, ep.link_m3u8);
                             }
                         });
@@ -3626,7 +3644,12 @@ document.addEventListener('visibilitychange', () => {
 
         function playSelectedMovieDirect(name, slug) {
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
-            currentMovie = { slug, name, poster_url: savedMovie ? savedMovie.poster_url : null };
+            const meta = currentDetailMeta && currentDetailMeta.slug === slug ? currentDetailMeta : null;
+            currentMovie = {
+                slug, name,
+                poster_url: (savedMovie && savedMovie.poster_url) || (meta && meta.poster_url) || null,
+                year: (savedMovie && savedMovie.year) || (meta && meta.year) || ''
+            };
             const targetUrl = savedMovie ? savedMovie.last_watched_url : null;
             playEpisodesListDirect(currentDetailEpisodes, targetUrl);
         }
@@ -3644,7 +3667,7 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function checkIsSaved(slug) {
-            return savedMoviesList.some(item => item.slug === slug);
+            return savedMoviesList.some(item => item.slug === slug && item.saved === true);
         }
 
         async function toggleSaveMovie(slug, name, poster_url, year, episode_current, total_episodes, episodes = currentDetailEpisodes) {
@@ -3681,7 +3704,7 @@ document.addEventListener('visibilitychange', () => {
                     });
                     const data = await res.json();
                     if (data.status === 'success') {
-                        savedMoviesList.push(data.movie);
+                        savedMoviesList = savedMoviesList.filter(item => item.slug !== slug).concat(data.movie);
                         if (btn) {
                             btn.className = "detail-action-side";
                             txt.textContent = "Đã lưu";
@@ -3723,21 +3746,45 @@ document.addEventListener('visibilitychange', () => {
             }
         }
 
+        function renderContinueRow(rows) {
+            const row = document.getElementById('continueRow');
+            row.innerHTML = '';
+            rows.forEach(m => {
+                const card = el('button', 'continue-card');
+                card.type = 'button';
+                card.dataset.slug = m.slug;
+                const img = el('img', 'continue-poster');
+                img.alt = '';
+                img.src = m.poster_url || '';
+                card.appendChild(img);
+                card.appendChild(el('div', 'continue-title', m.name));
+                card.appendChild(el('div', 'continue-ep', m.last_watched_episode || ''));
+                const bar = el('div', 'continue-progress');
+                const fill = el('div', 'continue-progress-fill');
+                fill.style.width = HFUtils.progressPct(m) + '%';
+                bar.appendChild(fill);
+                card.appendChild(bar);
+                card.addEventListener('click', () => playResumeSavedMovie(m.slug));
+                row.appendChild(card);
+            });
+        }
+
         async function renderSavedMovies() {
             const grid = document.getElementById('savedMoviesGrid');
-            grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 3rem 0;">Đang tải tủ phim từ máy chủ...</div>';
-            
             await fetchSavedMovies();
-            
-            if (savedMoviesList.length === 0) {
-                grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 3rem 0; font-size: 1.1rem;">Tủ phim trống. Hãy tìm phim và nhấn Lưu nhé!</div>';
-                return;
-            }
-            
+
+            const { continueWatching, saved } = HFUtils.splitLibrary(savedMoviesList);
+            document.getElementById('continueSection').hidden = continueWatching.length === 0;
+            document.getElementById('savedSection').hidden = saved.length === 0;
+            document.getElementById('libraryEmpty').hidden = continueWatching.length + saved.length > 0;
+            renderContinueRow(continueWatching);
             grid.innerHTML = '';
-            savedMoviesList.forEach(m => {
+            if (saved.length === 0) return;
+
+            saved.forEach(m => {
                 const card = document.createElement('div');
                 card.className = 'saved-movie-row';
+                card.dataset.slug = m.slug;
                 if (!document.body.classList.contains('device-mobile')) {
                     card.setAttribute('tabindex', '0');
                 }
@@ -3817,45 +3864,10 @@ document.addEventListener('visibilitychange', () => {
                 return;
             }
             
-            let targetUrl = null;
-            let targetIdx = 0;
-            
-            if (savedMovie.episode_states && savedMovie.episodes.length > 0) {
-                // 1. Tìm tập đang xem (watching)
-                for (let i = 0; i < savedMovie.episodes.length; i++) {
-                    const ep = savedMovie.episodes[i];
-                    if (savedMovie.episode_states[ep.link_m3u8] === "watching") {
-                        targetUrl = ep.link_m3u8;
-                        targetIdx = i;
-                        break;
-                    }
-                }
-                
-                // 2. Nếu không có tập nào đang xem, tìm tập chưa xem gần nhất (tập đầu tiên không phải watched)
-                if (!targetUrl) {
-                    for (let i = 0; i < savedMovie.episodes.length; i++) {
-                        const ep = savedMovie.episodes[i];
-                        if (savedMovie.episode_states[ep.link_m3u8] !== "watched") {
-                            targetUrl = ep.link_m3u8;
-                            targetIdx = i;
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            // 3. Fallback dự phòng
-            if (!targetUrl) {
-                targetUrl = savedMovie.last_watched_url || (savedMovie.episodes.length > 0 ? savedMovie.episodes[0].link_m3u8 : null);
-                if (targetUrl) {
-                    targetIdx = savedMovie.episodes.findIndex(ep => ep.link_m3u8 === targetUrl);
-                    if (targetIdx === -1) targetIdx = 0;
-                }
-            }
-            
+            const { index: targetIdx, url: targetUrl } = HFUtils.resumeTarget(savedMovie, savedMovie.episodes);
             if (!targetUrl) return alert("Không tìm thấy tập phim nào.");
-            
-            currentMovie = { slug: savedMovie.slug, name: savedMovie.name, poster_url: savedMovie.poster_url };
+
+            currentMovie = { slug: savedMovie.slug, name: savedMovie.name, poster_url: savedMovie.poster_url, year: savedMovie.year };
             playEpisodesListDirect(savedMovie.episodes, targetIdx);
         }
 
