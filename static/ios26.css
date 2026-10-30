@@ -347,3 +347,151 @@ body.device-tv .hero-desc,
 body.device-tv .hero-meta {
     font-size: 20px;
 }
+
+/* --- Thanh lọc: loại phim + chip, dính khi cuộn trên iPhone --- */
+#filterBar {
+    position: relative;
+    z-index: 60;
+    padding: 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Lớp kính nằm ở phần tử giả để tờ chọn (position: fixed) không bị kẹt trong backdrop-filter */
+#filterBar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: rgba(8, 8, 8, 0.72);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+}
+
+#filterBar .type-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 8px;
+}
+
+#filterBar .type-row::-webkit-scrollbar {
+    display: none;
+}
+
+#filterBar .grid-tab-btn {
+    flex: 0 0 auto;
+    min-height: var(--tap);
+    padding: 0 18px;
+    border-radius: var(--pill);
+    border: 1px solid var(--glass-border-light);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#filterBar .grid-tab-btn.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+#filterBar .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+#filterBar .filter-bar {
+    margin-left: 0;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#filterBar .filter-btn,
+#filterBar .filter-clear-btn {
+    min-height: var(--tap);
+    padding: 0 16px;
+    border-radius: var(--pill);
+    font-size: 14px;
+}
+
+#filterBar .filter-btn.active {
+    color: #fff;
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.result-count {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.filter-menu {
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    background: rgba(28, 28, 30, 0.88);
+}
+
+.filter-option {
+    min-height: var(--tap);
+}
+
+body.device-mobile #filterBar {
+    position: sticky;
+    top: calc(var(--safe-top) + 44px);
+    margin: 0 -1rem;
+    padding: 8px 1rem;
+}
+
+/* iPhone: tờ chọn dạng viên thuốc nổi phía trên tab bar */
+body.device-mobile .filter-menu {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: calc(var(--safe-bottom) + 8px + 64px + 12px);
+    min-width: 0;
+    max-height: 55vh;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 16px;
+    border-radius: 28px;
+    z-index: 950;
+}
+
+body.device-mobile .filter-option {
+    padding: 0 16px;
+    border-radius: var(--pill);
+    border: 1px solid var(--glass-border-light);
+}
+
+body.device-mobile .grid-tab-content {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+body.device-mobile .grid-tab-content .movie-title {
+    font-size: 12px;
+}
+
+body.device-mobile .grid-tab-content .movie-meta {
+    font-size: 11px;
+}
+
+/* TV: kết quả là một hàng cuộn ngang */
+body.device-tv .grid-tab-content {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: 220px;
+    overflow-x: auto;
+    padding: 12px 8px 28px;
+}
+
+body.device-tv .grid-load-more {
+    grid-column: auto;
+}

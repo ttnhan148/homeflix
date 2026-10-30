@@ -17,11 +17,11 @@ def _item(slug, name=None):
             "episode_current": "Full", "tmdb": {}}
 
 
-def _page(prefix, page, count=PER_PAGE):
+def _page(prefix, page, count=PER_PAGE, tag=""):
     items = []
     for i in range(count):
         n = (page - 1) * PER_PAGE + i + 1
-        slug = "phim-chung" if (page == 1 and i == 2 and prefix in ("phim-le", "phim-bo")) else f"{prefix}-{n}"
+        slug = "phim-chung" if (page == 1 and i == 2 and prefix in ("phim-le", "phim-bo")) else f"{prefix}{tag}-{n}"
         items.append(_item(slug))
     pagination = {"currentPage": page, "totalPages": TOTAL_PAGES, "totalItems": PER_PAGE * TOTAL_PAGES}
     return {"data": {"items": items, "params": {"pagination": pagination}}}
@@ -46,10 +46,11 @@ class FakePhimapi:
             params = {**q, **params}
         page = int(params.get("page", 1))
         if "/v1/api/home" in url:
-            return _Resp(_page("latest", page, self.counts.get("latest", PER_PAGE)))
+            return _Resp(self._with_names(_page("latest", page, self.counts.get("latest", PER_PAGE))))
         if "/v1/api/danh-sach/" in url:
             kind = url.rsplit("/", 1)[1]
-            return _Resp(self._with_names(_page(kind, page, self.counts.get(kind, PER_PAGE))))
+            tag = f"-{params['country']}" if params.get("country") else ""
+            return _Resp(self._with_names(_page(kind, page, self.counts.get(kind, PER_PAGE), tag)))
         if url.endswith("/v1/api/the-loai"):
             return _Resp({"data": {"items": [{"name": "Hành Động", "slug": "hanh-dong"}, {"name": "Tình Cảm", "slug": "tinh-cam"}]}})
         if url.endswith("/v1/api/quoc-gia"):

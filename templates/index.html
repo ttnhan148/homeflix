@@ -1975,25 +1975,31 @@
 
                     <!-- Grid tabs section -->
                     <div class="grid-tabs-section">
-                        <div class="grid-tabs-nav">
-                            <button class="grid-tab-btn active" data-tab="phim-chieu-rap" onclick="switchHomeTab('phim-chieu-rap')">Phim Chiếu Rạp</button>
-                            <button class="grid-tab-btn" data-tab="phim-le" onclick="switchHomeTab('phim-le')">Phim Lẻ</button>
-                            <button class="grid-tab-btn" data-tab="phim-bo" onclick="switchHomeTab('phim-bo')">Phim Bộ</button>
-                            <button class="grid-tab-btn" data-tab="tv-shows" onclick="switchHomeTab('tv-shows')">TV Shows</button>
-                            <div class="filter-bar">
-                                <div class="filter-dropdown">
-                                    <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại ▾</button>
-                                    <div class="filter-menu" id="filterMenu-category"></div>
+                        <div id="filterBar" class="filter-bar-wrap">
+                            <div class="grid-tabs-nav type-row">
+                                <button class="grid-tab-btn active" data-tab="all" onclick="switchHomeTab('all')">Tất cả</button>
+                                <button class="grid-tab-btn" data-tab="phim-chieu-rap" onclick="switchHomeTab('phim-chieu-rap')">Chiếu rạp</button>
+                                <button class="grid-tab-btn" data-tab="phim-le" onclick="switchHomeTab('phim-le')">Phim lẻ</button>
+                                <button class="grid-tab-btn" data-tab="phim-bo" onclick="switchHomeTab('phim-bo')">Phim bộ</button>
+                                <button class="grid-tab-btn" data-tab="tv-shows" onclick="switchHomeTab('tv-shows')">TV Shows</button>
+                            </div>
+                            <div class="chip-row">
+                                <div class="filter-bar">
+                                    <div class="filter-dropdown">
+                                        <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại ▾</button>
+                                        <div class="filter-menu" id="filterMenu-category"></div>
+                                    </div>
+                                    <div class="filter-dropdown">
+                                        <button class="filter-btn" id="filterBtn-country" onclick="toggleFilterDropdown('country')">Quốc gia ▾</button>
+                                        <div class="filter-menu" id="filterMenu-country"></div>
+                                    </div>
+                                    <div class="filter-dropdown">
+                                        <button class="filter-btn" id="filterBtn-year" onclick="toggleFilterDropdown('year')">Năm ▾</button>
+                                        <div class="filter-menu" id="filterMenu-year"></div>
+                                    </div>
+                                    <button class="filter-clear-btn" id="filterClearBtn" onclick="clearAllFilters()" style="display:none;">✕ Xóa lọc</button>
                                 </div>
-                                <div class="filter-dropdown">
-                                    <button class="filter-btn" id="filterBtn-country" onclick="toggleFilterDropdown('country')">Quốc gia ▾</button>
-                                    <div class="filter-menu" id="filterMenu-country"></div>
-                                </div>
-                                <div class="filter-dropdown">
-                                    <button class="filter-btn" id="filterBtn-year" onclick="toggleFilterDropdown('year')">Năm ▾</button>
-                                    <div class="filter-menu" id="filterMenu-year"></div>
-                                </div>
-                                <button class="filter-clear-btn" id="filterClearBtn" onclick="clearAllFilters()" style="display:none;">✕ Xóa lọc</button>
+                                <span id="resultCount" class="result-count"></span>
                             </div>
                         </div>
                         <div id="homeGridContent" class="grid-tab-content"></div>
@@ -2540,80 +2546,105 @@ document.addEventListener('visibilitychange', () => {
         let downloadStatuses = {};
 
         // --- Smart Homepage State ---
+        const newListState = () => ({ items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, total: null, fetchError: false, deadTypes: new Set(), filters: { category: '', country: '', year: '' } });
         let homeState = {
-            latest: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0 },
-            phimLe: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
-            phimChieuRap: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
-            phimBo: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
-            tvShows: { items: [], page: 1, loading: false, hasMore: true, fetchSeq: 0, filters: { category: '', country: '', year: '' } },
-            activeGridTab: 'phim-chieu-rap'
+            all: newListState(),
+            phimLe: newListState(),
+            phimChieuRap: newListState(),
+            phimBo: newListState(),
+            tvShows: newListState(),
+            activeGridTab: 'all'
         };
 
         function homeKey(tab) {
-            const map = { 'phim-chieu-rap': 'phimChieuRap', 'phim-le': 'phimLe', 'phim-bo': 'phimBo', 'tv-shows': 'tvShows' };
-            return map[tab] || 'phimChieuRap';
+            const map = { 'all': 'all', 'phim-chieu-rap': 'phimChieuRap', 'phim-le': 'phimLe', 'phim-bo': 'phimBo', 'tv-shows': 'tvShows' };
+            return map[tab] || 'all';
+        }
+
+        const TYPE_ENDPOINTS = {
+            'phim-chieu-rap': '/api/home/phim-chieu-rap',
+            'phim-le': '/api/home/phim-le',
+            'phim-bo': '/api/home/phim-bo',
+            'tv-shows': '/api/home/tv-shows'
+        };
+        // "Tất cả" có bộ lọc: /api/home/latest không lọc được nên hỏi song song ba loại rồi gộp
+        const FANOUT_TYPES = ['phim-le', 'phim-bo', 'tv-shows'];
+
+        function hasActiveFilter(f) {
+            return !!(f && (f.category || f.country || f.year));
+        }
+
+        function filterQuery(f) {
+            let q = '';
+            if (f.category) q += `&category=${encodeURIComponent(f.category)}`;
+            if (f.country) q += `&country=${encodeURIComponent(f.country)}`;
+            if (f.year) q += `&year=${encodeURIComponent(f.year)}`;
+            return q;
+        }
+
+        async function fetchListJson(url) {
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                return res.ok && !data.error ? data : null;
+            } catch (e) {
+                console.warn('Lỗi tải danh sách', url, e);
+                return null;
+            }
         }
 
         async function fetchHomeSection(section, page) {
-            const key = section === 'latest' ? 'latest' : homeKey(section);
-            const state = homeState[key];
+            const state = homeState[homeKey(section)];
             if (state.loading || !state.hasMore) return;
 
             state.loading = true;
             state.page = page || state.page;
-
-            let endpoint;
-            let query = `page=${state.page}`;
-            if (section === 'latest') {
-                endpoint = '/api/home/latest';
-            } else {
-                endpoint = section === 'phim-le' ? '/api/home/phim-le' : section === 'phim-bo' ? '/api/home/phim-bo' : section === 'tv-shows' ? '/api/home/tv-shows' : '/api/home/phim-chieu-rap';
-                const f = state.filters;
-                if (f.category) query += `&category=${encodeURIComponent(f.category)}`;
-                if (f.country) query += `&country=${encodeURIComponent(f.country)}`;
-                if (f.year) query += `&year=${encodeURIComponent(f.year)}`;
-            }
-
             const mySeq = ++state.fetchSeq;
 
             try {
-                const res = await fetch(`${endpoint}?${query}`);
-                const data = await res.json();
-                if (mySeq !== state.fetchSeq) return;
+                let items, hasMore, total, failed;
+                if (section === 'all' && hasActiveFilter(state.filters)) {
+                    const types = FANOUT_TYPES.filter(t => !state.deadTypes.has(t));
+                    const pages = await Promise.all(types.map(t =>
+                        fetchListJson(`${TYPE_ENDPOINTS[t]}?page=${state.page}${filterQuery(state.filters)}`)));
+                    if (mySeq !== state.fetchSeq) return;
+                    types.forEach((t, i) => { if (!pages[i]) state.deadTypes.add(t); });
+                    ({ items, hasMore, total } = HFUtils.mergeTypePages(pages));
+                    failed = pages.every(p => !p);
+                } else {
+                    const url = section === 'all'
+                        ? `/api/home/latest?page=${state.page}`
+                        : `${TYPE_ENDPOINTS[section]}?page=${state.page}${filterQuery(state.filters)}`;
+                    const data = await fetchListJson(url);
+                    if (mySeq !== state.fetchSeq) return;
+                    failed = !data;
+                    items = data ? (data.items || []) : [];
+                    const pag = (data && data.pagination) || {};
+                    hasMore = items.length > 0 && !(pag.currentPage >= pag.totalPages);
+                    total = Number.isFinite(pag.totalItems) ? pag.totalItems : null;
+                }
 
-                if (!res.ok || data.error) {
-                    state.fetchError = true;
+                state.fetchError = failed;
+                if (failed) {
+                    state.hasMore = false; // không thử lại vô hạn khi cuộn
                     return;
                 }
-                state.fetchError = false;
-
-                const items = data.items || [];
-                if (items.length === 0 || (data.pagination && data.pagination.currentPage >= data.pagination.totalPages)) {
-                    state.hasMore = false;
-                }
-
-                if (state.page === 1) {
-                    state.items = items;
-                } else {
-                    state.items = state.items.concat(items);
-                }
-            } catch (e) {
-                state.fetchError = true;
-                console.error(`Error fetching ${section}:`, e);
+                state.hasMore = hasMore;
+                state.total = total;
+                state.items = state.page === 1 ? items : state.items.concat(items);
             } finally {
                 if (mySeq === state.fetchSeq) state.loading = false;
             }
         }
 
         function applyFilter() {
-            const key = homeKey(homeState.activeGridTab);
-            const state = homeState[key];
-            state.items = [];
-            state.page = 1;
-            state.loading = false;
-            state.hasMore = true;
+            const tab = homeState.activeGridTab;
+            const state = homeState[homeKey(tab)];
+            Object.assign(state, { items: [], page: 1, loading: false, hasMore: true, total: null, fetchError: false, deadTypes: new Set() });
             updateFilterUI();
-            fetchHomeSection(homeState.activeGridTab, 1).then(() => {
+            const pending = fetchHomeSection(tab, 1);
+            renderGridCards(false); // hiện skeleton ngay
+            pending.then(() => {
                 renderGridCards(false);
                 setupHomeInfiniteScroll();
             });
@@ -2759,17 +2790,56 @@ document.addEventListener('visibilitychange', () => {
             showHeroSlide(0);
         }
 
+        const POSTER_PLACEHOLDER = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>';
+
+        function updateResultCount() {
+            const node = document.getElementById('resultCount');
+            if (!node) return;
+            const state = homeState[homeKey(homeState.activeGridTab)];
+            if (!state.items.length) node.textContent = '';
+            else node.textContent = Number.isFinite(state.total) ? `${state.total} phim` : `${state.items.length}+ phim`;
+        }
+
+        function buildMovieCard(movie) {
+            const card = el('div', 'movie-card');
+            card.dataset.slug = movie.slug;
+            if (!document.body.classList.contains('device-mobile')) card.setAttribute('tabindex', '0');
+
+            const wrap = el('div', 'poster-wrap');
+            const img = el('img', 'movie-poster');
+            img.alt = movie.name || '';
+            img.loading = 'lazy';
+            img.src = movie.poster_url || '';
+            img.onerror = () => { img.onerror = null; img.src = POSTER_PLACEHOLDER; };
+            wrap.appendChild(img);
+            const chips = [movie.quality, movie.lang].filter(Boolean).join(' · ');
+            const top = el('div', 'poster-overlay-top');
+            if (chips) top.appendChild(el('span', 'badge-chip', chips));
+            wrap.appendChild(top);
+            const bottom = el('div', 'poster-overlay-bottom');
+            bottom.appendChild(el('div', 'overlay-ep', movie.episode_current || ''));
+            wrap.appendChild(bottom);
+            card.appendChild(wrap);
+
+            const info = el('div', 'movie-info');
+            info.appendChild(el('div', 'movie-title', movie.name));
+            const meta = el('div', 'movie-meta');
+            meta.appendChild(el('span', '', `Năm: ${movie.year}`));
+            info.appendChild(meta);
+            card.appendChild(info);
+
+            card.addEventListener('click', () => showMovieDetailBySlug(movie.slug));
+            return card;
+        }
+
         function renderGridCards(append) {
             const grid = document.getElementById('homeGridContent');
             if (!grid) return;
 
-            // Remove old loader sentinel
             const oldLoader = document.getElementById('gridLoader');
             if (oldLoader) oldLoader.remove();
 
-            const tab = homeState.activeGridTab;
-            const key = homeKey(tab);
-            const state = homeState[key];
+            const state = homeState[homeKey(homeState.activeGridTab)];
 
             if (!append) {
                 if (state.items.length === 0 && state.loading) {
@@ -2780,56 +2850,30 @@ document.addEventListener('visibilitychange', () => {
                             <div class="skeleton-text-short"></div>
                         </div>
                     `).join('');
+                    updateResultCount();
                     return;
                 }
-                const hasFilter = state.filters && Object.values(state.filters).some(Boolean);
-                if (state.items.length === 0 && hasFilter && !state.loading && !state.fetchError) {
-                    grid.innerHTML = '<div class="filter-empty">Không tìm thấy phim phù hợp với bộ lọc.</div>';
+                if (state.items.length === 0) {
+                    const msg = state.fetchError ? 'Không tải được danh sách phim. Kiểm tra mạng rồi thử lại.'
+                        : hasActiveFilter(state.filters) ? 'Không tìm thấy phim phù hợp với bộ lọc.'
+                        : 'Chưa có phim để hiển thị.';
+                    grid.innerHTML = '';
+                    grid.appendChild(el('div', 'filter-empty', msg));
+                    updateResultCount();
                     return;
                 }
                 grid.innerHTML = '';
             }
 
-            const startIdx = append ? grid.children.length : 0;
-            for (let i = startIdx; i < state.items.length; i++) {
-                const movie = state.items[i];
-                const card = document.createElement('div');
-                card.className = 'movie-card';
-                if (!document.body.classList.contains('device-mobile')) {
-                    card.setAttribute('tabindex', '0');
-                }
+            const startIdx = append ? grid.querySelectorAll('.movie-card').length : 0;
+            for (let i = startIdx; i < state.items.length; i++) grid.appendChild(buildMovieCard(state.items[i]));
 
-                const poster = movie.poster_url || '';
-                const chips = [movie.quality, movie.lang].filter(Boolean).join(' · ');
-                card.innerHTML = `
-                    <div class="poster-wrap">
-                        <img class="movie-poster" src="${poster}" alt="${movie.name}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>'">
-                        <div class="poster-overlay-top">
-                            ${chips ? `<span class="badge-chip">${chips}</span>` : ''}
-                        </div>
-                        <div class="poster-overlay-bottom">
-                            <div class="overlay-ep">${movie.episode_current || ''}</div>
-                        </div>
-                    </div>
-                    <div class="movie-info">
-                        <div class="movie-title">${movie.name}</div>
-                        <div class="movie-meta">
-                            <span>Năm: ${movie.year}</span>
-                        </div>
-                    </div>
-                `;
-                card.onclick = () => showMovieDetailBySlug(movie.slug);
-                grid.appendChild(card);
-            }
-
-            // Add loader sentinel for infinite scroll if more pages exist
             if (state.hasMore) {
-                const loader = document.createElement('div');
-                loader.className = 'grid-load-more';
+                const loader = el('div', 'grid-load-more');
                 loader.id = 'gridLoader';
-                loader.textContent = '';
                 grid.appendChild(loader);
             }
+            updateResultCount();
         }
 
         let homeObservers = {};
@@ -3854,8 +3898,7 @@ document.addEventListener('visibilitychange', () => {
         (async function initHomepage() {
             loadFilterData();
             loadHeroItems();
-            await fetchHomeSection('latest', 1);
-            await fetchHomeSection('phim-chieu-rap', 1);
+            await fetchHomeSection('all', 1);
             renderGridCards(false);
             setupHomeInfiniteScroll();
         })();
