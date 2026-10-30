@@ -270,8 +270,12 @@ def validate_state(body, slug_ok) -> dict:
         raise ValueError("invalid slug")
     def opt_number(key):
         return None if body.get(key) is None else _number(body[key], 0)
-    return {"slug": slug, "title": _short_text(body.get("title")), "episode": _short_text(body.get("episode")),
-            "position": opt_number("position"), "duration": opt_number("duration"), "playing": body["playing"]}
+    out = {"slug": slug, "title": _short_text(body.get("title")), "episode": _short_text(body.get("episode")),
+           "position": opt_number("position"), "duration": opt_number("duration"), "playing": body["playing"]}
+    for key in ("autoNext", "autoIntro"):   # cài đặt thật của TV, để iPhone hiện công tắc đúng
+        if isinstance(body.get(key), bool):
+            out[key] = body[key]
+    return out
 
 
 def format_sse(event: str, data: dict) -> str:

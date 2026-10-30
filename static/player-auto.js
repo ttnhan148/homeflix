@@ -66,6 +66,8 @@
     }
   }
 
+  function closePrefsPanel() { const p = $('playerPrefs'); if (p) p.hidden = true; }
+
   function onEpisodeStart() {
     cancelCountdown();
     introHandled = false;
@@ -104,5 +106,5 @@
     initPrefsPanel();
   }
 
-  root.HFPlayerAuto = { init, getPrefs, setPrefs, onEnded, onEpisodeStart, cancelCountdown, skipIntro };
+  root.HFPlayerAuto = { init, getPrefs, setPrefs, onEnded, onEpisodeStart, cancelCountdown, skipIntro, closePrefsPanel };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

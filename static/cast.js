@@ -287,6 +287,8 @@
             $('castRemotePos').textContent = v.positionText;
             $('castRemoteDur').textContent = v.durationText;
             $('castPlayPause').textContent = v.playing ? '❚❚' : '▶';
+            if (remote && typeof remote.autoNext === 'boolean') $('castAutoNext').checked = remote.autoNext;
+            if (remote && typeof remote.autoIntro === 'boolean') $('castAutoIntro').checked = remote.autoIntro;
         }
 
         function applyState(state) {
@@ -377,7 +379,9 @@
         // --- trạng thái phát ---
         function currentState() {
             const active = document.body.classList.contains('player-active') && playbackEpisodes.length > 0 && currentPlaybackIndex >= 0;
-            if (!active) return { slug: null, title: null, episode: null, position: null, duration: null, playing: false };
+            const prefs = HFPlayerAuto.getPrefs();
+            const options = { autoNext: prefs.autoNext, autoIntro: prefs.autoIntro };
+            if (!active) return { slug: null, title: null, episode: null, position: null, duration: null, playing: false, ...options };
             const ep = playbackEpisodes[currentPlaybackIndex];
             return {
                 slug: currentMovie && currentMovie.slug ? currentMovie.slug : null,
@@ -386,6 +390,7 @@
                 position: Number.isFinite(video.currentTime) ? video.currentTime : null,
                 duration: Number.isFinite(video.duration) ? video.duration : null,
                 playing: !video.paused && !video.ended,
+                ...options,
             };
         }
 

@@ -162,3 +162,12 @@ def test_state_with_html_title_renders_as_text(app_module, make_client, open_app
     page.wait_for_selector("#castMiniBar:not([hidden])")
     assert EVIL in page.locator("#castMiniTitle").inner_text()
     assert page.evaluate("window.__pwn === undefined")
+
+
+def test_remote_switches_follow_tv_prefs(app_module, make_client, open_app):
+    page, tv = link_phone(app_module, make_client, open_app)
+    push_state(page, tv, autoNext=True, autoIntro=False)
+    open_remote(page)
+    assert page.is_checked("#castAutoNext") and not page.is_checked("#castAutoIntro")
+    push_state(page, tv, autoNext=False, autoIntro=True)
+    page.wait_for_function("!document.getElementById('castAutoNext').checked && document.getElementById('castAutoIntro').checked")

@@ -221,6 +221,13 @@ def test_prefs_survive_blocked_storage(open_app):
     assert page.locator(OVERLAY).is_hidden() and page.console_errors == []
 
 
+def test_exit_player_closes_prefs_panel(open_app):
+    page = open_player(open_app)
+    open_prefs(page)
+    page.evaluate("exitPlayer()")
+    assert page.locator("#playerPrefs").is_hidden()
+
+
 def test_player_auto_screenshots(open_app, tmp_path):
     import os
     from pathlib import Path

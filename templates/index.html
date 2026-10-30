@@ -3613,6 +3613,7 @@ document.addEventListener('visibilitychange', () => {
         // --- EXIT PLAYER (QUAY LẠI TRANG CHỦ) ---
         function exitPlayer() {
             HFPlayerAuto.cancelCountdown();
+            HFPlayerAuto.closePrefsPanel();
             reportPosition(false);
             clearResumeHandler();
             video.pause();

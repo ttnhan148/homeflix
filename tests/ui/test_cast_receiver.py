@@ -184,6 +184,7 @@ def test_state_is_reported_while_playing_with_controller_and_not_without(open_ap
     states = posts(page, "/api/cast/state")
     assert len(states) >= 3 and states[-1]["slug"] == "phim-le-1" and states[-1]["episode"] == "Tập 1" and states[-1]["playing"] is True
     assert states[-1]["title"] == "phim-le-1"
+    assert states[-1]["autoNext"] is True and states[-1]["autoIntro"] is False   # cài đặt thật của TV, để iPhone hiện đúng
     page.es_emit("command", {"type": "stop"})
     page.wait_for_timeout(100)
     assert posts(page, "/api/cast/state")[-1]["slug"] is None and posts(page, "/api/cast/state")[-1]["playing"] is False

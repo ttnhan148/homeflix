@@ -193,6 +193,11 @@ def test_validate_state_ok_and_normalised():
     assert idle == {"slug": None, "title": None, "episode": None, "position": None, "duration": None, "playing": False}
 
 
+def test_validate_state_keeps_only_boolean_prefs():
+    out = validate_state({"slug": "a", "playing": True, "autoNext": False, "autoIntro": "yes"}, slug_ok)
+    assert out["autoNext"] is False and "autoIntro" not in out
+
+
 @pytest.mark.parametrize("body", [
     {"playing": "no"}, {"slug": "a/b", "playing": True}, {"slug": "a", "position": -1, "playing": True},
     {"slug": "a", "position": float("nan"), "playing": True}, {"slug": "a", "title": "x" * 201, "playing": True},
