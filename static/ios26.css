@@ -292,7 +292,8 @@ body.device-mobile .manual-url-link {
 
 /* iPhone: hero kéo tràn dưới thanh trạng thái, logo nổi trên đó */
 body.device-mobile .hero {
-    height: calc(100svh - 150px);
+    /* chừa chỗ cho thanh lọc (112px) và khoảng cách 2rem nằm trên tab bar nổi ở màn hình đầu */
+    height: calc(100svh - var(--safe-bottom) - 8px - 64px - 12px - 112px - 2rem);
     margin: -1rem -1rem 0;
     width: auto;
     border-radius: 0;
@@ -313,6 +314,7 @@ body.device-mobile .sticky-header {
     backdrop-filter: none;
     padding-top: calc(var(--safe-top) + 8px);
     padding-bottom: 8px;
+    border: 0;
     pointer-events: none;
 }
 
@@ -404,6 +406,7 @@ body.device-tv .hero-meta {
 }
 
 #filterBar .filter-bar {
+    width: auto; /* luật .device-mobile .filter-bar cũ ép 100% làm số phim rớt xuống hàng riêng */
     margin-left: 0;
     flex-wrap: wrap;
     gap: 8px;
@@ -657,4 +660,27 @@ body.player-active #episodesDrawerEl {
     right: max(1rem, var(--safe-right));
     min-height: var(--tap);
     padding: 0 1rem;
+}
+
+/* TV: chữ điều khiển từ 20px, vùng chạm lớn hơn */
+body.device-tv #filterBar .grid-tab-btn,
+body.device-tv #filterBar .filter-btn,
+body.device-tv #filterBar .filter-clear-btn,
+body.device-tv .result-count,
+body.device-tv .hero-btn-play,
+body.device-tv .hero-btn-save {
+    font-size: 20px;
+}
+
+body.device-tv .hero-badge {
+    font-size: 20px;
+    padding: 6px 16px;
+}
+
+body.device-tv #filterBar .grid-tab-btn,
+body.device-tv #filterBar .filter-btn,
+body.device-tv #filterBar .filter-clear-btn,
+body.device-tv .hero-btn-play,
+body.device-tv .hero-btn-save {
+    min-height: 56px;
 }

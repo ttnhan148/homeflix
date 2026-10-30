@@ -1,5 +1,5 @@
-const CACHE_NAME = 'homeflix-shell-v1';
-const SHELL_URLS = ['/', '/static/logo.png', '/static/manifest.json'];
+const CACHE_NAME = 'homeflix-shell-v2';
+const SHELL_URLS = ['/', '/static/logo.png', '/static/manifest.json', '/static/ios26.css', '/static/home-utils.js'];
 
 // Install: pre-cache app-shell
 self.addEventListener('install', (event) => {
