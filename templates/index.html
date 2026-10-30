@@ -1882,6 +1882,7 @@
         <div id="stickyHeader" class="sticky-header">
             <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h1>HomeFlix</h1>
+                <button type="button" id="castSettingsBtn" class="cast-settings-btn" aria-label="Cài đặt điều khiển từ xa">⚙</button>
             </header>
 
             <!-- 3 OPTIONS MENU -->
@@ -2067,6 +2068,23 @@
             </div>
 
         </div>
+    </div>
+
+    <!-- CAST (TV/desktop nhận lệnh): nhãn, xác nhận kết nối, nhắc bấm phát, cài đặt -->
+    <div id="castLabel" class="cast-label glass" hidden></div>
+    <div id="castConfirm" class="cast-dialog glass" role="dialog" aria-modal="true" hidden>
+        <p id="castConfirmText"></p>
+        <div class="cast-dialog-actions">
+            <button type="button" id="castAllow" class="cast-btn cast-btn-primary">Cho phép</button>
+            <button type="button" id="castDeny" class="cast-btn">Từ chối</button>
+        </div>
+    </div>
+    <div id="castAutoplayPrompt" class="cast-dialog glass" role="dialog" hidden>
+        <p>Nhấn OK để phát</p>
+        <div class="cast-dialog-actions"><button type="button" id="castAutoplayBtn" class="cast-btn cast-btn-primary">OK</button></div>
+    </div>
+    <div id="castSettings" class="cast-panel glass" hidden>
+        <label class="cast-switch"><input type="checkbox" id="castAllowControl" checked><span>Cho phép điều khiển từ thiết bị khác</span></label>
     </div>
 
     <!-- TAB BAR NỔI (iPhone): Khám phá, Tủ phim, và nút Tìm kiếm tách riêng -->
@@ -2544,6 +2562,8 @@ document.addEventListener('visibilitychange', () => {
 
         // Trạng thái phim đang phát hiện tại (dùng để lưu tiến độ xem)
         let currentMovie = null;
+        let castStartAt = null; // giây bắt đầu do lệnh cast chỉ định (null: dùng tiến độ đã lưu)
+        const castOptions = { autoNext: false, autoIntro: false }; // do iPhone đặt; Gói 4 sẽ dùng
         // Danh sách phim lưu trên server
         let savedMoviesList = [];
         // Danh sách tập phim đang xem ở phần chi tiết
@@ -3363,6 +3383,10 @@ document.addEventListener('visibilitychange', () => {
                         && saved.duration && saved.position < saved.duration - 30) {
                     resumeAt = saved.position;
                 }
+            }
+            if (castStartAt !== null) {
+                resumeAt = castStartAt;
+                castStartAt = null;
             }
 
             // Gửi báo cáo tiến trình xem phim về Server (nếu phim đã được lưu)

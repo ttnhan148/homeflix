@@ -57,7 +57,7 @@ def open_app(app_module, browser):
             window.Hls.Events = { MANIFEST_PARSED: 'manifestParsed', ERROR: 'error' };
             window.Hls.ErrorTypes = {};
             HTMLMediaElement.prototype.play = function () { window.__plays = (window.__plays || 0) + 1; return Promise.resolve(); };
-            HTMLMediaElement.prototype.pause = function () {};
+            HTMLMediaElement.prototype.pause = function () { window.__pauses = (window.__pauses || 0) + 1; };
             HTMLMediaElement.prototype.canPlayType = function () { return ''; }; // ép đường hls.js, Chromium mới có HLS gốc
         """)
 
