@@ -176,6 +176,20 @@ Tất cả endpoint trả JSON (trừ proxy & trang chủ). Không có xác th�
 | POST | `/api/saved/progress` | Ghi tiến độ xem; đánh dấu tập cũ `watched`, hẹn xoá MP4 sau 3 giờ. |
 | DELETE | `/api/saved/{slug}` | Xoá phim + cascade: download records, cache session, file MP4. |
 
+### Cast (iPhone điều khiển TV cùng nhà)
+Cùng nhà = cùng IP công khai (hoặc cùng mạng LAN). Cần **một worker uvicorn**: hàng đợi lệnh, hiện diện và trạng thái nằm trong bộ nhớ.
+| Method | Path | Mô tả |
+|---|---|---|
+| POST | `/api/devices/heartbeat` | Thiết bị báo còn sống (15 giây/lần), body tùy chọn `{kind}`. |
+| GET | `/api/devices/nearby` | TV/máy tính cùng nhà đã heartbeat trong 40 giây. |
+| GET | `/api/cast/events` | Luồng SSE (lệnh, yêu cầu kết nối, trạng thái); `: ping` mỗi 15 giây. Reverse proxy phải tắt buffering (đã gửi `X-Accel-Buffering: no`). |
+| POST | `/api/cast/{target_id}/connect` | iPhone xin điều khiển TV: `connected` hoặc 202 `pending` (TV hỏi xác nhận lần đầu). |
+| POST | `/api/cast/requests/{controller_id}` | TV trả lời `{allow}`. |
+| DELETE | `/api/cast/link` | Ngắt kết nối. |
+| POST | `/api/cast/{target_id}/command` | Lệnh `play`, `pause`, `resume`, `stop`, `seek`, `episode`, `options`. |
+| POST / GET | `/api/cast/state`, `/api/cast/state/{target_id}` | TV báo trạng thái / iPhone lấy trạng thái mới nhất. |
+| GET / PATCH | `/api/cast/settings` | Công tắc "Cho phép điều khiển từ thiết bị khác" của TV. |
+
 ### Download HLS → MP4
 | Method | Path | Mô tả |
 |---|---|---|

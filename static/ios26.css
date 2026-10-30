@@ -690,3 +690,428 @@ body.device-mobile .search-overlay {
     padding-top: calc(var(--safe-top) + 1rem);
     padding-bottom: calc(var(--safe-bottom) + 8px + 64px + 16px);
 }
+
+/* --- Cast: bên nhận (TV, máy tính) --- */
+.cast-label[hidden],
+.cast-dialog[hidden],
+.cast-panel[hidden] {
+    display: none !important;
+}
+
+.cast-settings-btn {
+    min-width: var(--tap);
+    min-height: var(--tap);
+    border: 1px solid var(--glass-border-light);
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+body.device-mobile .cast-settings-btn {
+    display: none;
+}
+
+.cast-label {
+    position: fixed;
+    top: calc(var(--safe-top) + 16px);
+    right: max(16px, var(--safe-right));
+    z-index: 960;
+    padding: 8px 20px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.cast-dialog {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 980;
+    width: min(90vw, 520px);
+    padding: 28px;
+    border-radius: 28px;
+    text-align: center;
+    background: rgba(28, 28, 30, 0.9);
+}
+
+.cast-dialog p {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+.cast-dialog-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.cast-btn {
+    min-height: 56px;
+    min-width: 120px;
+    padding: 0 24px;
+    border: 1px solid var(--glass-border-light);
+    border-radius: var(--pill);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.cast-btn-primary {
+    background: #fff;
+    color: #000;
+}
+
+.cast-panel {
+    position: fixed;
+    top: calc(var(--safe-top) + 72px);
+    right: max(16px, var(--safe-right));
+    z-index: 970;
+    padding: 20px 24px;
+    border-radius: 24px;
+    background: rgba(28, 28, 30, 0.92);
+}
+
+.cast-switch {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.cast-switch input {
+    width: 28px;
+    height: 28px;
+}
+
+/* --- Cast: bên điều khiển (iPhone) --- */
+.cast-sheet[hidden],
+.cast-scrim[hidden],
+.cast-toast[hidden],
+.cast-dot[hidden],
+.cast-empty[hidden] {
+    display: none !important;
+}
+
+body:not(.device-mobile) .cast-top-btn {
+    display: none;
+}
+
+.cast-top-btn {
+    position: relative;
+    min-width: var(--tap);
+    min-height: var(--tap);
+    padding: 0;
+    border: 1px solid var(--glass-border-light);
+    border-radius: var(--pill);
+    background: rgba(8, 8, 8, 0.35);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.cast-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #30d158;
+    box-shadow: 0 0 0 2px rgba(8, 8, 8, 0.8);
+}
+
+body.device-mobile .sticky-header header {
+    align-items: center;
+}
+
+.cast-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 940;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.cast-sheet {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--safe-bottom) + 8px + 64px + 12px);
+    max-height: calc(100svh - var(--safe-top) - var(--safe-bottom) - 64px - 8px - 12px - 24px);
+    overflow-y: auto;
+    z-index: 950;
+    padding: 20px 16px 16px;
+    border-radius: 28px;
+    background: rgba(28, 28, 30, 0.9);
+}
+
+.cast-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.cast-sheet-head h2 {
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.cast-sheet-close {
+    min-width: var(--tap);
+    min-height: var(--tap);
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 16px;
+}
+
+.cast-device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cast-device {
+    min-height: 56px;
+    padding: 0 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid var(--glass-border-light);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: left;
+}
+
+.cast-device-status {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+}
+
+.cast-empty {
+    text-align: center;
+    padding: 16px 8px;
+    color: var(--text-dim);
+}
+
+.cast-empty p:first-child {
+    color: #fff;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.cast-hint {
+    font-size: 14px;
+}
+
+.cast-toast {
+    position: fixed;
+    left: 50%;
+    top: calc(var(--safe-top) + 64px);
+    transform: translateX(-50%);
+    z-index: 990;
+    padding: 10px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    background: rgba(28, 28, 30, 0.92);
+    max-width: calc(100vw - 32px);
+}
+
+/* --- Cast: thanh nhỏ và bảng điều khiển (iPhone) --- */
+.cast-mini[hidden],
+.cast-remote[hidden] {
+    display: none !important;
+}
+
+.cast-mini {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--safe-bottom) + 8px + 64px + 8px);
+    z-index: 899;
+    min-height: 56px;
+    padding: 8px 18px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-radius: 28px;
+    color: #fff;
+    text-align: left;
+    overflow: hidden;
+}
+
+.cast-mini-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.cast-mini-title {
+    font-size: 15px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cast-mini-ep {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.cast-mini-state {
+    font-size: 18px;
+}
+
+.cast-mini-progress {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 6px;
+    height: 3px;
+    border-radius: var(--pill);
+    background: rgba(255, 255, 255, 0.2);
+    overflow: hidden;
+}
+
+.cast-mini-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--accent-color);
+}
+
+.cast-remote {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--safe-bottom) + 8px + 64px + 12px);
+    max-height: calc(100svh - var(--safe-top) - var(--safe-bottom) - 64px - 8px - 12px - 24px);
+    overflow-y: auto;
+    z-index: 955;
+    padding: 20px 16px 16px;
+    border-radius: 28px;
+    background: rgba(28, 28, 30, 0.92);
+}
+
+.cast-remote-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.cast-remote-meta {
+    min-width: 0;
+}
+
+.cast-remote-title {
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.cast-remote-ep {
+    font-size: 14px;
+    color: var(--text-dim);
+}
+
+.cast-remote-progress {
+    height: 6px;
+    border-radius: var(--pill);
+    background: rgba(255, 255, 255, 0.2);
+    overflow: hidden;
+}
+
+.cast-remote-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent-color);
+}
+
+.cast-remote-times {
+    display: flex;
+    justify-content: space-between;
+    margin: 6px 0 14px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.cast-remote-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.cast-round {
+    min-width: var(--tap);
+    min-height: var(--tap);
+    width: 52px;
+    height: 52px;
+    border: 1px solid var(--glass-border-light);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.cast-round-main {
+    width: 64px;
+    height: 64px;
+    background: #fff;
+    color: #000;
+    font-size: 20px;
+}
+
+.cast-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: var(--tap);
+    font-size: 15px;
+}
+
+.cast-option input {
+    width: 24px;
+    height: 24px;
+}
+
+.cast-remote-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.cast-pill {
+    flex: 1;
+    min-height: var(--tap);
+    padding: 0 16px;
+    border: 1px solid var(--glass-border-light);
+    border-radius: var(--pill);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.cast-pill-danger {
+    color: #ff6961;
+}

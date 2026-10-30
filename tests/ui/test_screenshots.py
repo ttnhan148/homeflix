@@ -9,7 +9,7 @@ SIZES = [(430, 932, False), (440, 956, False), (1920, 1080, True)]
 
 def test_shell_precaches_new_static_files():
     sw = (ROOT / "static" / "sw.js").read_text()
-    assert "homeflix-shell-v2" in sw
+    assert "homeflix-shell-v" in sw  # phiên bản cache do các gói sau tăng (kiểm tra cụ thể ở test của gói đó)
     assert "/static/ios26.css" in sw and "/static/home-utils.js" in sw
 
 

@@ -20,6 +20,7 @@
     <!-- HLS.js cho thiết bị không Apple -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="/static/home-utils.js"></script>
+    <script src="/static/cast-utils.js"></script>
     <style>
         :root {
             --bg-color: #080808;
@@ -1881,6 +1882,11 @@
         <div id="stickyHeader" class="sticky-header">
             <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h1>HomeFlix</h1>
+                <button type="button" id="castBtn" class="cast-top-btn" aria-label="Phát lên TV">
+                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2 8V6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2h-6M2 12a9 9 0 019 9M2 16a5 5 0 015 5M2 20h.01"/></svg>
+                    <span id="castDot" class="cast-dot" hidden></span>
+                </button>
+                <button type="button" id="castSettingsBtn" class="cast-settings-btn" aria-label="Cài đặt điều khiển từ xa">⚙</button>
             </header>
 
             <!-- 3 OPTIONS MENU -->
@@ -2065,6 +2071,70 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- CAST (TV/desktop nhận lệnh): nhãn, xác nhận kết nối, nhắc bấm phát, cài đặt -->
+    <div id="castLabel" class="cast-label glass" hidden></div>
+    <div id="castConfirm" class="cast-dialog glass" role="dialog" aria-modal="true" hidden>
+        <p id="castConfirmText"></p>
+        <div class="cast-dialog-actions">
+            <button type="button" id="castAllow" class="cast-btn cast-btn-primary">Cho phép</button>
+            <button type="button" id="castDeny" class="cast-btn">Từ chối</button>
+        </div>
+    </div>
+    <div id="castAutoplayPrompt" class="cast-dialog glass" role="dialog" hidden>
+        <p>Nhấn OK để phát</p>
+        <div class="cast-dialog-actions"><button type="button" id="castAutoplayBtn" class="cast-btn cast-btn-primary">OK</button></div>
+    </div>
+    <div id="castSettings" class="cast-panel glass" hidden>
+        <label class="cast-switch"><input type="checkbox" id="castAllowControl" checked><span>Cho phép điều khiển từ thiết bị khác</span></label>
+    </div>
+
+    <!-- CAST (iPhone điều khiển): tờ "Phát lên" và thông báo -->
+    <div id="castScrim" class="cast-scrim" hidden></div>
+    <div id="castSheet" class="cast-sheet glass" role="dialog" aria-label="Phát lên" hidden>
+        <div class="cast-sheet-head">
+            <h2>Phát lên</h2>
+            <button type="button" id="castSheetClose" class="cast-sheet-close" aria-label="Đóng">✕</button>
+        </div>
+        <div id="castDeviceList" class="cast-device-list"></div>
+        <div id="castEmpty" class="cast-empty" hidden>
+            <p>Không thấy TV nào cùng mạng</p>
+            <p class="cast-hint">Mở HomeFlix trên TV (cùng Wi‑Fi) rồi thử lại.</p>
+        </div>
+    </div>
+    <div id="castToast" class="cast-toast glass" role="status" hidden></div>
+    <button type="button" id="castMiniBar" class="cast-mini glass" aria-label="Mở điều khiển TV" hidden>
+        <span class="cast-mini-info">
+            <span id="castMiniTitle" class="cast-mini-title"></span>
+            <span id="castMiniEp" class="cast-mini-ep"></span>
+        </span>
+        <span id="castMiniState" class="cast-mini-state">▶</span>
+        <span class="cast-mini-progress"><span id="castMiniFill" class="cast-mini-fill"></span></span>
+    </button>
+    <div id="castRemote" class="cast-remote glass" role="dialog" aria-label="Điều khiển TV" hidden>
+        <div class="cast-remote-head">
+            <div class="cast-remote-meta">
+                <div id="castRemoteTitle" class="cast-remote-title"></div>
+                <div id="castRemoteEp" class="cast-remote-ep"></div>
+            </div>
+            <button type="button" id="castRemoteClose" class="cast-sheet-close" aria-label="Đóng">✕</button>
+        </div>
+        <div class="cast-remote-progress"><div id="castRemoteFill" class="cast-remote-fill"></div></div>
+        <div class="cast-remote-times"><span id="castRemotePos">0:00</span><span id="castRemoteDur">0:00</span></div>
+        <div class="cast-remote-row">
+            <button type="button" id="castPrevEp" class="cast-round" aria-label="Tập trước">⏮</button>
+            <button type="button" id="castBack10" class="cast-round" aria-label="Lùi 10 giây">−10</button>
+            <button type="button" id="castPlayPause" class="cast-round cast-round-main" aria-label="Phát hoặc dừng">❚❚</button>
+            <button type="button" id="castFwd10" class="cast-round" aria-label="Tới 10 giây">+10</button>
+            <button type="button" id="castNextEp" class="cast-round" aria-label="Tập sau">⏭</button>
+        </div>
+        <label class="cast-option"><input type="checkbox" id="castAutoNext"><span>Tự qua tập</span></label>
+        <label class="cast-option"><input type="checkbox" id="castAutoIntro"><span>Bỏ qua intro</span></label>
+        <div class="cast-remote-actions">
+            <button type="button" id="castStop" class="cast-pill">Dừng trên TV</button>
+            <button type="button" id="castDisconnect" class="cast-pill cast-pill-danger">Ngắt kết nối</button>
         </div>
     </div>
 
@@ -2543,6 +2613,8 @@ document.addEventListener('visibilitychange', () => {
 
         // Trạng thái phim đang phát hiện tại (dùng để lưu tiến độ xem)
         let currentMovie = null;
+        let castStartAt = null; // giây bắt đầu do lệnh cast chỉ định (null: dùng tiến độ đã lưu)
+        const castOptions = { autoNext: false, autoIntro: false }; // do iPhone đặt; Gói 4 sẽ dùng
         // Danh sách phim lưu trên server
         let savedMoviesList = [];
         // Danh sách tập phim đang xem ở phần chi tiết
@@ -2564,6 +2636,11 @@ document.addEventListener('visibilitychange', () => {
             tvShows: newListState(),
             activeGridTab: 'all'
         };
+
+        // cast.js đăng ký window.__castRoute; nếu nó không nạp được thì mọi nút Phát vẫn phát cục bộ
+        function maybeCast(slug, episodeUrl) {
+            return typeof window.__castRoute === 'function' ? window.__castRoute(slug, episodeUrl) : false;
+        }
 
         function homeKey(tab) {
             const map = { 'all': 'all', 'phim-chieu-rap': 'phimChieuRap', 'phim-le': 'phimLe', 'phim-bo': 'phimBo', 'tv-shows': 'tvShows' };
@@ -2728,6 +2805,7 @@ document.addEventListener('visibilitychange', () => {
 
         // Phát ngay trong cú chạm: chi tiết đã tải trước nên không có await nào chen giữa.
         function heroPlay(slug) {
+            if (maybeCast(slug, null)) return;
             const d = heroState.details[slug];
             if (!d) {
                 // Chưa tải xong: báo đang tải, người dùng chạm lại khi xong (không phát bất đồng bộ, iOS sẽ chặn)
@@ -2822,6 +2900,7 @@ document.addEventListener('visibilitychange', () => {
                 slides[next].querySelector('.hero-btn-play').focus({ preventScroll: true });
             };
             updateHeroSaveLabels();
+            if (window.refreshPlayLabels) refreshPlayLabels();
             showHeroSlide(0);
         }
 
@@ -3363,6 +3442,10 @@ document.addEventListener('visibilitychange', () => {
                     resumeAt = saved.position;
                 }
             }
+            if (castStartAt !== null) {
+                resumeAt = castStartAt;
+                castStartAt = null;
+            }
 
             // Gửi báo cáo tiến trình xem phim về Server (nếu phim đã được lưu)
             if (currentMovie && currentMovie.slug) {
@@ -3554,7 +3637,7 @@ document.addEventListener('visibilitychange', () => {
             const btn = el('button', className);
             btn.type = 'button';
             btn.innerHTML = svg; // chỉ SVG tĩnh
-            btn.appendChild(document.createTextNode(label));
+            btn.appendChild(el('span', 'btn-label', label));
             btn.addEventListener('click', onClick);
             return btn;
         }
@@ -3623,6 +3706,7 @@ document.addEventListener('visibilitychange', () => {
                     const isSaved = checkIsSaved(m.slug);
                     
                     detailDiv.replaceChildren(buildDetailView(m, episodesList, isSaved));
+                    if (window.refreshPlayLabels) refreshPlayLabels();
                     setTimeout(initTabbing, 100);
                     if (episodesList.length > 0) {
                         const savedMovie = savedMoviesList.find(item => item.slug === m.slug);
@@ -3632,6 +3716,7 @@ document.addEventListener('visibilitychange', () => {
                             movieSlug: m.slug,
                             watchStates,
                             onPlay: (ep) => {
+                                if (maybeCast(m.slug, ep.link_m3u8)) return;
                                 currentMovie = { slug: m.slug, name: m.name, poster_url: m.poster_url, year: m.year };
                                 playEpisodesListDirect(currentDetailEpisodes, ep.link_m3u8);
                             }
@@ -3659,6 +3744,7 @@ document.addEventListener('visibilitychange', () => {
                 movieSlug: movie ? movie.slug : null,
                 watchStates,
                 onPlay: (ep) => {
+                    if (movie && maybeCast(movie.slug, ep.link_m3u8)) return;
                     if (movie) currentMovie = { slug: movie.slug, name: movie.name, poster_url: movie.poster_url };
                     playEpisodesListDirect(currentDetailEpisodes, ep.link_m3u8);
                 }
@@ -3666,6 +3752,7 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function playSelectedMovieDirect(name, slug) {
+            if (maybeCast(slug, null)) return;
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
             const meta = currentDetailMeta && currentDetailMeta.slug === slug ? currentDetailMeta : null;
             currentMovie = {
@@ -3869,12 +3956,14 @@ document.addEventListener('visibilitychange', () => {
         function playEpisodeFromSaved(slug, epIdx) {
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
             if (!savedMovie || !savedMovie.episodes || savedMovie.episodes.length === 0) return;
+            if (maybeCast(slug, savedMovie.episodes[epIdx] ? savedMovie.episodes[epIdx].link_m3u8 : null)) return;
             
             currentMovie = { slug: savedMovie.slug, name: savedMovie.name, poster_url: savedMovie.poster_url };
             playEpisodesListDirect(savedMovie.episodes, epIdx);
         }
 
         async function playResumeSavedMovie(slug) {
+            if (maybeCast(slug, null)) return;
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
             if (!savedMovie) return;
             
@@ -4047,5 +4136,6 @@ document.addEventListener('visibilitychange', () => {
             });
         }
     </script>
+    <script src="/static/cast.js"></script>
 </body>
 </html>

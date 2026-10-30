@@ -57,9 +57,27 @@ def open_app(app_module, browser):
             window.Hls.Events = { MANIFEST_PARSED: 'manifestParsed', ERROR: 'error' };
             window.Hls.ErrorTypes = {};
             HTMLMediaElement.prototype.play = function () { window.__plays = (window.__plays || 0) + 1; return Promise.resolve(); };
-            HTMLMediaElement.prototype.pause = function () {};
+            HTMLMediaElement.prototype.pause = function () { window.__pauses = (window.__pauses || 0) + 1; };
             HTMLMediaElement.prototype.canPlayType = function () { return ''; }; // ép đường hls.js, Chromium mới có HLS gốc
         """)
+
+        # EventSource giả: page.route không phát được luồng, nên test tự đẩy sự kiện vào (es_emit)
+        page.add_init_script("""
+            window.__es = [];
+            window.EventSource = class FakeEventSource {
+                constructor(url) { this.url = url; this.readyState = 1; this.listeners = {}; this.onerror = null;
+                    this.t = performance.now(); window.__es.push(this); }
+                addEventListener(name, fn) { (this.listeners[name] = this.listeners[name] || []).push(fn); }
+                close() { this.readyState = 2; }
+            };
+            const lastOpen = () => [...window.__es].reverse().find(e => e.readyState !== 2);
+            window.__esEmit = (name, data) => { const es = lastOpen(); if (es) (es.listeners[name] || []).forEach(f => f({data: JSON.stringify(data)})); };
+            window.__esError = () => { const es = lastOpen(); if (es && es.onerror) es.onerror(new Event('error')); };
+        """)
+        page.es_emit = lambda name, data: page.evaluate("([n, d]) => window.__esEmit(n, d)", [name, data])
+        page.es_error = lambda: page.evaluate("window.__esError()")
+        page.es_urls = lambda: page.evaluate("window.__es.map(e => e.url)")
+        page.es_open_count = lambda: page.evaluate("window.__es.filter(e => e.readyState !== 2).length")
 
         if any(safe):
             props = dict(zip(SAFE_VARS, (f"{v}px" for v in safe)))
