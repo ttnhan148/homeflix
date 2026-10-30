@@ -41,8 +41,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 POSTER_CACHE_DIR = os.path.join(CACHE_DIR, "posters")
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
-DB_FILE = os.path.join(BASE_DIR, "homeflix.db")
-DOWNLOADS_STATUS_FILE = os.path.join(BASE_DIR, "downloads.json")
+# Container mounts a volume here so the DB survives image rebuilds
+DATA_DIR = os.environ.get("HOMEFLIX_DATA_DIR", BASE_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_FILE = os.path.join(DATA_DIR, "homeflix.db")
+DOWNLOADS_STATUS_FILE = os.path.join(DATA_DIR, "downloads.json")
 
 # --- Định danh thiết bị (không đăng nhập) ---
 DEVICE_COOKIE = "hf_device"
