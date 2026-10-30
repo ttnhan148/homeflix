@@ -2008,6 +2008,7 @@
         <!-- TAB CONTENT 3: SAVED -->
         <div id="saved-tab" class="tab-content">
             <div class="search-container">
+                <button type="button" id="manualUrlLink" class="manual-url-link" onclick="switchTab('player-tab')">Nhập URL phim</button>
                 <div id="savedMoviesGrid" class="saved-movies-list-container"></div>
             </div>
         </div>
@@ -2052,6 +2053,23 @@
 
         </div>
     </div>
+
+    <!-- TAB BAR NỔI (iPhone): Khám phá, Tủ phim, và nút Tìm kiếm tách riêng -->
+    <nav id="floatTabBar" class="float-tabbar" aria-label="Điều hướng chính">
+        <div class="fab-capsule glass">
+            <button type="button" class="fab-tab active" id="fabTabExplore" onclick="switchTab('search-tab')">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9z"/></svg>
+                <span>Khám phá</span>
+            </button>
+            <button type="button" class="fab-tab" id="fabTabLibrary" onclick="switchTab('saved-tab')">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+                <span>Tủ phim</span>
+            </button>
+        </div>
+        <button type="button" class="fab-search glass" id="fabTabSearch" aria-label="Tìm kiếm" onclick="openSearchOverlay()">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </button>
+    </nav>
 
     <script>
         const inputArea = document.getElementById('m3u8InputRaw');
@@ -3041,6 +3059,17 @@ document.addEventListener('visibilitychange', () => {
         });
 
         // --- TAB SYSTEM ---
+        function syncFloatTabs(tabId) {
+            const active = { 'search-tab': 'fabTabExplore', 'saved-tab': 'fabTabLibrary' }[tabId];
+            document.querySelectorAll('.fab-tab').forEach(b => b.classList.toggle('active', b.id === active));
+        }
+
+        function openSearchOverlay() {
+            switchTab('search-tab');
+            document.getElementById('searchOverlay').classList.add('active');
+            document.getElementById('searchOverlayInput').focus();
+        }
+
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
@@ -3049,6 +3078,7 @@ document.addEventListener('visibilitychange', () => {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             
             document.getElementById(tabId).classList.add('active');
+            syncFloatTabs(tabId);
             
             if (tabId === 'player-tab') document.getElementById('tabBtnPlayer').classList.add('active');
             if (tabId === 'search-tab') {

@@ -46,3 +46,95 @@ body.device-tv :focus-visible {
     outline: 4px solid #fff !important;
     outline-offset: 2px;
 }
+
+/* --- Tab bar nổi (iPhone) --- */
+.float-tabbar,
+.manual-url-link {
+    display: none;
+}
+
+body.device-mobile .float-tabbar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--safe-bottom) + 8px);
+    height: 64px;
+    padding: 0 max(16px, var(--safe-left)) 0 max(16px, var(--safe-right));
+    gap: 12px;
+    justify-content: center;
+    z-index: 900;
+    pointer-events: none;
+}
+
+body.device-mobile .float-tabbar > * {
+    pointer-events: auto;
+}
+
+body.device-mobile.player-active .float-tabbar {
+    display: none;
+}
+
+body.device-mobile #appTabsNav {
+    display: none;
+}
+
+.fab-capsule {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+    height: 64px;
+}
+
+.fab-tab {
+    min-width: var(--tap);
+    min-height: var(--tap);
+    height: 52px;
+    padding: 0 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: 0;
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.fab-tab.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.fab-search {
+    width: 64px;
+    height: 64px;
+    min-width: var(--tap);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+/* Nội dung chừa chỗ cho tab bar và thanh Home */
+body.device-mobile .container {
+    padding-bottom: calc(var(--safe-bottom) + 8px + 64px + 16px);
+}
+
+body.device-mobile .manual-url-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    padding: 0 16px;
+    margin-bottom: 8px;
+    border: 1px solid var(--glass-border-light);
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 14px;
+}

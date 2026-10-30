@@ -46,6 +46,7 @@ def open_app(app_module, browser):
                                       has_touch=True, is_mobile=True, device_scale_factor=2)
         contexts.append(ctx)
         page = ctx.new_page()
+        page.set_default_timeout(4000)
         page.requests, page.console_errors, page.taps, page.is_touch = [], [], 0, not tv
 
         if any(safe):
