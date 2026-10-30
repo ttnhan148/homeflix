@@ -1,0 +1,27 @@
+# Production stack: joins the shared nginx proxy network, no host ports.
+# Run via deploy/deploy.sh (build context is the parent dir).
+name: homeflix
+
+services:
+  homeflix:
+    build: ..
+    container_name: homeflix
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - HOMEFLIX_DATA_DIR=/app/data
+    volumes:
+      - homeflix_cache:/app/cache
+      - homeflix_downloads:/app/downloads
+      - homeflix_db:/app/data
+    networks:
+      - app-net
+
+volumes:
+  homeflix_cache:
+  homeflix_downloads:
+  homeflix_db:
+
+networks:
+  app-net:
+    external: true
