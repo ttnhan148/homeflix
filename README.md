@@ -19,6 +19,7 @@ HomeFlix là một ứng dụng web **một file backend (FastAPI)** + **fronten
 | ⬇️ **Download HLS → MP4** | Hàng đợi download qua `ffmpeg` (bản sao `-c copy`, fallback encode lại audio AAC), tồn tại sau restart server. |
 | 📱 **UI đa thiết bị** | Tối ưu riêng cho Smart TV/máy chiếu (10-foot UI, điều hướng bằng D-pad), mobile và desktop. |
 | 📺 **AirPlay** | Phát hiện thiết bị AirPlay, nút phát nhanh, overlay điều khiển từ xa (play/pause, seek) với poster nền. |
+| ⏭️ **Tự qua tập / bỏ mở đầu** | Hết tập đếm ngược 10 giây rồi phát tập kế (có nút Hủy); nút "Bỏ qua mở đầu" nhảy tới mốc cố định (mặc định giây 85, đặt trong ⚙ của trình phát), chỉ hiện trong 90 giây đầu. Cài đặt lưu theo thiết bị (`localStorage`); iPhone cast có thể đổi qua lệnh `options`. |
 | 🗃️ **Cache API ngoài** | Dữ liệu `phimapi.com` được cache trong SQLite kèm **stale-fallback** khi API chết. |
 
 ---

@@ -478,7 +478,7 @@
                     break;
                 }
                 case 'options':
-                    ['autoNext', 'autoIntro'].forEach(k => { if (typeof cmd[k] === 'boolean') castOptions[k] = cmd[k]; });
+                    HFPlayerAuto.setPrefs(['autoNext', 'autoIntro'].reduce((o, k) => (typeof cmd[k] === 'boolean' ? Object.assign(o, { [k]: cmd[k] }) : o), {}));
                     break;
                 case 'stop': if (playing()) exitPlayer(); break;
             }

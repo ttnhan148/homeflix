@@ -2047,7 +2047,9 @@
                     Quay lại
                 </button>
                 <div class="player-ep-title" id="playerEpTitle" style="flex: 1; margin: 0 1rem;"></div>
-                <div id="playerHeaderRight" style="width:80px; display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;"></div>
+                <div id="playerHeaderRight" style="min-width:80px; display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
+                    <button type="button" id="playerPrefsBtn" class="player-prefs-btn" aria-label="Cài đặt phát">⚙</button>
+                </div>
             </div>
 
             <div class="player-wrapper">
@@ -2094,6 +2096,11 @@
     <div id="castAutoplayPrompt" class="cast-dialog glass" role="dialog" hidden>
         <p>Nhấn OK để phát</p>
         <div class="cast-dialog-actions"><button type="button" id="castAutoplayBtn" class="cast-btn cast-btn-primary">OK</button></div>
+    </div>
+    <div id="playerPrefs" class="cast-panel glass" role="dialog" aria-label="Cài đặt phát" hidden>
+        <label class="cast-switch"><input type="checkbox" id="prefAutoNext"><span>Tự qua tập</span></label>
+        <label class="cast-switch"><input type="checkbox" id="prefAutoIntro"><span>Tự bỏ qua mở đầu</span></label>
+        <label class="cast-switch"><span>Mở đầu kết thúc ở giây</span><input type="number" id="prefIntroSeconds" min="10" max="300" step="1" inputmode="numeric" class="pref-number"></label>
     </div>
     <div id="castSettings" class="cast-panel glass" hidden>
         <label class="cast-switch"><input type="checkbox" id="castAllowControl" checked><span>Cho phép điều khiển từ thiết bị khác</span></label>
@@ -2622,7 +2629,6 @@ document.addEventListener('visibilitychange', () => {
         // Trạng thái phim đang phát hiện tại (dùng để lưu tiến độ xem)
         let currentMovie = null;
         let castStartAt = null; // giây bắt đầu do lệnh cast chỉ định (null: dùng tiến độ đã lưu)
-        const castOptions = { autoNext: false, autoIntro: false }; // do iPhone đặt; Gói 4 sẽ dùng
         // Danh sách phim lưu trên server
         let savedMoviesList = [];
         // Danh sách tập phim đang xem ở phần chi tiết

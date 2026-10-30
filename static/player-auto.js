@@ -72,6 +72,22 @@
     $('skipIntroBtn').hidden = true;
   }
 
+  function initPrefsPanel() {
+    const panel = $('playerPrefs'), next = $('prefAutoNext'), intro = $('prefAutoIntro'), secs = $('prefIntroSeconds');
+    const sync = () => { next.checked = prefs.autoNext; intro.checked = prefs.autoIntro; secs.value = prefs.introSeconds; };
+    sync();
+    document.addEventListener('hf-prefs', sync);
+    $('playerPrefsBtn').addEventListener('click', () => { panel.hidden = !panel.hidden; if (!panel.hidden) next.focus(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) panel.hidden = true; });
+    next.addEventListener('change', () => setPrefs({ autoNext: next.checked }));
+    intro.addEventListener('change', () => setPrefs({ autoIntro: intro.checked }));
+    secs.addEventListener('change', () => {
+      const n = Number(secs.value);
+      if (secs.value.trim() !== '' && Number.isInteger(n) && n >= 10 && n <= 300) setPrefs({ introSeconds: n });
+      else sync();
+    });
+  }
+
   function init(opts) {
     video = opts.video;
     getEpisodes = opts.getEpisodes;
@@ -85,6 +101,7 @@
     $('skipIntroBtn').addEventListener('click', skipIntro);
     ['timeupdate', 'loadedmetadata', 'seeked'].forEach((ev) => video.addEventListener(ev, updateSkipButton));
     document.addEventListener('hf-prefs', updateSkipButton);
+    initPrefsPanel();
   }
 
   root.HFPlayerAuto = { init, getPrefs, setPrefs, onEnded, onEpisodeStart, cancelCountdown, skipIntro };

@@ -16,8 +16,9 @@ def out_dir(tmp_path):
 
 def test_shell_precaches_cast_files():
     sw = (ROOT / "static" / "sw.js").read_text()
-    assert "homeflix-shell-v3" in sw
-    assert "/static/cast.js" in sw and "/static/cast-utils.js" in sw
+    assert "homeflix-shell-v4" in sw
+    for f in ("cast.js", "cast-utils.js", "player-utils.js", "player-auto.js"):
+        assert f"/static/{f}" in sw
 
 
 def test_cast_sheet_and_remote_render(app_module, make_client, open_app, tmp_path):

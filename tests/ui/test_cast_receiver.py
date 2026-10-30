@@ -106,11 +106,12 @@ def test_commands_without_playback_are_harmless(open_app):
     assert not page.evaluate(PLAYER_ACTIVE) and page.console_errors == []
 
 
-def test_options_command_updates_cast_options(open_app):
+def test_options_command_updates_player_prefs(open_app):
     page = open_tv(open_app)
     page.es_emit("command", {"type": "options", "autoNext": True})
     page.es_emit("command", {"type": "options", "autoIntro": True, "autoNext": False})
-    assert page.evaluate("[castOptions.autoNext, castOptions.autoIntro]") == [False, True]
+    prefs = page.evaluate("HFPlayerAuto.getPrefs()")
+    assert [prefs["autoNext"], prefs["autoIntro"]] == [False, True]
 
 
 def test_autoplay_block_shows_prompt_and_reports_not_playing(open_app):

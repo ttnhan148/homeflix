@@ -1158,3 +1158,50 @@ body.device-mobile .sticky-header header {
 .skip-intro[hidden] {
     display: none;
 }
+
+/* --- Cài đặt phát (⚙ trong thanh trên của trình phát) --- */
+.cast-switch .pref-number {
+    width: 88px;
+    min-height: var(--tap);
+    margin-left: auto;
+    padding: 0 10px;
+    border: 1px solid var(--glass-border-light);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 18px;
+    text-align: center;
+}
+
+#playerPrefs .cast-switch + .cast-switch {
+    margin-top: 14px;
+}
+
+#playerPrefs {
+    display: flex;
+    flex-direction: column;
+}
+
+#playerPrefs[hidden] {
+    display: none !important;
+}
+
+.player-prefs-btn {
+    min-width: var(--tap);
+    min-height: var(--tap);
+    border: 1px solid var(--glass-border-light);
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.auto-next .cast-pill {
+    flex: 0 0 auto;
+    min-width: 120px;
+}
+
+.auto-next-text {
+    flex: 1;
+}
