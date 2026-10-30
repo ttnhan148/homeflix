@@ -3136,7 +3136,7 @@ document.addEventListener('visibilitychange', () => {
                 overlayInput.focus();
             }
             resultsDiv.style.display = 'grid';
-            resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim);">Đang tìm kiếm...</div>';
+            resultsDiv.innerHTML = '<div class="filter-empty" role="status">Đang tìm</div>';
 
             try {
                 const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
@@ -3151,15 +3151,15 @@ document.addEventListener('visibilitychange', () => {
                             quality: item.quality, lang: item.lang,
                             episode_current: item.episode_current || (item.type === 'single' ? 'Phim Lẻ' : '')
                         });
-                        card.querySelector('.movie-meta').appendChild(el('span', 'badge-type', item.type === 'single' ? 'Phim Lẻ' : 'Phim Bộ'));
                         resultsDiv.appendChild(card);
                     });
                     setTimeout(initTabbing, 100);
                 } else {
-                    resultsDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--accent-color);">Không tìm thấy phim nào phù hợp.</div>';
+                    resultsDiv.innerHTML = '<div class="filter-empty">Không có phim phù hợp.</div>';
                 }
             } catch (err) {
-                resultsDiv.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--accent-color);">Lỗi kết nối: ${err.message}</div>`;
+                console.error('[Search]', err);
+                resultsDiv.innerHTML = '<div class="filter-empty">Không tìm được. Thử lại sau.</div>';
             }
         }
 
