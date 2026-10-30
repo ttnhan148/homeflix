@@ -11,11 +11,49 @@
       .trim();
   }
 
+  function yearText(y) {
+    return y && y !== 'undefined' && y !== 'null' ? String(y) : '';
+  }
+
+  // Một thể loại, một quốc gia: dòng meta ngắn để giao diện đỡ chữ
   function heroMeta(m) {
     m = m || {};
-    const year = m.year && m.year !== 'undefined' && m.year !== 'null' ? String(m.year) : '';
-    const join = (a) => (Array.isArray(a) ? a.filter(Boolean).join(', ') : '');
-    return [year, join(m.category), join(m.country)].filter(Boolean).join(' · ');
+    const first = (a) => (Array.isArray(a) ? a.filter(Boolean)[0] || '' : '');
+    return [yearText(m.year), first(m.category), first(m.country)].filter(Boolean).join(' · ');
+  }
+
+  // "Hoàn Tất (8/8)" -> "Đủ 8 tập"; các nhãn khác giữ nguyên
+  function shortEpisode(s) {
+    if (s == null) return '';
+    const t = String(s).trim();
+    const done = t.match(/^hoàn tất\s*\((\d+)\s*\/\s*(\d+)\)$/i);
+    if (!done) return t;
+    return done[1] === done[2] ? `Đủ ${done[2]} tập` : `Tập ${done[1]}/${done[2]}`;
+  }
+
+  function cardMeta(m) {
+    m = m || {};
+    return [shortEpisode(m.episode_current), yearText(m.year)].filter(Boolean).join(' · ');
+  }
+
+  // Ô tập chỉ hiện số: "Tập 09" -> "9"
+  function epShort(name) {
+    const t = String(name == null ? '' : name).trim();
+    const n = t.match(/^tập\s+0*(\d+(?:\.\d+)?)$/i);
+    return n ? n[1] : t;
+  }
+
+  function continueMeta(row) {
+    row = row || {};
+    const raw = String(row.last_watched_episode || '').trim();
+    const ep = /^full$/i.test(raw) ? '' : (epShort(raw) !== raw ? `Tập ${epShort(raw)}` : raw);
+    let left = '';
+    if (row.duration > 0 && row.position > 0) {
+      const minutes = Math.ceil((row.duration - row.position) / 60);
+      left = minutes <= 1 ? 'sắp hết' : `còn ${minutes} phút`;
+    }
+    const text = [ep, left].filter(Boolean).join(' · ');
+    return ep ? text : text.charAt(0).toUpperCase() + text.slice(1);
   }
 
   function mergeTypePages(pages) {
@@ -64,7 +102,7 @@
     return Math.max(0, Math.min(100, Math.round((row.position / row.duration) * 100)));
   }
 
-  const api = { stripHtml, heroMeta, mergeTypePages, resumeTarget, splitLibrary, progressPct };
+  const api = { stripHtml, heroMeta, shortEpisode, cardMeta, epShort, continueMeta, mergeTypePages, resumeTarget, splitLibrary, progressPct };
   root.HFUtils = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

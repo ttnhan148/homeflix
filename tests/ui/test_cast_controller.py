@@ -214,7 +214,7 @@ def test_sheet_and_button_respect_safe_area_and_touch_targets(app_module, make_c
     row = page.locator("#castDeviceList .cast-device").first.bounding_box()
     assert row["height"] >= 44
     sheet = page.locator("#castSheet").bounding_box()
-    assert sheet["y"] >= 59 and sheet["y"] + sheet["height"] <= 932 - (34 + 8 + 64) + 1
+    assert sheet["y"] >= 59 and sheet["y"] + sheet["height"] <= page.evaluate("document.getElementById('floatTabBar').getBoundingClientRect().top") + 0.5
     assert page.locator("#castSheetClose").bounding_box()["height"] >= 44
 
 

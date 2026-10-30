@@ -16,7 +16,7 @@ def out_dir(tmp_path):
 
 def test_shell_precaches_cast_files():
     sw = (ROOT / "static" / "sw.js").read_text()
-    assert "homeflix-shell-v4" in sw
+    assert "homeflix-shell-v5" in sw
     for f in ("cast.js", "cast-utils.js", "player-utils.js", "player-auto.js"):
         assert f"/static/{f}" in sw
 

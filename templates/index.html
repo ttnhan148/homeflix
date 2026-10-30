@@ -5,8 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>HomeFlix</title>
-    <!-- Thêm phông chữ tiếng Việt hiện đại Be Vietnam Pro -->
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Inter: một họ chữ, đủ dấu tiếng Việt, có số đều cột -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
     <!-- PWA / IOS Add to Homescreen -->
     <link rel="manifest" href="/static/manifest.json">
@@ -15,7 +17,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="HomeFlix">
     <link class="favicon" rel="apple-touch-icon" href="/static/logo.png">
-    <meta name="theme-color" content="#080808">
+    <meta name="theme-color" content="#000000">
 
     <!-- HLS.js cho thiết bị không Apple -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -1875,43 +1877,34 @@
             padding-right: 1.5rem !important;
         }
     </style>
-    <link rel="stylesheet" href="/static/ios26.css">
+    <link rel="stylesheet" href="/static/hf.css">
 </head>
 
 <body>
     <div class="container">
         <!-- STICKY HEADER WRAPPER -->
         <div id="stickyHeader" class="sticky-header">
-            <header id="appHeader" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <h1>HomeFlix</h1>
-                <button type="button" id="castBtn" class="cast-top-btn" aria-label="Phát lên TV">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2 8V6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2h-6M2 12a9 9 0 019 9M2 16a5 5 0 015 5M2 20h.01"/></svg>
-                    <span id="castDot" class="cast-dot" hidden></span>
-                </button>
-                <button type="button" id="castSettingsBtn" class="cast-settings-btn" aria-label="Cài đặt điều khiển từ xa">⚙</button>
+            <header id="appHeader" class="app-header">
+                <div class="brand">
+                    <svg class="brand-mark" width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path d="M4.5 14.5 16 5l11.5 9.5V26a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 26Z" fill="none" stroke="#e50914" stroke-width="2.5" stroke-linejoin="round"/><path d="M13 13.2 21 18l-8 4.8Z" fill="#e50914"/></svg>
+                    <h1>HomeFlix</h1>
+                </div>
+                <!-- TV, máy tính: điều hướng nằm cùng hàng với logo -->
+                <nav class="tabs-nav" id="appTabsNav" aria-label="Điều hướng chính">
+                    <button class="tab-btn active" id="tabBtnSearch" onclick="switchTab('search-tab')">Home</button>
+                    <button class="tab-btn" id="tabBtnSaved" onclick="switchTab('saved-tab')">Tủ phim</button>
+                    <button class="tab-btn" id="tabBtnPlayer" onclick="switchTab('player-tab')">Nhập link</button>
+                </nav>
+                <div class="header-actions">
+                    <button type="button" id="castBtn" class="cast-top-btn" aria-label="Phát lên TV">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                        <span id="castDot" class="cast-dot" hidden></span>
+                    </button>
+                    <button type="button" id="castSettingsBtn" class="cast-settings-btn" aria-label="Cài đặt điều khiển từ xa">
+                        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+                    </button>
+                </div>
             </header>
-
-            <!-- 3 OPTIONS MENU -->
-            <div class="tabs-nav" id="appTabsNav">
-                <button class="tab-btn active" id="tabBtnSearch" onclick="switchTab('search-tab')">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
-                    Tìm Kiếm
-                </button>
-                <button class="tab-btn" id="tabBtnSaved" onclick="switchTab('saved-tab')">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
-                    </svg>
-                    Đã Lưu
-                </button>
-                <button class="tab-btn" id="tabBtnPlayer" onclick="switchTab('player-tab')">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                    </svg>
-                    Nhập URL
-                </button>
-            </div>
         </div>
 
         <!-- TAB CONTENT 1: MANUAL LINK -->
@@ -1945,14 +1938,9 @@
                         <svg class="search-input-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                         </svg>
-                        <input type="text" id="searchInput" placeholder="Tìm kiếm phim..." oninput="handleSearchInput(event)" onkeydown="if(event.key==='Enter') searchMovies()">
+                        <input type="text" id="searchInput" placeholder="Tìm phim" aria-label="Tìm phim" oninput="handleSearchInput(event)" onkeydown="if(event.key==='Enter') searchMovies()">
                     </div>
-                    <button class="btn-main" onclick="searchMovies()">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                        </svg>
-                        TÌM KIẾM
-                    </button>
+                    <button class="btn-main" onclick="searchMovies()">Tìm</button>
                 </div>
 
                 <!-- Search overlay -->
@@ -1962,9 +1950,9 @@
                             <svg class="search-input-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                             </svg>
-                            <input type="text" id="searchOverlayInput" class="search-overlay-input" placeholder="Tìm kiếm phim..." oninput="handleOverlaySearchInput(event)" onkeydown="if(event.key==='Enter') searchMovies()">
+                            <input type="text" id="searchOverlayInput" class="search-overlay-input" placeholder="Tìm phim" aria-label="Tìm phim" oninput="handleOverlaySearchInput(event)" onkeydown="if(event.key==='Enter') searchMovies()">
                         </div>
-                        <button class="search-overlay-close" onclick="closeSearchOverlay()">
+                        <button class="search-overlay-close" onclick="closeSearchOverlay()" aria-label="Đóng tìm kiếm">
                             <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
@@ -1974,9 +1962,19 @@
                 </div>
 
                 <!-- Homepage content -->
-                <div id="homepageContent" style="display: flex; flex-direction: column; gap: 2rem;">
-                    <!-- Hero: phim hot chiếu rạp, poster phủ nền -->
-                    <section id="hero" class="hero" hidden aria-label="Phim chiếu rạp nổi bật">
+                <div id="homepageContent" style="display: flex;">
+                    <!-- Xem tiếp: việc hay làm nhất, một chạm là phát -->
+                    <section id="homeContinue" class="home-section" hidden aria-labelledby="homeContinueTitle">
+                        <div class="sec-head">
+                            <h2 id="homeContinueTitle">Xem tiếp</h2>
+                            <button type="button" class="sec-link" onclick="switchTab('saved-tab')">Tủ phim</button>
+                        </div>
+                        <div id="homeContinueList" class="home-continue"></div>
+                    </section>
+
+                    <!-- Phim hot chiếu rạp: hàng thẻ cuộn ngang -->
+                    <section id="hero" class="hero home-section" hidden aria-labelledby="heroHeading">
+                        <div class="sec-head"><h2 id="heroHeading">Đang chiếu rạp</h2></div>
                         <div id="heroTrack" class="hero-track"></div>
                         <div id="heroDots" class="hero-dots" hidden></div>
                     </section>
@@ -1994,18 +1992,18 @@
                             <div class="chip-row">
                                 <div class="filter-bar">
                                     <div class="filter-dropdown">
-                                        <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại ▾</button>
+                                        <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại</button>
                                         <div class="filter-menu" id="filterMenu-category"></div>
                                     </div>
                                     <div class="filter-dropdown">
-                                        <button class="filter-btn" id="filterBtn-country" onclick="toggleFilterDropdown('country')">Quốc gia ▾</button>
+                                        <button class="filter-btn" id="filterBtn-country" onclick="toggleFilterDropdown('country')">Quốc gia</button>
                                         <div class="filter-menu" id="filterMenu-country"></div>
                                     </div>
                                     <div class="filter-dropdown">
-                                        <button class="filter-btn" id="filterBtn-year" onclick="toggleFilterDropdown('year')">Năm ▾</button>
+                                        <button class="filter-btn" id="filterBtn-year" onclick="toggleFilterDropdown('year')">Năm</button>
                                         <div class="filter-menu" id="filterMenu-year"></div>
                                     </div>
-                                    <button class="filter-clear-btn" id="filterClearBtn" onclick="clearAllFilters()" style="display:none;">✕ Xóa lọc</button>
+                                    <button class="filter-clear-btn" id="filterClearBtn" onclick="clearAllFilters()" style="display:none;">Xóa lọc</button>
                                 </div>
                                 <span id="resultCount" class="result-count"></span>
                             </div>
@@ -2022,16 +2020,17 @@
         <!-- TAB CONTENT 3: SAVED -->
         <div id="saved-tab" class="tab-content">
             <div class="search-container">
-                <button type="button" id="manualUrlLink" class="manual-url-link" onclick="switchTab('player-tab')">Nhập URL phim</button>
+                <h2 class="library-heading">Tủ phim</h2>
                 <section id="continueSection" class="library-section" hidden>
-                    <h2 class="library-title">Tiếp tục xem</h2>
+                    <h3 class="library-title">Đang xem</h3>
                     <div id="continueRow" class="continue-row"></div>
                 </section>
                 <section id="savedSection" class="library-section" hidden>
-                    <h2 class="library-title">Đã lưu</h2>
+                    <h3 class="library-title">Đã lưu</h3>
                     <div id="savedMoviesGrid" class="saved-movies-list-container"></div>
                 </section>
-                <div id="libraryEmpty" class="library-empty" hidden>Tủ phim trống. Hãy tìm phim và nhấn Lưu nhé!</div>
+                <div id="libraryEmpty" class="library-empty" hidden>Tủ phim trống</div>
+                <button type="button" id="manualUrlLink" class="manual-url-link" onclick="switchTab('player-tab')">Nhập link phim</button>
             </div>
         </div>
 
@@ -2040,20 +2039,20 @@
 
             <!-- Player header: back button + title (above video, not overlapping) -->
             <div id="playerHeader" class="player-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0;">
-                <button class="btn-overlay-back" onclick="exitPlayer()">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                    </svg>
-                    Quay lại
+                <button class="btn-overlay-back" onclick="exitPlayer()" aria-label="Quay lại">
+                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
                 </button>
                 <div class="player-ep-title" id="playerEpTitle" style="flex: 1; margin: 0 1rem;"></div>
-                <div id="playerHeaderRight" style="min-width:80px; display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
-                    <button type="button" id="playerPrefsBtn" class="player-prefs-btn" aria-label="Cài đặt phát">⚙</button>
+                <div id="playerHeaderRight" style="min-width:44px; display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
+                    <button type="button" id="playerPrefsBtn" class="player-prefs-btn" aria-label="Cài đặt phát">
+                        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+                    </button>
                 </div>
             </div>
 
             <div class="player-wrapper">
                 <video id="videoPlayer" playsinline webkit-playsinline controls x-webkit-airplay="allow" airplay="allow"></video>
+                <div id="playerError" class="player-error" role="alert" hidden></div>
                 <button type="button" id="skipIntroBtn" class="skip-intro glass" hidden>Bỏ qua mở đầu</button>
                 <div id="autoNextOverlay" class="auto-next glass" hidden>
                     <span id="autoNextText" class="auto-next-text"></span>
@@ -2063,9 +2062,9 @@
                 <!-- AirPlay Remote Control Overlay -->
                 <div class="airplay-remote-overlay" id="airplayOverlay">
                     <img class="airplay-bg-poster" id="airplayBgPoster" src="" alt="">
-                    <button class="airplay-disconnect-btn" id="airplayDisconnectBtn" onclick="disconnectAirPlay()">✕ Ngắt kết nối</button>
-                    <div class="airplay-icon">📡</div>
-                    <div class="airplay-label">Đang phát qua AirPlay</div>
+                    <button class="airplay-disconnect-btn" id="airplayDisconnectBtn" onclick="disconnectAirPlay()">Ngắt kết nối</button>
+                    <div class="airplay-icon" aria-hidden="true"><svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/><path d="m12 15 5 6H7z"/></svg></div>
+                    <div class="airplay-label">AirPlay</div>
                     <div class="airplay-controls">
                         <button class="airplay-playpause" id="airplayPlayPause" onclick="toggleAirplayPlayPause()">
                             <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path id="airplayPlayPauseIcon" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
@@ -2139,36 +2138,39 @@
         <div class="cast-remote-progress"><div id="castRemoteFill" class="cast-remote-fill"></div></div>
         <div class="cast-remote-times"><span id="castRemotePos">0:00</span><span id="castRemoteDur">0:00</span></div>
         <div class="cast-remote-row">
-            <button type="button" id="castPrevEp" class="cast-round" aria-label="Tập trước">⏮</button>
+            <button type="button" id="castPrevEp" class="cast-round" aria-label="Tập trước"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5.5v13L8.5 12z" fill="currentColor"/><rect x="5.5" y="5.5" width="2" height="13" rx="1" fill="currentColor"/></svg></button>
             <button type="button" id="castBack10" class="cast-round" aria-label="Lùi 10 giây">−10</button>
             <button type="button" id="castPlayPause" class="cast-round cast-round-main" aria-label="Phát hoặc dừng">❚❚</button>
             <button type="button" id="castFwd10" class="cast-round" aria-label="Tới 10 giây">+10</button>
-            <button type="button" id="castNextEp" class="cast-round" aria-label="Tập sau">⏭</button>
+            <button type="button" id="castNextEp" class="cast-round" aria-label="Tập sau"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5.5v13l9.5-6.5z" fill="currentColor"/><rect x="16.5" y="5.5" width="2" height="13" rx="1" fill="currentColor"/></svg></button>
         </div>
         <label class="cast-option"><input type="checkbox" id="castAutoNext"><span>Tự qua tập</span></label>
-        <label class="cast-option"><input type="checkbox" id="castAutoIntro"><span>Bỏ qua intro</span></label>
+        <label class="cast-option"><input type="checkbox" id="castAutoIntro"><span>Bỏ qua mở đầu</span></label>
         <div class="cast-remote-actions">
             <button type="button" id="castStop" class="cast-pill">Dừng trên TV</button>
             <button type="button" id="castDisconnect" class="cast-pill cast-pill-danger">Ngắt kết nối</button>
         </div>
     </div>
 
-    <!-- TAB BAR NỔI (iPhone): Khám phá, Tủ phim, và nút Tìm kiếm tách riêng -->
-    <nav id="floatTabBar" class="float-tabbar" aria-label="Điều hướng chính">
-        <div class="fab-capsule glass">
+    <!-- TAB BAR (iPhone): thanh kính sát đáy, nút nằm trên thanh Home -->
+    <nav id="floatTabBar" class="float-tabbar glass" aria-label="Điều hướng chính">
+        <div class="fab-capsule">
             <button type="button" class="fab-tab active" id="fabTabExplore" onclick="switchTab('search-tab')">
-                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9z"/></svg>
-                <span>Khám phá</span>
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg>
+                <span>Home</span>
+            </button>
+            <button type="button" class="fab-tab fab-search" id="fabTabSearch" onclick="openSearchOverlay()">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <span>Tìm kiếm</span>
             </button>
             <button type="button" class="fab-tab" id="fabTabLibrary" onclick="switchTab('saved-tab')">
-                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4h11v16.5L12 16.8l-5.5 3.7z"/></svg>
                 <span>Tủ phim</span>
             </button>
         </div>
-        <button type="button" class="fab-search glass" id="fabTabSearch" aria-label="Tìm kiếm" onclick="openSearchOverlay()">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        </button>
     </nav>
+    <!-- Dải kính sau thanh trạng thái (PWA iPhone): nội dung cuộn không lộ dưới giờ và Dynamic Island -->
+    <div id="statusBarShield" class="status-shield glass" aria-hidden="true"></div>
 
     <script>
         const inputArea = document.getElementById('m3u8InputRaw');
@@ -2216,7 +2218,7 @@ function buildEpisodesDrawer() {
     
     const toggle = document.createElement('button');
     toggle.className = 'episodes-drawer-toggle';
-    toggle.innerHTML = `<span>📋 Danh sách tập (<span id="epCount">0</span>)</span><span class="drawer-arrow">▾</span>`;
+    toggle.innerHTML = `<span><span id="epCount">0</span> tập</span><svg class="drawer-arrow" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
     toggle.onclick = toggleEpisodesDrawer;
     
     const grid = document.createElement('div');
@@ -2291,7 +2293,7 @@ function toggleEpisodesDrawer() {
 
         function renderEpisodeList(containerEl, opts) {
             if (!containerEl) return;
-            const { episodes, movieSlug, watchStates, onPlay, autoFocusWatching, showTitle, showMeta } = opts;
+            const { episodes, movieSlug, watchStates, onPlay, autoFocusWatching, showTitle, showMeta, watchingPct } = opts;
             if (!episodes || episodes.length === 0) {
                 containerEl.innerHTML = '';
                 return;
@@ -2319,7 +2321,7 @@ function toggleEpisodesDrawer() {
 
             const header = el('div', 'ep-list-header');
             if (showTitle !== false) {
-                header.appendChild(el('span', 'ep-list-title', `Danh sách tập (${total})`));
+                header.appendChild(el('span', 'ep-list-title', `${total} tập`));
             }
             if (showMeta !== false) {
                 const metaBits = [];
@@ -2386,15 +2388,21 @@ function toggleEpisodesDrawer() {
                     btn.title = 'Đã xem';
                 }
 
-                if (st === 'watching' || st === 'watched') {
+                if (st === 'watched') {
                     const wsIcon = el('span', 'ep-watch-state');
-                    wsIcon.innerHTML = st === 'watched'
-                        ? '<svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
-                        : '<svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+                    wsIcon.innerHTML = '<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
                     btn.appendChild(wsIcon);
                 }
 
-                btn.appendChild(el('span', 'ep-name', ep.name));
+                btn.appendChild(el('span', 'ep-name', HFUtils.epShort(ep.name)));
+                btn.setAttribute('aria-label', ep.name + (st === 'watched' ? ', đã xem' : st === 'watching' ? ', đang xem' : ''));
+                if (st === 'watching' && watchingPct > 0) {
+                    const bar = el('span', 'ep-progress');
+                    const fill = el('span', 'ep-progress-fill');
+                    fill.style.width = watchingPct + '%';
+                    bar.appendChild(fill);
+                    btn.appendChild(bar);
+                }
 
                 if (movieSlug) {
                     const indicator = el('span', 'ep-dl-indicator not_started');
@@ -2783,7 +2791,6 @@ document.addEventListener('visibilitychange', () => {
             const d = heroState.details[slug];
             if (!slide || !d) return;
             slide.querySelector('.hero-meta').textContent = HFUtils.heroMeta(d.movie);
-            slide.querySelector('.hero-desc').textContent = HFUtils.stripHtml(d.movie.content);
         }
 
         function loadHeroDetail(slug) {
@@ -2843,21 +2850,23 @@ document.addEventListener('visibilitychange', () => {
         function buildHeroSlide(m) {
             const slide = el('article', 'hero-slide');
             slide.dataset.slug = m.slug;
+            const media = el('div', 'hero-media');
             const img = el('img', 'hero-bg');
             img.alt = '';
+            img.loading = 'lazy';
             img.src = heroImage(m);
-            slide.appendChild(img);
-            slide.appendChild(el('div', 'hero-gradient'));
+            img.onerror = () => { img.onerror = null; img.src = m.poster_url || POSTER_PLACEHOLDER; };
+            media.appendChild(img);
+            media.addEventListener('click', () => showMovieDetailBySlug(m.slug));
+            slide.appendChild(media);
             const content = el('div', 'hero-content');
-            content.appendChild(el('span', 'hero-badge', 'Đang chiếu rạp'));
-            content.appendChild(el('h2', 'hero-title', m.name));
+            content.appendChild(el('h3', 'hero-title', m.name));
             content.appendChild(el('div', 'hero-meta', HFUtils.heroMeta({ year: m.year })));
-            content.appendChild(el('p', 'hero-desc'));
             const actions = el('div', 'hero-actions');
             const play = el('button', 'hero-btn-play', 'Phát');
             play.type = 'button';
             play.addEventListener('click', () => heroPlay(m.slug));
-            const save = el('button', 'hero-btn-save glass', 'Lưu');
+            const save = el('button', 'hero-btn-save', 'Lưu');
             save.type = 'button';
             save.addEventListener('click', () => heroToggleSave(m.slug));
             actions.append(play, save);
@@ -2874,7 +2883,8 @@ document.addEventListener('visibilitychange', () => {
             document.querySelectorAll('.hero-dot').forEach((d, k) => d.classList.toggle('active', k === i));
             if (opts && opts.scroll) {
                 const track = document.getElementById('heroTrack');
-                track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
+                const slides = track.querySelectorAll('.hero-slide');
+                track.scrollTo({ left: slides[i].offsetLeft - slides[0].offsetLeft, behavior: 'smooth' });
             }
             loadHeroDetail(heroState.items[i].slug);
             if (i + 1 < n) loadHeroDetail(heroState.items[i + 1].slug);
@@ -2895,20 +2905,30 @@ document.addEventListener('visibilitychange', () => {
                 dots.appendChild(el('span', 'hero-dot' + (k === 0 ? ' active' : '')));
             });
             dots.hidden = n < 2;
-            const io = new IntersectionObserver(entries => entries.forEach(e => {
-                if (e.isIntersecting) showHeroSlide(slides.indexOf(e.target));
-            }), { root: track, threshold: 0.6 });
+            // Nhiều thẻ hiện cùng lúc: thẻ "hiện tại" là thẻ trái nhất đang hiện; tải trước nó, các thẻ đang hiện và thẻ kế
+            const visible = new Set();
+            const io = new IntersectionObserver(entries => {
+                entries.forEach(e => {
+                    const k = slides.indexOf(e.target);
+                    if (e.isIntersecting) visible.add(k); else visible.delete(k);
+                });
+                if (!visible.size) return;
+                visible.forEach(k => loadHeroDetail(heroState.items[k].slug));
+                showHeroSlide(Math.min(...visible));
+            }, { root: track, threshold: 0.6 });
             slides.forEach(sl => io.observe(sl));
             hero.onkeydown = (e) => {
                 if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                const slide = e.target.closest('.hero-slide');
+                if (!slide) return;
                 e.preventDefault();
-                const slide = slides[heroState.index];
+                const at = slides.indexOf(slide);
                 const play = slide.querySelector('.hero-btn-play');
                 const save = slide.querySelector('.hero-btn-save');
-                // Phát và Lưu nằm cạnh nhau: mũi tên chuyển giữa hai nút trước, hết nút mới đổi slide
+                // Phát và Lưu nằm cạnh nhau: mũi tên chuyển giữa hai nút trước, hết nút mới đổi thẻ
                 if (e.key === 'ArrowRight' && e.target === play) return save.focus();
                 if (e.key === 'ArrowLeft' && e.target === save) return play.focus();
-                const next = heroState.index + (e.key === 'ArrowRight' ? 1 : -1);
+                const next = at + (e.key === 'ArrowRight' ? 1 : -1);
                 if (next < 0 || next >= n) return;
                 showHeroSlide(next, { scroll: true });
                 slides[next].querySelector('.hero-btn-play').focus({ preventScroll: true });
@@ -2925,7 +2945,7 @@ document.addEventListener('visibilitychange', () => {
             if (!node) return;
             const state = homeState[homeKey(homeState.activeGridTab)];
             if (!state.items.length) node.textContent = '';
-            else node.textContent = Number.isFinite(state.total) ? `${state.total} phim` : `${state.items.length}+ phim`;
+            else node.textContent = Number.isFinite(state.total) ? `${state.total.toLocaleString('vi-VN')} phim` : `${state.items.length}+ phim`;
         }
 
         function buildMovieCard(movie) {
@@ -2940,20 +2960,11 @@ document.addEventListener('visibilitychange', () => {
             img.src = movie.poster_url || '';
             img.onerror = () => { img.onerror = null; img.src = POSTER_PLACEHOLDER; };
             wrap.appendChild(img);
-            const chips = [movie.quality, movie.lang].filter(Boolean).join(' · ');
-            const top = el('div', 'poster-overlay-top');
-            if (chips) top.appendChild(el('span', 'badge-chip', chips));
-            wrap.appendChild(top);
-            const bottom = el('div', 'poster-overlay-bottom');
-            bottom.appendChild(el('div', 'overlay-ep', movie.episode_current || ''));
-            wrap.appendChild(bottom);
             card.appendChild(wrap);
 
             const info = el('div', 'movie-info');
             info.appendChild(el('div', 'movie-title', movie.name));
-            const meta = el('div', 'movie-meta');
-            meta.appendChild(el('span', '', `Năm: ${movie.year}`));
-            info.appendChild(meta);
+            info.appendChild(el('div', 'movie-meta', HFUtils.cardMeta(movie)));
             card.appendChild(info);
 
             card.addEventListener('click', () => showMovieDetailBySlug(movie.slug));
@@ -2971,8 +2982,8 @@ document.addEventListener('visibilitychange', () => {
 
             if (!append) {
                 if (state.items.length === 0 && state.loading) {
-                    grid.innerHTML = Array(6).fill(0).map(() => `
-                        <div class="skeleton-card" style="min-height: 280px;">
+                    grid.innerHTML = Array(9).fill(0).map(() => `
+                        <div class="skeleton-card" aria-hidden="true">
                             <div class="skeleton-img"></div>
                             <div class="skeleton-text"></div>
                             <div class="skeleton-text-short"></div>
@@ -2982,9 +2993,9 @@ document.addEventListener('visibilitychange', () => {
                     return;
                 }
                 if (state.items.length === 0) {
-                    const msg = state.fetchError ? 'Không tải được danh sách phim. Kiểm tra mạng rồi thử lại.'
-                        : hasActiveFilter(state.filters) ? 'Không tìm thấy phim phù hợp với bộ lọc.'
-                        : 'Chưa có phim để hiển thị.';
+                    const msg = state.fetchError ? 'Không tải được phim. Thử lại sau.'
+                        : hasActiveFilter(state.filters) ? 'Không có phim phù hợp.'
+                        : 'Chưa có phim.';
                     grid.innerHTML = '';
                     grid.appendChild(el('div', 'filter-empty', msg));
                     updateResultCount();
@@ -2997,8 +3008,9 @@ document.addEventListener('visibilitychange', () => {
             for (let i = startIdx; i < state.items.length; i++) grid.appendChild(buildMovieCard(state.items[i]));
 
             if (state.hasMore) {
-                const loader = el('div', 'grid-load-more');
+                const loader = el('div', 'grid-load-more', 'Đang tải thêm');
                 loader.id = 'gridLoader';
+                loader.setAttribute('role', 'status');
                 grid.appendChild(loader);
             }
             updateResultCount();
@@ -3024,7 +3036,7 @@ document.addEventListener('visibilitychange', () => {
                             setupHomeInfiniteScroll();
                         });
                     }
-                }, { rootMargin: '300px' });
+                }, { rootMargin: '900px 900px' }); // tải trang kế khi còn khoảng một màn hình
                 homeObservers.grid.observe(loader);
             }
         }
@@ -3329,6 +3341,7 @@ document.addEventListener('visibilitychange', () => {
                     document.getElementById('homepageContent').style.display = 'flex';
                     document.getElementById('searchOverlay').classList.remove('active');
                 }
+                fetchSavedMovies(); // tiến độ vừa xem cập nhật vào "Xem tiếp"
             }
             if (tabId === 'saved-tab') {
                 document.getElementById('tabBtnSaved').classList.add('active');
@@ -3524,16 +3537,24 @@ document.addEventListener('visibilitychange', () => {
                 mp4Url = `/media/${currentMovie.slug}/${encodeURIComponent(title)}.mp4`;
             }
 
+            hidePlayerError();
+            const store = safeStorage();
+            let source = useMp4 ? mp4Url : HFPlayerUtils.streamSource(store, url, Date.now());
+            // Proxy không lấy được nguồn (CDN chặn IP máy chủ): phát thẳng link gốc từ thiết bị này
+            const fallbackDirect = () => {
+                if (!HFPlayerUtils.isProxied(source)) return false;
+                console.warn("[Play] Proxy lỗi, chuyển sang phát thẳng:", url);
+                HFPlayerUtils.rememberDirect(store, Date.now());
+                source = url;
+                attachSource(source);
+                return true;
+            };
+
             video.onerror = () => {
-                const errorMap = {
-                    1: "Người dùng đã hủy tải video.",
-                    2: "Lỗi đường truyền (Network Error).",
-                    3: "Lỗi giải mã (Decoding Error).",
-                    4: "Không tìm thấy phim hoặc link không hợp lệ."
-                };
-                const msg = errorMap[video.error ? video.error.code : 4] || "Lỗi không xác định.";
-                console.error("[Play] Video Error Event:", video.error, "Msg:", msg);
-                alert(`[Native Player Error]: ${msg}\nTên tập: ${title}`);
+                const code = video.error ? video.error.code : 4;
+                console.error("[Play] Video Error Event:", video.error, "code:", code);
+                if ((code === 2 || code === 4) && fallbackDirect()) return;
+                showPlayerError(code === 3 ? "Không giải mã được tập này." : "Không phát được tập này.");
             };
 
             console.log("[Play] useMp4 =", useMp4, "mp4Url =", mp4Url);
@@ -3556,58 +3577,65 @@ document.addEventListener('visibilitychange', () => {
             // Update overlay title
             playerOverlay.setTitle(title);
 
-            if (useMp4) {
-                video.src = mp4Url;
-                console.log("[Play] Phát MP4 qua src");
-                video.play().catch(err => console.error("[Play] Lỗi video.play() MP4:", err));
-            } else {
-                const proxy = `/proxy/m3u8?url=${encodeURIComponent(url)}`;
-                console.log("[Play] Phát HLS qua Proxy:", proxy);
-
-                if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    console.log("[Play] Trình duyệt hỗ trợ mpegurl gốc (Native HLS)");
-                    video.src = proxy;
-                    video.play().catch(err => console.error("[Play] Lỗi video.play() Native HLS:", err));
-                } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                    console.log("[Play] Sử dụng Hls.js");
-                    const isTVMode = document.body.classList.contains('device-tv');
-                    hlsObj = new Hls({
-                        maxBufferLength: isTVMode ? 20 : 30,
-                        maxMaxBufferLength: isTVMode ? 120 : 600,
-                        manifestLoadingMaxRetry: 5,
-                        lowLatencyMode: !isTVMode
-                    });
-                    hlsObj.loadSource(proxy);
-                    hlsObj.attachMedia(video);
-                    hlsObj.on(Hls.Events.MANIFEST_PARSED, () => {
-                        console.log("[Play] MANIFEST_PARSED, gọi video.play()");
-                        video.play().catch(err => console.error("[Play] Lỗi video.play() Hls.js:", err));
-                    });
-                    
-                    hlsObj.on(Hls.Events.ERROR, (event, data) => {
-                        console.warn("[Play] Hls.js error event:", data);
-                        if (data.fatal) {
-                            let errorMsg = "";
-                            switch (data.type) {
-                                case Hls.ErrorTypes.NETWORK_ERROR:
-                                    errorMsg = "Lỗi kết nối mạng (Network Error)";
-                                    break;
-                                case Hls.ErrorTypes.MEDIA_ERROR:
-                                    errorMsg = "Lỗi định dạng phim (Media Error)";
-                                    break;
-                                default:
-                                    errorMsg = "Lỗi hệ thống khởi tạo (System Error)";
-                                    break;
-                            }
-                            alert(`[HLS Error]: ${errorMsg}\nChi tiết: ${data.details}\nTên tập: ${title}`);
-                            hlsObj.destroy();
-                        }
-                    });
-                } else {
-                    console.error("[Play] Trình duyệt không hỗ trợ phát HLS (không có Hls.js và không có Native HLS)");
-                    alert('LỖI: TRÌNH DUYỆT KHÔNG HỖ TRỢ HLS');
+            function attachSource(src) {
+                if (hlsObj) {
+                    hlsObj.destroy();
+                    hlsObj = null;
                 }
+                if (useMp4 || video.canPlayType('application/vnd.apple.mpegurl')) {
+                    console.log("[Play] Gắn nguồn trực tiếp vào video:", src);
+                    video.src = src;
+                    video.play().catch(err => console.error("[Play] Lỗi video.play():", err));
+                    return;
+                }
+                if (typeof Hls === 'undefined' || !Hls.isSupported()) {
+                    console.error("[Play] Trình duyệt không hỗ trợ phát HLS");
+                    showPlayerError("Trình duyệt này không phát được HLS.");
+                    return;
+                }
+                console.log("[Play] Sử dụng Hls.js:", src);
+                const isTVMode = document.body.classList.contains('device-tv');
+                hlsObj = new Hls({
+                    maxBufferLength: isTVMode ? 20 : 30,
+                    maxMaxBufferLength: isTVMode ? 120 : 600,
+                    manifestLoadingMaxRetry: HFPlayerUtils.isProxied(src) ? 1 : 5,
+                    lowLatencyMode: !isTVMode
+                });
+                hlsObj.loadSource(src);
+                hlsObj.attachMedia(video);
+                hlsObj.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(err => console.error("[Play] Lỗi video.play() Hls.js:", err));
+                });
+                hlsObj.on(Hls.Events.ERROR, (event, data) => {
+                    console.warn("[Play] Hls.js error event:", data);
+                    if (!data.fatal) return;
+                    const manifestFailed = data.type === Hls.ErrorTypes.NETWORK_ERROR && /^manifestLoad/.test(data.details || '');
+                    if (manifestFailed && fallbackDirect()) return;
+                    showPlayerError(data.type === Hls.ErrorTypes.MEDIA_ERROR ? "Không giải mã được tập này." : "Không phát được tập này.");
+                    if (hlsObj) {
+                        hlsObj.destroy();
+                        hlsObj = null;
+                    }
+                });
             }
+
+            attachSource(source);
+        }
+
+        // Safari chế độ riêng tư hoặc trình duyệt chặn dữ liệu: chỉ đọc localStorage cũng ném lỗi
+        function safeStorage() {
+            try { return window.localStorage; } catch (e) { return null; }
+        }
+
+        function showPlayerError(message) {
+            const box = document.getElementById('playerError');
+            box.textContent = message;
+            box.hidden = false;
+        }
+
+        function hidePlayerError() {
+            const box = document.getElementById('playerError');
+            if (box) box.hidden = true;
         }
 
         // --- EXIT PLAYER (QUAY LẠI TRANG CHỦ) ---
@@ -3662,41 +3690,54 @@ document.addEventListener('visibilitychange', () => {
         // Dữ liệu phim (tên, mô tả HTML, slug) chỉ đi vào DOM qua textContent/thuộc tính, không qua innerHTML hay onclick
         function buildDetailView(m, episodesList, isSaved) {
             const frag = document.createDocumentFragment();
-            frag.appendChild(iconButton('detail-back-btn', SVG_BACK, ' Quay lại', () => backToSearchResults()));
+            const back = iconButton('detail-back-btn', SVG_BACK, '', () => backToSearchResults());
+            back.setAttribute('aria-label', 'Quay lại');
+            frag.appendChild(back);
 
-            const hero = el('div', 'detail-hero');
-            const img = el('img', 'detail-backdrop');
+            const head = el('div', 'detail-head');
+            const img = el('img', 'detail-poster');
             img.src = m.poster_url || '';
-            img.alt = m.name || '';
-            hero.appendChild(img);
-            hero.appendChild(el('div', 'detail-hero-gradient'));
-            const heroContent = el('div', 'detail-hero-content');
-            heroContent.appendChild(el('div', 'detail-hero-title', m.name));
-            heroContent.appendChild(el('div', 'detail-hero-subtitle', `${m.origin_name || ''} (${m.year})`));
-            hero.appendChild(heroContent);
-            frag.appendChild(hero);
-
+            img.alt = '';
+            img.onerror = () => { img.onerror = null; img.src = POSTER_PLACEHOLDER; };
+            head.appendChild(img);
+            const body = el('div', 'detail-head-body');
+            body.appendChild(el('h2', 'detail-hero-title', m.name));
+            if (m.origin_name && m.origin_name !== m.name) body.appendChild(el('div', 'detail-hero-subtitle', m.origin_name));
+            const names = (a) => (Array.isArray(a) ? a.map(x => (x && x.name) || x).filter(Boolean) : []);
+            const year = m.year && String(m.year) !== 'undefined' ? String(m.year) : '';
+            body.appendChild(el('div', 'detail-meta', [year, names(m.country)[0], m.time].filter(Boolean).join(' · ')));
             const chips = el('div', 'detail-chips');
-            [m.episode_current, m.time, m.quality, m.lang].filter(Boolean).forEach(c => chips.appendChild(el('span', 'detail-chip', c)));
-            frag.appendChild(chips);
-
-            frag.appendChild(el('div', 'detail-overview', HFUtils.stripHtml(m.content) || 'Chưa có mô tả cho phim này.'));
-            const eps = el('div', 'detail-episodes');
-            eps.id = 'detailEpisodeList';
-            frag.appendChild(eps);
+            [m.quality].concat(String(m.lang || '').split('+')).map(s => (s || '').trim()).filter(Boolean)
+                .forEach(c => chips.appendChild(el('span', 'detail-chip', c)));
+            body.appendChild(chips);
+            head.appendChild(body);
+            frag.appendChild(head);
 
             const actions = el('div', 'detail-actions');
-            const save = el('button', 'detail-action-side');
+            actions.appendChild(iconButton('detail-action-play', SVG_PLAY, 'Phát', () => playSelectedMovieDirect(m.name, m.slug)));
+            const save = el('button', 'detail-action-side' + (isSaved ? ' is-saved' : ''));
             save.type = 'button';
             save.id = 'btnSaveDetail';
             save.innerHTML = SVG_BOOKMARK;
-            const label = el('span', '', isSaved ? 'Đã lưu' : 'Lưu phim');
+            const label = el('span', '', isSaved ? 'Đã lưu' : 'Lưu');
             label.id = 'saveBtnText';
             save.appendChild(label);
             save.addEventListener('click', () => toggleSaveMovie(m.slug, m.name, m.poster_url, m.year, m.episode_current, episodesList.length));
             actions.appendChild(save);
-            actions.appendChild(iconButton('detail-action-play', SVG_PLAY, 'Phát', () => playSelectedMovieDirect(m.name, m.slug)));
             frag.appendChild(actions);
+
+            const overview = HFUtils.stripHtml(m.content);
+            if (overview) {
+                const p = el('p', 'detail-overview', overview);
+                p.addEventListener('click', () => p.classList.toggle('is-open'));
+                frag.appendChild(p);
+            }
+            const genres = names(m.category).slice(0, 3).join(' · ');
+            if (genres) frag.appendChild(el('div', 'detail-genres', genres));
+
+            const eps = el('div', 'detail-episodes');
+            eps.id = 'detailEpisodeList';
+            frag.appendChild(eps);
             return frag;
         }
 
@@ -3708,7 +3749,7 @@ document.addEventListener('visibilitychange', () => {
             if (homepageContent) homepageContent.style.display = 'none';
             resultsDiv.style.display = 'none';
             detailDiv.style.display = 'block';
-            detailDiv.innerHTML = '<div style="text-align: center; color: var(--text-dim);">Đang tải chi tiết phim...</div>';
+            detailDiv.innerHTML = '<div class="detail-loading" role="status">Đang tải</div>';
             
             try {
                 const res = await fetch(`/api/movie/${slug}`);
@@ -3732,6 +3773,7 @@ document.addEventListener('visibilitychange', () => {
                             episodes: episodesList,
                             movieSlug: m.slug,
                             watchStates,
+                            watchingPct: HFUtils.progressPct(savedMovie),
                             onPlay: (ep) => {
                                 if (maybeCast(m.slug, ep.link_m3u8)) return;
                                 currentMovie = { slug: m.slug, name: m.name, poster_url: m.poster_url, year: m.year };
@@ -3751,15 +3793,18 @@ document.addEventListener('visibilitychange', () => {
             const listEl = document.getElementById('detailEpisodeList');
             if (!listEl || !currentDetailEpisodes || currentDetailEpisodes.length === 0) return;
             let watchStates = {};
+            let watchingPct = 0;
             let movie = currentMovie;
             if (movie && movie.slug) {
                 const saved = savedMoviesList.find(item => item.slug === movie.slug);
                 if (saved && saved.episode_states) watchStates = saved.episode_states;
+                watchingPct = HFUtils.progressPct(saved);
             }
             renderEpisodeList(listEl, {
                 episodes: currentDetailEpisodes,
                 movieSlug: movie ? movie.slug : null,
                 watchStates,
+                watchingPct,
                 onPlay: (ep) => {
                     if (movie && maybeCast(movie.slug, ep.link_m3u8)) return;
                     if (movie) currentMovie = { slug: movie.slug, name: movie.name, poster_url: movie.poster_url };
@@ -3788,6 +3833,7 @@ document.addEventListener('visibilitychange', () => {
                 const res = await fetch('/api/saved');
                 savedMoviesList = await res.json();
                 if (typeof updateHeroSaveLabels === 'function') updateHeroSaveLabels();
+                renderHomeContinue();
             } catch(e) {
                 console.error("Lỗi lấy danh sách tủ phim:", e);
             }
@@ -3810,7 +3856,7 @@ document.addEventListener('visibilitychange', () => {
                         savedMoviesList = savedMoviesList.filter(item => item.slug !== slug);
                         if (btn) {
                             btn.className = "detail-action-side";
-                            txt.textContent = "Lưu phim";
+                            txt.textContent = "Lưu";
                         }
                     }
                 } catch(e) { alert("Không thể xóa phim: " + e.message); }
@@ -3833,7 +3879,7 @@ document.addEventListener('visibilitychange', () => {
                     if (data.status === 'success') {
                         savedMoviesList = savedMoviesList.filter(item => item.slug !== slug).concat(data.movie);
                         if (btn) {
-                            btn.className = "detail-action-side";
+                            btn.className = "detail-action-side is-saved";
                             txt.textContent = "Đã lưu";
                         }
                     }
@@ -3875,27 +3921,49 @@ document.addEventListener('visibilitychange', () => {
             }
         }
 
+        // Một dòng "đang xem": poster, tên, tập và thời gian còn lại, thanh tiến độ. Chạm là phát tiếp.
+        function buildContinueCard(m, className) {
+            const card = el('button', className);
+            card.type = 'button';
+            card.dataset.slug = m.slug;
+            const img = el('img', 'continue-poster');
+            img.alt = '';
+            img.src = m.poster_url || '';
+            img.onerror = () => { img.onerror = null; img.src = POSTER_PLACEHOLDER; };
+            card.appendChild(img);
+            const body = el('span', 'continue-body');
+            body.appendChild(el('span', 'continue-title', m.name));
+            body.appendChild(el('span', 'continue-ep', HFUtils.continueMeta(m)));
+            const bar = el('span', 'continue-progress');
+            const fill = el('span', 'continue-progress-fill');
+            fill.style.width = HFUtils.progressPct(m) + '%';
+            bar.appendChild(fill);
+            body.appendChild(bar);
+            card.appendChild(body);
+            const play = el('span', 'continue-play');
+            play.innerHTML = SVG_PLAY;
+            card.appendChild(play);
+            card.setAttribute('aria-label', `Phát tiếp ${m.name}`);
+            card.addEventListener('click', () => playResumeSavedMovie(m.slug));
+            return card;
+        }
+
         function renderContinueRow(rows) {
             const row = document.getElementById('continueRow');
             row.innerHTML = '';
-            rows.forEach(m => {
-                const card = el('button', 'continue-card');
-                card.type = 'button';
-                card.dataset.slug = m.slug;
-                const img = el('img', 'continue-poster');
-                img.alt = '';
-                img.src = m.poster_url || '';
-                card.appendChild(img);
-                card.appendChild(el('div', 'continue-title', m.name));
-                card.appendChild(el('div', 'continue-ep', m.last_watched_episode || ''));
-                const bar = el('div', 'continue-progress');
-                const fill = el('div', 'continue-progress-fill');
-                fill.style.width = HFUtils.progressPct(m) + '%';
-                bar.appendChild(fill);
-                card.appendChild(bar);
-                card.addEventListener('click', () => playResumeSavedMovie(m.slug));
-                row.appendChild(card);
-            });
+            rows.forEach(m => row.appendChild(buildContinueCard(m, 'continue-card')));
+        }
+
+        const HOME_CONTINUE_MAX = 3;
+
+        function renderHomeContinue() {
+            const section = document.getElementById('homeContinue');
+            const list = document.getElementById('homeContinueList');
+            if (!section || !list) return;
+            const rows = HFUtils.splitLibrary(savedMoviesList).continueWatching.slice(0, HOME_CONTINUE_MAX);
+            list.innerHTML = '';
+            rows.forEach((m, i) => list.appendChild(buildContinueCard(m, 'home-cont' + (i === 0 ? ' is-lead' : ''))));
+            section.hidden = rows.length === 0;
         }
 
         async function renderSavedMovies() {
@@ -3910,6 +3978,7 @@ document.addEventListener('visibilitychange', () => {
             grid.innerHTML = '';
             if (saved.length === 0) return;
 
+            // Đã lưu: lưới poster gọn; tập phim xem ở trang chi tiết
             saved.forEach(m => {
                 const card = document.createElement('div');
                 card.className = 'saved-movie-row';
@@ -3917,56 +3986,27 @@ document.addEventListener('visibilitychange', () => {
                 if (!document.body.classList.contains('device-mobile')) {
                     card.setAttribute('tabindex', '0');
                 }
-                
-                const totalEpsText = m.total_episodes ? `${m.total_episodes} tập` : m.episode_current;
-                
-                const epsContainer = el('div', 'episodes-container');
-                if (!(m.episodes && m.episodes.length > 0)) {
-                    const hint = el('span', '', 'Chưa có danh sách tập phim. ');
-                    hint.style.cssText = 'font-size: 0.85rem; color: var(--text-dim);';
-                    const link = el('a', '', 'Đồng bộ ngay');
-                    link.href = '#';
-                    link.style.cssText = 'color: var(--accent-color); text-decoration: underline;';
-                    link.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); syncEpisodesForMovie(m.slug); });
-                    hint.appendChild(link);
-                    epsContainer.appendChild(hint);
-                }
 
+                const wrap = el('div', 'poster-wrap');
                 const poster = el('img', 'movie-poster');
                 poster.src = m.poster_url || '';
                 poster.alt = m.name || '';
-                card.appendChild(poster);
-                const infoRow = el('div', 'movie-info-row');
-                infoRow.appendChild(el('div', 'movie-title', m.name));
-                const meta = el('div', 'movie-meta');
-                meta.appendChild(el('span', '', `Năm: ${m.year || ''} (${totalEpsText || ''})`));
-                infoRow.appendChild(meta);
-                infoRow.appendChild(epsContainer);
-                const btnRow = el('div');
-                btnRow.style.cssText = 'display: flex; gap: 0.5rem; margin-top: 0.5rem;';
-                const resume = iconButton('btn-main', '<svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>', ' Xem tiếp', (e) => { e.stopPropagation(); playResumeSavedMovie(m.slug); });
-                resume.style.cssText = 'padding: 0.5rem 1.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.25rem;';
-                const del = iconButton('btn-sec', '<svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>', ' Xóa phim', (e) => { e.stopPropagation(); deleteSavedMovie(m.slug); });
-                del.style.cssText = 'padding: 0.5rem 1.25rem; font-size: 0.85rem; margin: 0; border-color: #555; display: flex; align-items: center; gap: 0.25rem;';
-                btnRow.append(resume, del);
-                infoRow.appendChild(btnRow);
-                card.appendChild(infoRow);
+                poster.loading = 'lazy';
+                poster.onerror = () => { poster.onerror = null; poster.src = POSTER_PLACEHOLDER; };
+                wrap.appendChild(poster);
+                const del = iconButton('btn-sec saved-remove', '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>', '', (e) => { e.stopPropagation(); deleteSavedMovie(m.slug); });
+                del.setAttribute('aria-label', `Bỏ lưu ${m.name}`);
+                wrap.appendChild(del);
+                card.appendChild(wrap);
+                card.appendChild(el('div', 'movie-title', m.name));
+                card.appendChild(el('div', 'movie-meta', HFUtils.cardMeta({ episode_current: m.episode_current, year: m.year })));
                 card.onclick = () => {
                     switchTab('search-tab');
                     showMovieDetail(m.slug);
                 };
                 grid.appendChild(card);
-
-                if (m.episodes && m.episodes.length > 0) {
-                    renderEpisodeList(epsContainer, {
-                        episodes: m.episodes,
-                        movieSlug: m.slug,
-                        watchStates: m.episode_states || {},
-                        onPlay: (ep, idx) => playEpisodeFromSaved(m.slug, idx)
-                    });
-                }
             });
-            updateDownloadIndicatorsUI();
+            renderHomeContinue();
             setTimeout(initTabbing, 100);
         }
 
@@ -4125,7 +4165,7 @@ document.addEventListener('visibilitychange', () => {
                 if (!btn) continue;
                 const val = f[type];
                 btn.classList.toggle('active', !!val);
-                btn.textContent = (val ? getFilterLabel(type, val) : labels[type]) + ' ▾';
+                btn.textContent = val ? getFilterLabel(type, val) : labels[type];
                 if (val) activeCount++;
             }
             const clearBtn = document.getElementById('filterClearBtn');

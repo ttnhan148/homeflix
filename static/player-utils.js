@@ -41,7 +41,31 @@
     return 'Tập kế sau ' + secondsLeft + ' giây';
   }
 
-  const api = { DEFAULT_PREFS, loadPrefs, savePrefs, showSkipIntro, introTarget, hasNextEpisode, countdownLabel };
+  // Nguồn video: mặc định qua proxy (có cache, tải trước). Khi proxy không lấy được nguồn
+  // (CDN chặn IP máy chủ ngoài Việt Nam), thiết bị nhớ phát thẳng link gốc trong 12 giờ.
+  const DIRECT_KEY = 'hf_direct_stream_until';
+  const DIRECT_TTL_MS = 12 * 3600 * 1000;
+
+  function proxyUrl(url) {
+    return '/proxy/m3u8?url=' + encodeURIComponent(url);
+  }
+
+  function isProxied(src) {
+    return String(src).indexOf('/proxy/m3u8?') === 0;
+  }
+
+  function streamSource(storage, url, now) {
+    let until = 0;
+    try { until = Number(storage.getItem(DIRECT_KEY)) || 0; } catch (e) { until = 0; }
+    return until > now ? url : proxyUrl(url);
+  }
+
+  function rememberDirect(storage, now) {
+    try { storage.setItem(DIRECT_KEY, String(now + DIRECT_TTL_MS)); } catch (e) { /* storage bị chặn */ }
+  }
+
+  const api = { DEFAULT_PREFS, loadPrefs, savePrefs, showSkipIntro, introTarget, hasNextEpisode, countdownLabel,
+    DIRECT_TTL_MS, proxyUrl, isProxied, streamSource, rememberDirect };
   root.HFPlayerUtils = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

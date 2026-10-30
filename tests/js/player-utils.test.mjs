@@ -59,3 +59,24 @@ test('hasNextEpisode', () => {
 test('countdownLabel', () => {
   assert.equal(U.countdownLabel(7), 'Tập kế sau 7 giây');
 });
+
+test('streamSource: proxy by default, direct while the remembered window lasts', () => {
+  const now = 1_000_000;
+  assert.equal(U.streamSource(mem(), 'https://cdn.test/a.m3u8', now), '/proxy/m3u8?url=https%3A%2F%2Fcdn.test%2Fa.m3u8');
+  const s = mem();
+  U.rememberDirect(s, now);
+  assert.equal(U.streamSource(s, 'https://cdn.test/a.m3u8', now + 1000), 'https://cdn.test/a.m3u8');
+  assert.equal(U.streamSource(s, 'https://cdn.test/a.m3u8', now + U.DIRECT_TTL_MS + 1), '/proxy/m3u8?url=https%3A%2F%2Fcdn.test%2Fa.m3u8');
+  assert.equal(U.streamSource(boom, 'https://cdn.test/a.m3u8', now), '/proxy/m3u8?url=https%3A%2F%2Fcdn.test%2Fa.m3u8');
+  U.rememberDirect(boom, now); // storage bị chặn: không ném lỗi
+});
+
+test('isProxied tells a proxied source from a direct one', () => {
+  assert.equal(U.isProxied('/proxy/m3u8?url=x'), true);
+  assert.equal(U.isProxied('https://cdn.test/a.m3u8'), false);
+});
+
+test('streamSource and rememberDirect survive a missing storage', () => {
+  assert.equal(U.streamSource(null, 'https://cdn.test/a.m3u8', 1), '/proxy/m3u8?url=https%3A%2F%2Fcdn.test%2Fa.m3u8');
+  U.rememberDirect(null, 1);
+});

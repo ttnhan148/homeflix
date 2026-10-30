@@ -52,10 +52,14 @@ def open_app(app_module, browser):
 
         # hls.js (CDN) bị chặn trong test: thay bằng bản giả ghi nhận việc gắn nguồn, và chặn phát thật
         page.add_init_script("""
-            window.Hls = class { static isSupported() { return true; } loadSource() {} on() {} destroy() {}
+            window.Hls = class { static isSupported() { return true; }
+                constructor() { this.handlers = {}; window.__hls = this; }
+                loadSource(src) { window.__hlsSource = src; }
+                on(name, fn) { this.handlers[name] = fn; }
+                destroy() { this.destroyed = true; }
                 attachMedia() { window.__hlsAttached = true; } };
             window.Hls.Events = { MANIFEST_PARSED: 'manifestParsed', ERROR: 'error' };
-            window.Hls.ErrorTypes = {};
+            window.Hls.ErrorTypes = { NETWORK_ERROR: 'networkError', MEDIA_ERROR: 'mediaError' };
             HTMLMediaElement.prototype.play = function () { window.__plays = (window.__plays || 0) + 1; return Promise.resolve(); };
             HTMLMediaElement.prototype.pause = function () { window.__pauses = (window.__pauses || 0) + 1; };
             HTMLMediaElement.prototype.canPlayType = function () { return ''; }; // ép đường hls.js, Chromium mới có HLS gốc

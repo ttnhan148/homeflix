@@ -48,7 +48,7 @@ def test_playing_unsaved_movie_creates_history_but_not_saved(open_app):
     row = next(r for r in api(page, "GET", "/api/saved") if r["slug"] == "phim-le-1")
     assert row["saved"] is False and row["name"] == "phim-le-1" and len(row["episodes"]) == 3
     assert page.evaluate("checkIsSaved('phim-le-1')") is False
-    assert page.locator("#saveBtnText").inner_text() == "Lưu phim"
+    assert page.locator("#saveBtnText").inner_text() == "Lưu"
 
 
 def test_library_splits_continue_and_saved(open_app):
@@ -81,7 +81,7 @@ def test_save_after_watching_keeps_single_entry(open_app):
     page.evaluate("fetchSavedMovies()")
     page.evaluate("showMovieDetailBySlug('phim-bo-1')")
     page.wait_for_selector("#btnSaveDetail")
-    assert page.locator("#saveBtnText").inner_text() == "Lưu phim"
+    assert page.locator("#saveBtnText").inner_text() == "Lưu"
     tap(page, "#btnSaveDetail")
     page.wait_for_function("document.getElementById('saveBtnText').textContent === 'Đã lưu'")
     assert page.evaluate("savedMoviesList.filter(m => m.slug === 'phim-bo-1').length") == 1

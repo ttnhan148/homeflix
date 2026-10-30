@@ -3,8 +3,39 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const U = createRequire(import.meta.url)('../../static/home-utils.js');
 
-test('heroMeta joins year, categories, countries', () => {
-  assert.equal(U.heroMeta({ year: 2026, category: ['Hành Động', 'Phiêu Lưu'], country: ['Mỹ'] }), '2026 · Hành Động, Phiêu Lưu · Mỹ');
+test('heroMeta keeps year, first category, first country', () => {
+  assert.equal(U.heroMeta({ year: 2026, category: ['Hành Động', 'Phiêu Lưu'], country: ['Mỹ', 'Anh'] }), '2026 · Hành Động · Mỹ');
+});
+
+test('shortEpisode shortens finished series and keeps the rest', () => {
+  assert.equal(U.shortEpisode('Hoàn Tất (8/8)'), 'Đủ 8 tập');
+  assert.equal(U.shortEpisode('Hoàn tất (40/40)'), 'Đủ 40 tập');
+  assert.equal(U.shortEpisode('Hoàn Tất (12/16)'), 'Tập 12/16');
+  assert.equal(U.shortEpisode('Tập 15'), 'Tập 15');
+  assert.equal(U.shortEpisode(' Full '), 'Full');
+  assert.equal(U.shortEpisode(null), '');
+});
+
+test('cardMeta joins short episode and year, skipping blanks', () => {
+  assert.equal(U.cardMeta({ episode_current: 'Hoàn Tất (8/8)', year: 2021 }), 'Đủ 8 tập · 2021');
+  assert.equal(U.cardMeta({ episode_current: 'Tập 7', year: '2026' }), 'Tập 7 · 2026');
+  assert.equal(U.cardMeta({ year: 'undefined' }), '');
+});
+
+test('epShort turns "Tập 09" into "9" and leaves other names alone', () => {
+  assert.equal(U.epShort('Tập 09'), '9');
+  assert.equal(U.epShort('Tập 1.5'), '1.5');
+  assert.equal(U.epShort('tập 120'), '120');
+  assert.equal(U.epShort('Full'), 'Full');
+  assert.equal(U.epShort('Tập Đặc Biệt'), 'Tập Đặc Biệt');
+});
+
+test('continueMeta shows episode and minutes left', () => {
+  assert.equal(U.continueMeta({ last_watched_episode: 'Tập 09', position: 1080, duration: 2700 }), 'Tập 9 · còn 27 phút');
+  assert.equal(U.continueMeta({ last_watched_episode: 'Full', position: 3600, duration: 6060 }), 'Còn 41 phút');
+  assert.equal(U.continueMeta({ last_watched_episode: 'Tập 2', position: 2690, duration: 2700 }), 'Tập 2 · sắp hết');
+  assert.equal(U.continueMeta({ last_watched_episode: 'Tập 2' }), 'Tập 2');
+  assert.equal(U.continueMeta({}), '');
 });
 test('heroMeta skips empty parts', () => {
   assert.equal(U.heroMeta({ year: '2026', category: [], country: ['Mỹ'] }), '2026 · Mỹ');

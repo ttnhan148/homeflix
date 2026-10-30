@@ -10,7 +10,7 @@ SIZES = [(430, 932, False), (440, 956, False), (1920, 1080, True)]
 def test_shell_precaches_new_static_files():
     sw = (ROOT / "static" / "sw.js").read_text()
     assert "homeflix-shell-v" in sw  # phiên bản cache do các gói sau tăng (kiểm tra cụ thể ở test của gói đó)
-    assert "/static/ios26.css" in sw and "/static/home-utils.js" in sw
+    assert "/static/hf.css" in sw and "/static/home-utils.js" in sw
 
 
 @pytest.mark.parametrize("w,h,tv", SIZES)
@@ -40,7 +40,7 @@ def test_tv_controls_use_at_least_20px_text(open_app):
     page = open_app(tv=True)
     page.goto("http://homeflix.test/")
     page.wait_for_selector(".hero-btn-play")
-    for sel in ("#filterBar .grid-tab-btn", "#filterBar .filter-btn", ".hero-btn-play", ".hero-badge", "#resultCount"):
+    for sel in ("#filterBar .grid-tab-btn", "#filterBar .filter-btn", ".hero-btn-play", "#heroHeading", ".hero-title", "#resultCount"):
         size = page.evaluate("s => parseFloat(getComputedStyle(document.querySelector(s)).fontSize)", sel)
         assert size >= 20, (sel, size)
 

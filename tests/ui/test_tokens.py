@@ -1,6 +1,6 @@
 from pathlib import Path
 
-CSS = Path(__file__).resolve().parents[2] / "static" / "ios26.css"
+CSS = Path(__file__).resolve().parents[2] / "static" / "hf.css"
 
 
 def test_glass_class_has_blur(open_app):

@@ -1,0 +1,2491 @@
+/* HomeFlix — nền đen tuyệt đối, phân lớp bằng độ sáng (#000, #111, #2a2a2a), không bóng, không gradient.
+   Màu đỏ chỉ dùng cho tiến độ xem. Kính chỉ đặt ở thanh nổi trên nội dung đang trượt.
+   Nạp sau CSS inline trong index.html, nên luật cùng độ ưu tiên ở đây thắng. */
+
+:root {
+    /* Vùng an toàn: iPhone có Dynamic Island và thanh Home. Test ghi đè các biến này. */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+
+    --ground: #000;
+    --surface: #111;
+    --raised: #2a2a2a;
+    --line: #1a1a1a;
+    --control: #444;
+    --text: #fff;
+    --muted: #b4b4b4;
+    --faint: #949494;
+    --accent: #e50914;
+    --positive: #3fc07a;
+    --danger: #ff6b6b;
+
+    --glass-bg: rgba(24, 24, 26, 0.62);
+    --glass-blur: blur(24px) saturate(160%);
+    --glass-line: rgba(255, 255, 255, 0.08);
+
+    --pill: 999px;
+    --tap: 44px;
+    --tabbar-h: 56px;
+    --edge: 16px;
+    --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    /* Biến cũ mà CSS inline còn dùng */
+    --bg-color: #000;
+    --card-bg: #111;
+    --surface-elevated: #1c1c1e;
+    --accent-color: #e50914;
+    --accent-hover: #e50914;
+    --text-main: #fff;
+    --text-dim: #b4b4b4;
+    --text-muted: #949494;
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-border-strong: rgba(255, 255, 255, 0.08);
+    --glass-border-light: rgba(255, 255, 255, 0.12);
+    --focus-ring: #fff;
+    --shadow-glow: none;
+    --shadow-card: none;
+    --shadow-elevated: none;
+}
+
+.glass {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+}
+
+/* Trình duyệt không hỗ trợ backdrop-filter: lùi về nền đặc */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+        background: rgba(17, 17, 17, 0.96);
+    }
+}
+
+/* TV thường yếu: bỏ blur, dùng nền đặc */
+body.device-tv .glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(20, 20, 22, 0.95);
+}
+
+/* ---------- Nền tảng ---------- */
+body, input, button, textarea, select {
+    font-family: var(--font);
+}
+
+body {
+    background: var(--ground);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.45;
+}
+
+button {
+    font-family: var(--font);
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Tên phim dài không khoảng trắng không được đẩy trang tràn ngang (iOS sẽ thu nhỏ cả trang) */
+.detail-hero-title,
+.detail-hero-subtitle,
+.detail-overview,
+.movie-title,
+.continue-title,
+.player-ep-title,
+.cast-remote-title,
+.cast-dialog p {
+    overflow-wrap: anywhere;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+body.device-tv {
+    font-size: 20px;
+}
+
+body.device-tv :focus-visible {
+    outline: 4px solid #fff !important;
+    outline-offset: 4px;
+}
+
+.container {
+    max-width: 1200px;
+    padding: 0 24px 48px;
+    gap: 28px;
+}
+
+body.device-mobile .container {
+    padding: 0 max(var(--edge), var(--safe-right)) calc(var(--tabbar-h) + var(--safe-bottom) + 28px) max(var(--edge), var(--safe-left));
+    gap: 24px;
+}
+
+body.device-tv .container {
+    max-width: none;
+    padding: 0 60px 60px;
+    gap: 36px;
+}
+
+/* ---------- Header: logo, điều hướng (TV/máy tính), nút TV ---------- */
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 16px 0;
+    gap: 0;
+    background: rgba(0, 0, 0, 0.9);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 0;
+}
+
+/* Máy tính: nền đen tràn hết bề ngang cửa sổ (không tạo cuộn ngang), nội dung vẫn thẳng mép cột */
+body.device-desktop .sticky-header {
+    background: var(--ground);
+    box-shadow: 0 0 0 100vmax var(--ground);
+    clip-path: inset(0 -100vmax);
+    padding: 14px 0;
+}
+
+body.device-tv .sticky-header {
+    position: relative;
+    background: transparent;
+    padding: 28px 0 8px;
+}
+
+/* iPhone: header nằm trong luồng, ngay dưới Dynamic Island */
+body.device-mobile .sticky-header {
+    position: relative;
+    top: auto;
+    background: transparent;
+    padding: calc(var(--safe-top) + 6px) 0 0;
+}
+
+.app-header {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+}
+
+.app-header h1,
+body.device-mobile .app-header h1,
+body.device-tv .app-header h1 {
+    font-size: 22px;
+    line-height: 30px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    text-transform: none;
+}
+
+body.device-mobile .app-header {
+    min-height: 52px;
+}
+
+body.device-mobile .app-header h1 {
+    font-size: 24px;
+    line-height: 32px;
+}
+
+body.device-tv .app-header h1 {
+    font-size: 30px;
+    line-height: 38px;
+}
+
+body.device-tv .brand-mark {
+    width: 40px;
+    height: 40px;
+}
+
+.tabs-nav,
+body.device-tv .tabs-nav {
+    display: flex;
+    gap: 4px;
+    width: auto;
+    padding: 0;
+    border: 0;
+    justify-content: flex-start;
+}
+
+.tab-btn,
+body.device-tv .tab-btn {
+    min-height: var(--tap);
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--faint);
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.tab-btn:hover {
+    color: var(--text);
+    background: transparent;
+    border: 0;
+}
+
+.tab-btn.active,
+body.device-tv .tab-btn.active {
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    font-weight: 600;
+}
+
+body.device-tv .tab-btn {
+    min-height: 56px;
+    padding: 0 18px;
+    font-size: 22px;
+}
+
+body.device-mobile #appTabsNav {
+    display: none;
+}
+
+.header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cast-top-btn,
+.cast-settings-btn {
+    position: relative;
+    width: var(--tap);
+    height: var(--tap);
+    padding: 0;
+    border: 1px solid var(--control);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+body:not(.device-mobile) .cast-top-btn,
+body.device-mobile .cast-settings-btn {
+    display: none;
+}
+
+body.device-tv .cast-settings-btn {
+    width: 56px;
+    height: 56px;
+}
+
+.cast-dot {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--positive);
+    box-shadow: 0 0 0 2px var(--ground);
+}
+
+/* Dải kính sau thanh trạng thái iPhone (PWA black-translucent) */
+.status-shield {
+    display: none;
+}
+
+body.device-mobile .status-shield {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--safe-top);
+    z-index: 880;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.55); /* trên nền đen lúc chưa cuộn thì hoà vào nền */
+}
+
+body.player-active .status-shield {
+    display: none;
+}
+
+/* ---------- Ô tìm kiếm (TV, máy tính) ---------- */
+.search-container {
+    gap: 28px;
+}
+
+.search-bar {
+    display: flex;
+    gap: 10px;
+}
+
+.search-bar input,
+.search-overlay-input {
+    height: 48px;
+    border: 1px solid #222;
+    border-radius: var(--pill);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    padding-left: 44px;
+    box-shadow: none;
+}
+
+.search-bar input:focus,
+.search-overlay-input:focus {
+    border-color: var(--control);
+    box-shadow: none;
+    outline: none;
+}
+
+body.device-mobile .search-bar {
+    display: none;
+}
+
+body.device-tv .search-bar input {
+    height: 60px;
+    font-size: 20px;
+}
+
+/* Nút chính: trắng, chữ đen, không gradient, không glow */
+.btn-main,
+body.device-tv .btn-main {
+    height: 48px;
+    padding: 0 22px;
+    border: 0;
+    border-radius: var(--pill);
+    background: #fff;
+    background-image: none;
+    color: #000;
+    font-size: 15px;
+    font-weight: 600;
+    text-transform: none;
+    box-shadow: none;
+    transform: none;
+}
+
+.btn-main:hover {
+    background: #e6e6e6;
+    box-shadow: none;
+    transform: none;
+}
+
+body.device-tv .btn-main {
+    height: 60px;
+    font-size: 20px;
+}
+
+.btn-sec {
+    border: 1px solid var(--control);
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text);
+}
+
+/* ---------- Home ---------- */
+#homepageContent {
+    flex-direction: column;
+    gap: 32px;
+}
+
+body.device-tv #homepageContent {
+    gap: 44px;
+}
+
+.sec-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.sec-head h2 {
+    font-size: 19px;
+    line-height: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.sec-link {
+    min-height: var(--tap);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+body.device-tv .sec-head h2 {
+    font-size: 26px;
+    line-height: 32px;
+}
+
+body.device-tv .sec-link {
+    font-size: 20px;
+}
+
+/* --- Xem tiếp: thẻ đầu nổi bật, các dòng sau gọn --- */
+.home-continue,
+.continue-row {
+    display: flex;
+    flex-direction: column;
+}
+
+.home-cont,
+.continue-card {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+}
+
+.continue-card {
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    padding: 12px 0;
+}
+
+.home-cont .continue-poster,
+.continue-card .continue-poster {
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--surface);
+}
+
+.continue-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.continue-title {
+    font-size: 15px;
+    line-height: 20px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.continue-ep {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.continue-ep:empty {
+    display: none;
+}
+
+.continue-progress {
+    display: block;
+    height: 3px;
+    margin-top: 6px;
+    border-radius: 2px;
+    background: var(--raised);
+    overflow: hidden;
+}
+
+.continue-progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+}
+
+.continue-play {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--control);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+}
+
+.continue-play svg {
+    width: 16px;
+    height: 16px;
+}
+
+.home-cont.is-lead {
+    grid-template-columns: 96px minmax(0, 1fr) auto;
+    gap: 14px;
+    padding: 12px;
+    margin-bottom: 6px;
+    border-radius: 20px;
+    background: var(--surface);
+}
+
+.home-cont.is-lead .continue-title {
+    font-size: 17px;
+    line-height: 24px;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.home-cont.is-lead .continue-play {
+    width: 48px;
+    height: 48px;
+    border: 0;
+    background: #fff;
+    color: #000;
+}
+
+.home-cont.is-lead .continue-progress {
+    height: 4px;
+}
+
+/* Máy tính, TV: Xem tiếp là hàng thẻ */
+body:not(.device-mobile) .home-continue,
+body:not(.device-mobile) .continue-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+
+body:not(.device-mobile) .home-cont,
+body:not(.device-mobile) .continue-card {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px;
+    margin: 0;
+    border-radius: 20px;
+    background: var(--surface);
+}
+
+body:not(.device-mobile) .home-cont .continue-play,
+body:not(.device-mobile) .continue-card .continue-play {
+    display: none;
+}
+
+body.device-tv .home-continue,
+body.device-tv .continue-row {
+    gap: 24px;
+}
+
+body.device-tv .home-cont,
+body.device-tv .continue-card {
+    grid-template-columns: 120px minmax(0, 1fr);
+    padding: 20px;
+}
+
+body.device-tv .continue-title {
+    font-size: 24px;
+    line-height: 30px;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+body.device-tv .continue-ep {
+    font-size: 20px;
+    line-height: 28px;
+}
+
+body.device-tv .continue-progress {
+    height: 6px;
+    margin-top: 12px;
+}
+
+/* --- Đang chiếu rạp: hàng thẻ ngang cuộn --- */
+.hero {
+    position: static;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    border-radius: 0;
+    background: none;
+}
+
+.hero-track {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+}
+
+.hero-track::-webkit-scrollbar {
+    display: none;
+}
+
+body.device-mobile .hero-track {
+    margin: 0 calc(-1 * max(var(--edge), var(--safe-right))) 0 calc(-1 * max(var(--edge), var(--safe-left)));
+    padding: 0 max(var(--edge), var(--safe-right)) 0 max(var(--edge), var(--safe-left));
+    scroll-padding: 0 max(var(--edge), var(--safe-left));
+    gap: 12px;
+}
+
+.hero-slide {
+    flex: 0 0 calc((100% - 28px) / 3);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scroll-snap-align: start;
+    min-width: 0;
+}
+
+body.device-mobile .hero-slide {
+    flex-basis: 78%;
+}
+
+body.device-tv .hero-slide {
+    flex-basis: calc((100% - 48px) / 3);
+}
+
+body.device-tv .hero-track {
+    gap: 24px;
+    padding: 8px;
+    margin: -8px;
+}
+
+.hero-media {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface);
+    cursor: pointer;
+}
+
+.hero-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.hero-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.hero-title {
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hero-meta {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hero-meta:empty {
+    display: none;
+}
+
+.hero-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.hero-btn-play,
+.hero-btn-save {
+    min-height: var(--tap);
+    padding: 0 20px;
+    border-radius: var(--pill);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.hero-btn-play {
+    border: 0;
+    background: #fff;
+    color: #000;
+}
+
+.hero-btn-save {
+    border: 1px solid var(--control);
+    background: transparent;
+    color: var(--text);
+    font-weight: 500;
+}
+
+.hero-btn-play.is-loading {
+    opacity: 0.6;
+}
+
+.hero-btn-play.is-loading::after {
+    content: "";
+    width: 14px;
+    height: 14px;
+    margin-left: 8px;
+    display: inline-block;
+    vertical-align: -2px;
+    border: 2px solid rgba(0, 0, 0, 0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: hf-spin 0.8s linear infinite;
+}
+
+.hero-dots {
+    display: none !important;
+}
+
+body.device-tv .hero-title {
+    font-size: 24px;
+    line-height: 30px;
+}
+
+body.device-tv .hero-meta {
+    font-size: 20px;
+    line-height: 26px;
+}
+
+body.device-tv .hero-btn-play,
+body.device-tv .hero-btn-save {
+    min-height: 56px;
+    padding: 0 28px;
+    font-size: 20px;
+}
+
+@keyframes hf-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---------- Thanh lọc: loại phim (gạch chân) + chip ---------- */
+.grid-tabs-section {
+    gap: 0;
+}
+
+#filterBar {
+    position: relative;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 0 14px;
+}
+
+body.device-mobile #filterBar {
+    position: sticky;
+    top: var(--safe-top);
+    margin: 0 calc(-1 * max(var(--edge), var(--safe-right))) 0 calc(-1 * max(var(--edge), var(--safe-left)));
+    padding: 4px max(var(--edge), var(--safe-right)) 12px max(var(--edge), var(--safe-left));
+}
+
+/* Kính nằm ở phần tử giả để tờ chọn (position: fixed) không bị kẹt trong backdrop-filter */
+body.device-mobile #filterBar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--glass-line);
+}
+
+#filterBar .type-row,
+body.device-mobile .grid-tabs-nav {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 24px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--line);
+    margin: 0;
+    padding: 0;
+}
+
+body.device-mobile #filterBar .type-row {
+    border-bottom: 0;
+    gap: 22px;
+}
+
+#filterBar .type-row::-webkit-scrollbar {
+    display: none;
+}
+
+#filterBar .grid-tab-btn {
+    flex: 0 0 auto;
+    min-height: var(--tap);
+    padding: 0;
+    margin-bottom: -1px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--faint);
+    font-size: 15px;
+    font-weight: 500;
+}
+
+body.device-mobile #filterBar .grid-tab-btn {
+    color: var(--muted);
+}
+
+#filterBar .grid-tab-btn:hover {
+    color: var(--text);
+    background: transparent;
+}
+
+#filterBar .grid-tab-btn.active {
+    color: var(--text);
+    border-bottom-color: var(--text);
+    background: transparent;
+}
+
+#filterBar .chip-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#filterBar .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 8px;
+    width: auto;
+    margin: 0;
+}
+
+/* iPhone: hàng chip cuộn ngang trong khung của nó, không đẩy trang tràn ngang.
+   Tờ chọn ở đây là position: fixed nên không bị overflow cắt. */
+body.device-mobile #filterBar .filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+#filterBar .filter-bar::-webkit-scrollbar {
+    display: none;
+}
+
+#filterBar .filter-dropdown {
+    flex: none;
+}
+
+#filterBar .filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 14px 0 16px;
+    border: 0;
+    border-radius: var(--pill);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+body.device-mobile #filterBar .filter-btn,
+body.device-mobile #filterBar .filter-clear-btn {
+    height: var(--tap);
+    min-height: var(--tap);
+}
+
+body.device-mobile #filterBar .filter-btn {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+#filterBar .filter-btn::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-right: 1.75px solid currentColor;
+    border-bottom: 1.75px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+}
+
+#filterBar .filter-btn.active {
+    background: #fff;
+    color: #000;
+}
+
+#filterBar .filter-clear-btn {
+    height: 40px;
+    padding: 0 6px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.result-count {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.filter-menu {
+    border: 0;
+    border-radius: 16px;
+    padding: 8px;
+    background: #1c1c1e;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+.filter-option {
+    min-height: 40px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    font-size: 15px;
+    text-align: left;
+}
+
+.filter-option:hover,
+.filter-option.active {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text);
+}
+
+/* iPhone: tờ chọn nổi phía trên tab bar */
+body.device-mobile .filter-menu {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px);
+    min-width: 0;
+    max-height: 55vh;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 16px;
+    border-radius: 24px;
+    z-index: 950;
+    background: rgba(28, 28, 30, 0.86);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: none;
+}
+
+body.device-mobile .filter-option {
+    min-height: var(--tap);
+    padding: 0 16px;
+    border-radius: var(--pill);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+body.device-mobile .filter-option.active {
+    background: #fff;
+    color: #000;
+}
+
+body.device-tv #filterBar .grid-tab-btn,
+body.device-tv #filterBar .filter-btn,
+body.device-tv #filterBar .filter-clear-btn,
+body.device-tv .result-count {
+    font-size: 20px;
+}
+
+body.device-tv #filterBar .grid-tab-btn,
+body.device-tv #filterBar .filter-btn,
+body.device-tv #filterBar .filter-clear-btn {
+    min-height: 56px;
+    height: 56px;
+}
+
+body.device-tv #filterBar .filter-btn {
+    padding: 0 22px 0 24px;
+}
+
+body.device-tv .filter-option {
+    min-height: 52px;
+    font-size: 20px;
+}
+
+/* ---------- Lưới phim ---------- */
+.grid-tab-content,
+.movies-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 24px 16px;
+}
+
+body.device-mobile .grid-tab-content,
+body.device-mobile .movies-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px 12px;
+}
+
+body.device-tv .grid-tab-content {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: 200px;
+    overflow-x: auto;
+    gap: 24px;
+    padding: 8px;
+    margin: 0 -8px;
+}
+
+body.device-tv .movies-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 28px 24px;
+}
+
+.movie-card,
+body.device-tv .movie-card {
+    display: flex;
+    flex-direction: column;
+    background: none;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: none;
+    overflow: visible;
+    transform: none;
+    cursor: pointer;
+}
+
+.movie-card:hover,
+body.device-tv .movie-card:hover {
+    transform: none;
+    box-shadow: none;
+    border: 0;
+}
+
+.movie-card:hover .movie-poster {
+    filter: brightness(1.12);
+}
+
+.poster-wrap {
+    position: relative;
+    aspect-ratio: 2 / 3;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+}
+
+.poster-overlay-top,
+.poster-overlay-bottom {
+    display: none;
+}
+
+.movie-info,
+body.device-tv .movie-card .movie-info {
+    padding: 8px 0 0;
+    background: none;
+    gap: 2px;
+}
+
+.movie-title,
+body.device-mobile .movie-title,
+body.device-mobile .grid-tab-content .movie-title,
+body.device-tv .movie-title {
+    height: auto;
+    font-size: 14px;
+    line-height: 19px;
+    font-weight: 500;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+body.device-mobile .movie-title,
+body.device-mobile .grid-tab-content .movie-title {
+    font-size: 13px;
+    line-height: 18px;
+}
+
+body.device-tv .movie-title {
+    font-size: 20px;
+    line-height: 26px;
+    display: block;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.movie-meta,
+body.device-mobile .grid-tab-content .movie-meta {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--faint);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+}
+
+body.device-tv .movie-meta {
+    font-size: 18px;
+    line-height: 24px;
+}
+
+.movie-meta:empty {
+    display: none;
+}
+
+body.device-tv .movie-card:focus-visible {
+    outline: 4px solid #fff;
+    outline-offset: 4px;
+}
+
+/* Chỗ chờ: khối xám phẳng đúng kích thước thật, không shimmer */
+.skeleton-card,
+body.device-mobile .skeleton-card,
+body.device-tv .skeleton-card {
+    min-height: 0;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    animation: hf-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-card .skeleton-img {
+    aspect-ratio: 2 / 3;
+    height: auto;
+    border-radius: 6px;
+    background: var(--surface);
+}
+
+.skeleton-card .skeleton-text,
+.skeleton-card .skeleton-text-short {
+    height: 12px;
+    margin: 10px 0 0;
+    border-radius: 6px;
+    background: var(--surface);
+}
+
+.skeleton-card .skeleton-text {
+    width: 85%;
+}
+
+.skeleton-card .skeleton-text-short {
+    width: 50%;
+    height: 10px;
+    margin-top: 6px;
+}
+
+@keyframes hf-pulse {
+    50% { opacity: 0.55; }
+}
+
+/* Cuộn vô hạn: dòng "Đang tải thêm" ở cuối lưới */
+.grid-load-more {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 72px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.grid-load-more::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--raised);
+    border-top-color: var(--muted);
+    border-radius: 50%;
+    animation: hf-spin 0.8s linear infinite;
+}
+
+body.device-tv .grid-load-more {
+    grid-column: auto;
+    min-height: 0;
+    font-size: 20px;
+}
+
+.filter-empty {
+    grid-column: 1 / -1;
+    padding: 56px 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 15px;
+}
+
+/* ---------- Lớp tìm kiếm ---------- */
+.search-overlay {
+    background: var(--ground);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+body.device-mobile .search-overlay {
+    padding: calc(var(--safe-top) + 12px) max(var(--edge), var(--safe-right)) calc(var(--tabbar-h) + var(--safe-bottom) + 24px) max(var(--edge), var(--safe-left));
+}
+
+.search-overlay-close {
+    width: var(--tap);
+    height: var(--tap);
+    border: 1px solid var(--control);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text);
+}
+
+/* ---------- Trang chi tiết ---------- */
+.detail-loading {
+    padding: 48px 0;
+    text-align: center;
+    color: var(--muted);
+}
+
+.detail-back-btn {
+    width: var(--tap);
+    height: var(--tap);
+    padding: 0;
+    margin: 0 0 16px;
+    border: 1px solid var(--control);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.detail-back-btn .btn-label:empty {
+    display: none;
+}
+
+.detail-head {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.detail-poster {
+    width: 128px;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    border-radius: 6px;
+    flex: none;
+    background: var(--surface);
+}
+
+body.device-desktop .detail-poster {
+    width: 200px;
+}
+
+body.device-tv .detail-poster {
+    width: 240px;
+}
+
+.detail-head-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-hero-title,
+body.device-mobile .detail-hero-title,
+body.device-tv .detail-hero-title {
+    font-size: 22px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+}
+
+body.device-desktop .detail-hero-title {
+    font-size: 30px;
+    line-height: 38px;
+}
+
+body.device-tv .detail-hero-title {
+    font-size: 36px;
+    line-height: 44px;
+}
+
+.detail-hero-subtitle,
+.detail-meta,
+body.device-mobile .detail-hero-subtitle {
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--muted);
+}
+
+.detail-meta:empty {
+    display: none;
+}
+
+body.device-tv .detail-hero-subtitle,
+body.device-tv .detail-meta {
+    font-size: 20px;
+    line-height: 28px;
+}
+
+.detail-chips,
+body.device-mobile .detail-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.detail-chip {
+    height: 24px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: var(--pill);
+    background: #222;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 24px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+body.device-tv .detail-chip {
+    height: 34px;
+    padding: 0 14px;
+    font-size: 18px;
+    line-height: 34px;
+}
+
+.detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    max-width: 520px;
+}
+
+.detail-action-play,
+body.device-mobile .detail-action-play,
+body.device-tv .detail-action-play {
+    flex: 1;
+    height: 48px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: var(--pill);
+    background: #fff;
+    background-image: none;
+    color: #000;
+    font-size: 16px;
+    font-weight: 600;
+    box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-transform: none;
+}
+
+.detail-action-play:hover {
+    background: #e6e6e6;
+    box-shadow: none;
+    transform: none;
+}
+
+.detail-action-side,
+body.device-mobile .detail-action-side,
+body.device-tv .detail-action-side {
+    height: 48px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: var(--pill);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.detail-action-side:hover {
+    background: var(--raised);
+    color: var(--text);
+    border: 0;
+}
+
+.detail-action-side.is-saved svg {
+    fill: currentColor;
+}
+
+body.device-tv .detail-action-play,
+body.device-tv .detail-action-side {
+    height: 60px;
+    font-size: 20px;
+}
+
+/* iPhone: nút Phát nằm cố định trong tầm ngón cái, trên tab bar */
+body.device-mobile .detail-actions {
+    position: fixed;
+    left: max(var(--edge), var(--safe-left));
+    right: max(var(--edge), var(--safe-right));
+    bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 10px);
+    z-index: 850;
+    max-width: none;
+    margin: 0;
+    padding: 6px;
+    border-radius: var(--pill);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-line);
+}
+
+body.device-mobile .detail-actions .detail-action-play,
+body.device-mobile .detail-actions .detail-action-side {
+    height: var(--tap);
+}
+
+body.device-mobile .detail-actions .detail-action-side {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+body.device-mobile #movieDetailContainer {
+    padding-bottom: 72px;
+}
+
+.detail-overview,
+body.device-mobile .detail-overview,
+body.device-tv .detail-overview {
+    margin-top: 20px;
+    font-size: 15px;
+    line-height: 22px;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+    max-width: 760px;
+}
+
+.detail-overview.is-open {
+    display: block;
+}
+
+body.device-tv .detail-overview {
+    font-size: 20px;
+    line-height: 30px;
+}
+
+.detail-genres {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+body.device-tv .detail-genres {
+    font-size: 20px;
+}
+
+.detail-episodes,
+body.device-mobile .detail-episodes {
+    margin-top: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+/* ---------- Dải tập ---------- */
+.ep-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ep-list-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ep-list-title {
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.ep-list-meta {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+body.device-tv .ep-list-title {
+    font-size: 26px;
+    line-height: 32px;
+}
+
+body.device-tv .ep-list-meta {
+    font-size: 20px;
+}
+
+.ep-list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 8px;
+    max-height: none;
+    overflow: visible;
+}
+
+body.device-mobile .ep-list-grid,
+body.device-mobile .episodes-drawer .ep-list-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+body.device-tv .ep-list-grid {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 12px;
+}
+
+.ep-item,
+body.device-mobile .ep-item,
+body.device-tv .ep-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 52px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 12px;
+    background: #262626;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    box-shadow: none;
+    animation: none;
+    transform: none;
+}
+
+.ep-item:hover {
+    background: #333;
+    color: var(--text);
+    border: 0;
+    transform: none;
+}
+
+.ep-item .ep-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Trạng thái tập: thêm body để thắng các luật theo thiết bị ở trên */
+body .ep-list .ep-item.is-watched,
+body .ep-list .ep-item.is-watched:hover {
+    background: var(--surface);
+    color: var(--faint);
+}
+
+body .ep-list .ep-item.is-watching,
+body .ep-list .ep-item.is-watching:hover,
+body .ep-list .ep-item.active {
+    background: #fff;
+    color: #000;
+    font-weight: 600;
+}
+
+.ep-progress {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 7px;
+    height: 3px;
+    border-radius: 2px;
+    background: #d9d9d9;
+    overflow: hidden;
+}
+
+.ep-progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+}
+
+.ep-item .ep-dl-indicator {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 18px;
+    height: 18px;
+    color: var(--faint);
+}
+
+.ep-item .ep-dl-indicator.not_started {
+    opacity: 0;
+}
+
+.ep-item:hover .ep-dl-indicator.not_started,
+.ep-item:focus-visible .ep-dl-indicator.not_started {
+    opacity: 1;
+}
+
+.ep-item .ep-dl-indicator.completed {
+    color: var(--positive);
+}
+
+.ep-item.is-watching .ep-dl-indicator {
+    color: #555;
+}
+
+body.device-tv .ep-item {
+    height: 64px;
+    font-size: 22px;
+}
+
+.ep-list-pager {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ep-pager-btn,
+.ep-jump-input {
+    min-height: 40px;
+    border: 0;
+    border-radius: var(--pill);
+    background: var(--surface);
+    color: var(--text);
+}
+
+.ep-pager-btn {
+    width: 40px;
+}
+
+.ep-jump-input {
+    width: 130px;
+    padding: 0 14px;
+}
+
+.ep-pager-label {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+/* ---------- Tủ phim ---------- */
+#saved-tab .search-container {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.library-heading {
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+body.device-mobile .library-heading {
+    display: none; /* tab bar đã nói đây là Tủ phim; header giữ tên app */
+}
+
+body.device-tv .library-heading {
+    font-size: 30px;
+    line-height: 38px;
+}
+
+.library-section {
+    margin: 0;
+}
+
+.library-title {
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+body.device-tv .library-title {
+    font-size: 26px;
+    line-height: 32px;
+    margin-bottom: 16px;
+}
+
+.library-empty {
+    padding: 72px 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 15px;
+}
+
+.saved-movies-list-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 24px 16px;
+    margin-top: 8px;
+}
+
+body.device-mobile .saved-movies-list-container {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px 12px;
+}
+
+body.device-tv .saved-movies-list-container {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 28px 24px;
+}
+
+.saved-movie-row,
+body.device-mobile .saved-movie-row {
+    display: block;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.saved-movie-row:hover {
+    border: 0;
+    box-shadow: none;
+}
+
+.saved-movie-row .poster-wrap {
+    margin-bottom: 8px;
+}
+
+.saved-movie-row .movie-poster,
+body.device-mobile .saved-movie-row .movie-poster {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border: 0;
+    border-radius: 0;
+}
+
+.saved-movie-row .movie-title {
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+}
+
+body.device-tv .saved-movie-row .movie-title {
+    font-size: 20px;
+    line-height: 26px;
+}
+
+.saved-movie-row .movie-meta {
+    display: block;
+}
+
+.saved-remove,
+.btn-sec.saved-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.saved-remove::after {
+    content: "";
+    position: absolute;
+    inset: -6px; /* vùng chạm 44pt */
+}
+
+.saved-remove .btn-label:empty {
+    display: none;
+}
+
+.manual-url-link {
+    display: none;
+}
+
+body.device-mobile .manual-url-link {
+    display: inline-flex;
+    align-self: center;
+    align-items: center;
+    min-height: var(--tap);
+    padding: 0 12px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+/* Nhập link (tab ẩn trên iPhone, mở từ Tủ phim) */
+.input-card {
+    border: 0;
+    border-radius: 20px;
+    background: var(--surface);
+    box-shadow: none;
+}
+
+textarea {
+    border: 1px solid #222;
+    border-radius: 14px;
+    background: var(--ground);
+    color: var(--text);
+}
+
+.btn-paste {
+    border: 1px solid var(--control);
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text);
+}
+
+/* ---------- Tab bar iPhone: thanh kính sát đáy, nút nằm trên thanh Home ---------- */
+.float-tabbar {
+    display: none;
+}
+
+body.device-mobile .float-tabbar {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 900;
+    padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+    border-top: 1px solid var(--glass-line);
+}
+
+body.device-mobile.player-active .float-tabbar {
+    display: none;
+}
+
+.fab-capsule {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    height: var(--tabbar-h);
+    padding: 0;
+}
+
+.fab-tab {
+    flex: 1;
+    min-width: var(--tap);
+    min-height: var(--tap);
+    padding: 6px 0 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 3px;
+    border: 0;
+    background: transparent;
+    color: var(--faint);
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 500;
+}
+
+.fab-tab.active {
+    color: var(--text);
+}
+
+/* ---------- Trình phát ---------- */
+.player-wrapper {
+    background: #000;
+    border: 0;
+    box-shadow: none;
+}
+
+body.player-active #playerHeader {
+    padding: max(8px, var(--safe-top)) max(16px, var(--safe-right)) 8px max(16px, var(--safe-left)) !important;
+}
+
+.btn-overlay-back,
+.player-prefs-btn {
+    width: var(--tap);
+    height: var(--tap);
+    min-width: var(--tap);
+    min-height: var(--tap);
+    padding: 0;
+    border: 1px solid var(--control);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+body.device-tv .btn-overlay-back,
+body.device-tv .player-prefs-btn {
+    width: 56px;
+    height: 56px;
+}
+
+.player-ep-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.device-tv .player-ep-title {
+    font-size: 24px;
+}
+
+.player-error {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 6;
+    max-width: min(80%, 420px);
+    padding: 14px 22px;
+    border-radius: 16px;
+    background: rgba(24, 24, 26, 0.82);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 500;
+    text-align: center;
+}
+
+body.player-active #episodesDrawerEl {
+    width: auto;
+    margin: 0 max(16px, var(--safe-right)) max(16px, var(--safe-bottom)) max(16px, var(--safe-left));
+}
+
+.episodes-drawer {
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.episodes-drawer-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.episodes-drawer.collapsed .drawer-arrow {
+    transform: rotate(-90deg);
+}
+
+.airplay-remote-overlay {
+    padding: max(2rem, var(--safe-top)) max(2rem, var(--safe-right)) max(2rem, var(--safe-bottom)) max(2rem, var(--safe-left));
+}
+
+.airplay-disconnect-btn {
+    top: max(1rem, var(--safe-top));
+    right: max(1rem, var(--safe-right));
+    min-height: var(--tap);
+    padding: 0 16px;
+    border: 1px solid var(--control);
+    border-radius: var(--pill);
+    background: rgba(0, 0, 0, 0.5);
+    color: var(--text);
+    font-size: 14px;
+}
+
+.airplay-remote-overlay .airplay-icon {
+    color: var(--text);
+}
+
+/* Tự qua tập: lớp đếm ngược nằm dưới video, ngoài vùng an toàn */
+.auto-next {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: calc(56px + var(--safe-bottom, 0px));
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 8px 8px 18px;
+    border-radius: var(--pill);
+}
+
+.auto-next[hidden] {
+    display: none;
+}
+
+.auto-next-text {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.auto-next .cast-pill {
+    flex: 0 0 auto;
+    min-width: 96px;
+}
+
+/* Bỏ qua mở đầu: góc dưới phải, tầm ngón cái, trên thanh điều khiển video */
+.skip-intro {
+    position: absolute;
+    right: calc(12px + var(--safe-right, 0px));
+    bottom: calc(56px + var(--safe-bottom, 0px));
+    z-index: 5;
+    min-height: var(--tap);
+    padding: 0 20px;
+    border: 0;
+    border-radius: var(--pill);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.skip-intro[hidden] {
+    display: none;
+}
+
+body.device-tv .skip-intro,
+body.device-tv .auto-next-text {
+    font-size: 20px;
+}
+
+/* ---------- Cast: bên nhận (TV, máy tính) ---------- */
+.cast-label {
+    position: fixed;
+    top: calc(var(--safe-top) + 16px);
+    right: max(16px, var(--safe-right));
+    z-index: 960;
+    padding: 10px 20px;
+    border-radius: var(--pill);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+body.device-tv .cast-label {
+    font-size: 20px;
+}
+
+.cast-dialog {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 980;
+    width: min(90vw, 520px);
+    padding: 28px;
+    border-radius: 24px;
+    text-align: center;
+    background: rgba(28, 28, 30, 0.94);
+}
+
+.cast-dialog p {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+.cast-dialog-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.cast-btn {
+    min-height: 56px;
+    min-width: 120px;
+    padding: 0 24px;
+    border: 1px solid var(--control);
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text);
+    font-size: 20px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cast-btn-primary {
+    border-color: #fff;
+    background: #fff;
+    color: #000;
+}
+
+.cast-panel {
+    position: fixed;
+    top: calc(var(--safe-top) + 72px);
+    right: max(16px, var(--safe-right));
+    z-index: 970;
+    padding: 20px 24px;
+    border-radius: 20px;
+    background: rgba(28, 28, 30, 0.94);
+}
+
+.cast-switch {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+body.device-tv .cast-switch {
+    font-size: 20px;
+}
+
+.cast-switch input {
+    width: 26px;
+    height: 26px;
+    accent-color: #fff;
+}
+
+#playerPrefs {
+    display: flex;
+    flex-direction: column;
+}
+
+#playerPrefs .cast-switch + .cast-switch {
+    margin-top: 14px;
+}
+
+.cast-switch .pref-number {
+    width: 88px;
+    min-height: var(--tap);
+    margin-left: auto;
+    padding: 0 10px;
+    border: 1px solid var(--control);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font-size: 18px;
+    text-align: center;
+}
+
+/* ---------- Cast: bên điều khiển (iPhone) ---------- */
+.cast-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 940;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.cast-sheet,
+.cast-remote {
+    position: fixed;
+    left: max(12px, var(--safe-left));
+    right: max(12px, var(--safe-right));
+    bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px);
+    max-height: calc(100svh - var(--safe-top) - var(--safe-bottom) - var(--tabbar-h) - 36px);
+    overflow-y: auto;
+    z-index: 950;
+    padding: 20px 16px 16px;
+    border-radius: 28px;
+    background: rgba(28, 28, 30, 0.78);
+    border: 1px solid var(--glass-line);
+}
+
+.cast-remote {
+    z-index: 955;
+}
+
+.cast-sheet-head,
+.cast-remote-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.cast-sheet-head h2 {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.cast-sheet-close {
+    width: var(--tap);
+    height: var(--tap);
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text);
+    font-size: 15px;
+}
+
+.cast-device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cast-device {
+    min-height: 56px;
+    padding: 0 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 500;
+    text-align: left;
+}
+
+.cast-device-status {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.cast-empty {
+    text-align: center;
+    padding: 16px 8px;
+    color: var(--muted);
+}
+
+.cast-empty p:first-child {
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.cast-hint {
+    font-size: 14px;
+}
+
+.cast-toast {
+    position: fixed;
+    left: 50%;
+    top: calc(var(--safe-top) + 64px);
+    transform: translateX(-50%);
+    z-index: 990;
+    max-width: calc(100vw - 32px);
+    padding: 10px 20px;
+    border-radius: var(--pill);
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.cast-mini {
+    position: fixed;
+    left: max(12px, var(--safe-left));
+    right: max(12px, var(--safe-right));
+    bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 8px);
+    z-index: 899;
+    min-height: 56px;
+    padding: 8px 18px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--glass-line);
+    border-radius: 20px;
+    color: var(--text);
+    text-align: left;
+    overflow: hidden;
+}
+
+.cast-mini-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.cast-mini-title {
+    font-size: 15px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cast-mini-ep {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.cast-mini-state {
+    font-size: 16px;
+}
+
+.cast-mini-progress {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 6px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+}
+
+.cast-mini-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+}
+
+.cast-remote-meta {
+    min-width: 0;
+}
+
+.cast-remote-title {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.cast-remote-ep {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.cast-remote-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+}
+
+.cast-remote-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+}
+
+.cast-remote-times {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0 16px;
+    font-size: 13px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.cast-remote-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.cast-round {
+    width: 52px;
+    height: 52px;
+    min-width: var(--tap);
+    min-height: var(--tap);
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cast-round-main {
+    width: 68px;
+    height: 68px;
+    background: #fff;
+    color: #000;
+    font-size: 20px;
+}
+
+.cast-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 52px;
+    font-size: 15px;
+    flex-direction: row-reverse;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cast-option input {
+    width: 24px;
+    height: 24px;
+    accent-color: #fff;
+}
+
+.cast-remote-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.cast-pill {
+    flex: 1;
+    min-height: var(--tap);
+    padding: 0 16px;
+    border: 1px solid var(--control);
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.cast-pill-danger {
+    color: var(--danger);
+}

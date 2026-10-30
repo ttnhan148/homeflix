@@ -153,7 +153,7 @@ def test_remote_controls_meet_44pt_and_safe_area(app_module, make_client, open_a
         box = page.locator(sel).bounding_box()
         assert box["width"] >= 44 - 0.5 and box["height"] >= 44 - 0.5, sel
     panel = page.locator("#castRemote").bounding_box()
-    assert panel["y"] >= 59 and panel["y"] + panel["height"] <= 932 - (34 + 8 + 64) + 1
+    assert panel["y"] >= 59 and panel["y"] + panel["height"] <= page.evaluate("document.getElementById('floatTabBar').getBoundingClientRect().top") + 0.5
 
 
 def test_state_with_html_title_renders_as_text(app_module, make_client, open_app):

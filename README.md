@@ -19,7 +19,7 @@ HomeFlix là một ứng dụng web **một file backend (FastAPI)** + **fronten
 | ⬇️ **Download HLS → MP4** | Hàng đợi download qua `ffmpeg` (bản sao `-c copy`, fallback encode lại audio AAC), tồn tại sau restart server. |
 | 📱 **UI đa thiết bị** | Tối ưu riêng cho Smart TV/máy chiếu (10-foot UI, điều hướng bằng D-pad), mobile và desktop. |
 | 📺 **AirPlay** | Phát hiện thiết bị AirPlay, nút phát nhanh, overlay điều khiển từ xa (play/pause, seek) với poster nền. |
-| ⏭️ **Tự qua tập / bỏ mở đầu** | Hết tập đếm ngược 10 giây rồi phát tập kế (có nút Hủy); nút "Bỏ qua mở đầu" nhảy tới mốc cố định (mặc định giây 85, đặt trong ⚙ của trình phát), chỉ hiện trong 90 giây đầu. Cài đặt lưu theo thiết bị (`localStorage`); iPhone cast có thể đổi qua lệnh `options` (công tắc trên iPhone hiện đúng cài đặt của TV). Trên iPhone phát cục bộ, trình phát vào toàn màn hình gốc của iOS nên nút Bỏ qua mở đầu và Hủy đếm ngược không hiện; dùng "Tự bỏ qua mở đầu" trong ⚙. |
+| ⏭️ **Tự qua tập / bỏ mở đầu** | Hết tập đếm ngược 10 giây rồi phát tập kế (có nút Hủy); nút "Bỏ qua mở đầu" nhảy tới mốc cố định (mặc định giây 85, đặt trong nút Cài đặt phát của trình phát), chỉ hiện trong 90 giây đầu. Cài đặt lưu theo thiết bị (`localStorage`); iPhone cast có thể đổi qua lệnh `options` (công tắc trên iPhone hiện đúng cài đặt của TV). Trên iPhone phát cục bộ, trình phát vào toàn màn hình gốc của iOS nên nút Bỏ qua mở đầu và Hủy đếm ngược không hiện; dùng "Tự bỏ qua mở đầu" trong Cài đặt phát. |
 | 🗃️ **Cache API ngoài** | Dữ liệu `phimapi.com` được cache trong SQLite kèm **stale-fallback** khi API chết. |
 
 ---
@@ -155,8 +155,10 @@ Tất cả endpoint trả JSON (trừ proxy & trang chủ). Không có xác th�
 ### Proxy HLS
 | Method | Path | Mô tả |
 |---|---|---|
-| GET | `/proxy/m3u8?url=...&sid=...` | Tải + rewrite playlist. `sid` mặc định = `md5(url)`. Trả `application/vnd.apple.mpegurl`. |
+| GET | `/proxy/m3u8?url=...&sid=...` | Tải + rewrite playlist. `sid` mặc định = `md5(url)`. Trả `application/vnd.apple.mpegurl`. Nguồn lỗi thì trả 502 kèm `X-Upstream-Status`, và `X-Upstream-Block: geo` khi CDN chặn IP ngoài Việt Nam. |
 | GET | `/proxy/ts?url=...&sid=...` | Proxy + cache segment. Header `X-Cache`: `HIT` / `HIT-QUEUED` / `MISS`. |
+
+> CDN video của phimapi chỉ trả nội dung cho IP Việt Nam. Máy chủ đặt ở nước ngoài thì proxy lỗi; khi đó trình phát tự chuyển sang phát thẳng link gốc từ thiết bị xem và nhớ lựa chọn này 12 giờ (`hf_direct_stream_until` trong `localStorage`). Phát thẳng mất cache, tải trước và tải MP4 phía máy chủ; trên TV/máy tính còn cần CDN cho phép CORS.
 
 ### Dữ liệu phim
 | Method | Path | Cache TTL | Mô tả |

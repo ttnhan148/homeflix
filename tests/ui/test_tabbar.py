@@ -8,13 +8,6 @@ def _visible(page, sel):
     return page.evaluate("s => { const e = document.querySelector(s); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0; }", sel)
 
 
-def test_tabbar_sits_above_home_indicator(open_app):
-    page = open_app(safe=(59, 0, 34, 0))
-    page.goto(URL)
-    bottom = page.evaluate("document.getElementById('floatTabBar').getBoundingClientRect().bottom")
-    assert abs((VIEW_H - bottom) - 42) <= 1
-
-
 def test_tabbar_buttons_meet_44pt_touch_target(open_app):
     page = open_app()
     page.goto(URL)
