@@ -1,0 +1,48 @@
+/* HomeFlix — ngôn ngữ thiết kế iOS 26 (Liquid Glass) dùng chung cho iPhone và TV */
+
+:root {
+    /* Vùng an toàn: iPhone có Dynamic Island và thanh Home. Test ghi đè các biến này. */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+
+    --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+    --glass-bg-solid: rgba(28, 28, 30, 0.94);
+    --glass-border-light: rgba(255, 255, 255, 0.22);
+    --glass-blur: blur(24px) saturate(180%);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    --pill: 999px;
+    --tap: 44px;
+}
+
+.glass {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border-light);
+    box-shadow: var(--glass-shadow);
+    border-radius: var(--pill);
+}
+
+/* Trình duyệt không hỗ trợ backdrop-filter: lùi về nền mờ đặc */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+        background: var(--glass-bg-solid);
+    }
+}
+
+body, input, button, textarea, select {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Be Vietnam Pro", sans-serif;
+}
+
+/* TV: chữ từ 20px, viền tiêu điểm trắng 4px (thắng các viền vàng cũ) */
+body.device-tv {
+    font-size: 20px;
+    --focus-ring: #fff; /* các luật viền tiêu điểm cũ dùng biến này (trước là vàng) */
+}
+
+body.device-tv :focus-visible {
+    outline: 4px solid #fff !important;
+    outline-offset: 2px;
+}
