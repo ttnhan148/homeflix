@@ -14,11 +14,12 @@ def out_dir(tmp_path):
     return out
 
 
-def test_shell_precaches_cast_files():
-    sw = (ROOT / "static" / "sw.js").read_text()
-    assert "homeflix-shell-v5" in sw
+def test_page_loads_cast_files_with_content_version(open_app):
+    page = open_app()
+    page.goto("http://homeflix.test/")
+    srcs = page.evaluate("[...document.scripts].map(s => s.getAttribute('src') || '')")
     for f in ("cast.js", "cast-utils.js", "player-utils.js", "player-auto.js"):
-        assert f"/static/{f}" in sw
+        assert any(s.startswith(f"/static/{f}?v=") for s in srcs), f
 
 
 def test_cast_sheet_and_remote_render(app_module, make_client, open_app, tmp_path):

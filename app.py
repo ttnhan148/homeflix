@@ -894,24 +894,41 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HomeFlix Proxy Player", lifespan=lifespan)
 
-# --- CachedStaticFiles: thêm Cache-Control header cho static files ---
-# Static files (icons, manifest, CSS, JS) hiếm khi thay đổi → browser cache
-# giảm RTT và bandwidth. Cache-Control: max-age=7d + immutable cho phép
-# browser sử dụng cached mà không cần revalidate.
+# --- File tĩnh có phiên bản ---
+# Trang gắn ?v=<hash nội dung> vào URL của JS/CSS (asset_url). URL có v đổi theo nội dung nên
+# được cache immutable 7 ngày; URL không có v (logo, manifest) và sw.js thì luôn hỏi lại server
+# (ETag), để bản deploy mới không bị trình duyệt giữ file cũ.
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+_asset_versions = {}
+
+
+def asset_url(name: str) -> str:
+    path = os.path.join(STATIC_DIR, name)
+    st = os.stat(path)
+    key = (path, st.st_mtime_ns, st.st_size)
+    version = _asset_versions.get(key)
+    if version is None:
+        with open(path, "rb") as f:
+            version = hashlib.md5(f.read()).hexdigest()[:10]
+        _asset_versions[key] = version
+    return f"/static/{name}?v={version}"
+
+
 class CachedStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
-        # Chỉ cache response 200 (không cache 404)
         if response.status_code == 200:
-            response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+            versioned = b"v=" in scope.get("query_string", b"") and path != "sw.js"
+            response.headers["Cache-Control"] = "public, max-age=604800, immutable" if versioned else "no-cache"
         return response
 
-# Phục vụ các file tĩnh (manifest, icons) với cache headers
-app.mount("/static", CachedStaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+
+app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
 
 
 # Khởi tạo Jinja2 templates với đường dẫn tuyệt đối
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+templates.env.globals["asset"] = lambda name: asset_url(name)
 
 # Cho phép CORS để Player JS có thể truy cập streams từ bất kì đâu
 app.add_middleware(

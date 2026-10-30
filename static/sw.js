@@ -1,5 +1,6 @@
-const CACHE_NAME = 'homeflix-shell-v5';
-const SHELL_URLS = ['/', '/static/logo.png', '/static/manifest.json', '/static/hf.css', '/static/home-utils.js', '/static/cast-utils.js', '/static/player-utils.js', '/static/player-auto.js', '/static/cast.js'];
+const CACHE_NAME = 'homeflix-shell-v6';
+// JS/CSS có ?v=<hash> trong URL nên được cache theo từng phiên bản khi tải lần đầu, không precache
+const SHELL_URLS = ['/', '/static/logo.png', '/static/manifest.json'];
 
 // Install: pre-cache app-shell
 self.addEventListener('install', (event) => {
@@ -51,13 +52,23 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // CACHE-FIRST: static assets (logo, manifest, etc.)
+    // CACHE-FIRST: static assets. JS/CSS có ?v=<hash> nên URL mới = nội dung mới.
     event.respondWith(
         caches.match(event.request).then((cached) => {
             if (cached) return cached;
             return fetch(event.request).then((response) => {
+                if (!response.ok) return response;
                 const clone = response.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                caches.open(CACHE_NAME).then(async (cache) => {
+                    if (url.searchParams.has('v')) {
+                        // Bỏ các phiên bản cũ của cùng file
+                        for (const req of await cache.keys()) {
+                            const old = new URL(req.url);
+                            if (old.pathname === url.pathname && old.search !== url.search) cache.delete(req);
+                        }
+                    }
+                    cache.put(event.request, clone);
+                });
                 return response;
             });
         })

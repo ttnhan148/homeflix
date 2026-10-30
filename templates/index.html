@@ -21,10 +21,10 @@
 
     <!-- HLS.js cho thiết bị không Apple -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="/static/home-utils.js"></script>
-    <script src="/static/cast-utils.js"></script>
-    <script src="/static/player-utils.js"></script>
-    <script src="/static/player-auto.js"></script>
+    <script src="{{ asset('home-utils.js') }}"></script>
+    <script src="{{ asset('cast-utils.js') }}"></script>
+    <script src="{{ asset('player-utils.js') }}"></script>
+    <script src="{{ asset('player-auto.js') }}"></script>
     <style>
         :root {
             --bg-color: #080808;
@@ -1877,7 +1877,7 @@
             padding-right: 1.5rem !important;
         }
     </style>
-    <link rel="stylesheet" href="/static/hf.css">
+    <link rel="stylesheet" href="{{ asset('hf.css') }}">
 </head>
 
 <body>
@@ -4193,6 +4193,6 @@ document.addEventListener('visibilitychange', () => {
             });
         }
     </script>
-    <script src="/static/cast.js"></script>
+    <script src="{{ asset('cast.js') }}"></script>
 </body>
 </html>

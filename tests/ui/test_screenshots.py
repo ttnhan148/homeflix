@@ -7,10 +7,10 @@ ROOT = Path(__file__).resolve().parents[2]
 SIZES = [(430, 932, False), (440, 956, False), (1920, 1080, True)]
 
 
-def test_shell_precaches_new_static_files():
+def test_service_worker_caches_shell_and_versioned_assets_by_full_url():
     sw = (ROOT / "static" / "sw.js").read_text()
-    assert "homeflix-shell-v" in sw  # phiên bản cache do các gói sau tăng (kiểm tra cụ thể ở test của gói đó)
-    assert "/static/hf.css" in sw and "/static/home-utils.js" in sw
+    assert "homeflix-shell-v" in sw  # phiên bản cache do các gói sau tăng
+    assert "'/'" in sw and "caches.match(event.request)" in sw
 
 
 @pytest.mark.parametrize("w,h,tv", SIZES)
