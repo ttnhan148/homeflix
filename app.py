@@ -1,6 +1,7 @@
 import m3u8
 import urllib.parse
 import hashlib
+import hmac
 import os
 import aiofiles
 import shutil
@@ -988,6 +989,29 @@ async def patch_device_api(request: Request, body: dict):
     return await get_device_api(request)
 
 # --- Cast: hiện diện và thiết bị gần đây ---
+# Id thiết bị chính là cookie đăng nhập nên KHÔNG bao giờ gửi cho thiết bị khác. Mọi payload và route cast
+# dùng id công khai = HMAC(salt, id thiết bị); server chỉ giải ngược trong phạm vi cùng nhà.
+def _cast_public_id(device_id: str, salt: str | None = None) -> str:
+    key = (salt or get_household_salt()).encode()
+    return hmac.new(key, b"cast:" + device_id.encode(), hashlib.sha256).hexdigest()[:20]
+
+async def _cast_resolve(request: Request, public_id: str, kinds: tuple | None = None) -> dict | None:
+    """Hàng devices cùng nhà có id công khai khớp (và đúng loại nếu có `kinds`), hoặc None."""
+    rows = await asyncio.to_thread(db_query, "SELECT * FROM devices WHERE household = ?", (request.state.household,))
+    salt = await asyncio.to_thread(get_household_salt)
+    for row in rows:
+        if hmac.compare_digest(_cast_public_id(row["id"], salt), str(public_id)):
+            return dict(row) if kinds is None or row["kind"] in kinds else None
+    return None
+
+def _sweep_stale_controllers(tv_id: str) -> None:
+    """Controller không còn heartbeat (đóng Safari, mất mạng) thì gỡ liên kết và báo TV bỏ nhãn."""
+    salt = get_household_salt()
+    for controller_id in cast_hub.controllers_of(tv_id):
+        if not cast_hub.is_online(controller_id):
+            cast_hub.unlink(controller_id)
+            cast_hub.publish(tv_id, "controller_left", {"controller_id": _cast_public_id(controller_id, salt)})
+
 @app.post("/api/devices/heartbeat")
 async def devices_heartbeat_api(request: Request, body: dict | None = None):
     device_id = request.state.device_id
@@ -1001,6 +1025,8 @@ async def devices_heartbeat_api(request: Request, body: dict | None = None):
         row = await asyncio.to_thread(db_query_one, "SELECT kind FROM devices WHERE id = ?", (device_id,))
         kind = row["kind"] if row else "desktop"
     cast_hub.heartbeat(device_id, kind)
+    if kind in ("tv", "desktop"):
+        await asyncio.to_thread(_sweep_stale_controllers, device_id)
     return {"status": "ok"}
 
 @app.get("/api/devices/nearby")
@@ -1009,7 +1035,8 @@ async def devices_nearby_api(request: Request):
         db_query,
         "SELECT id, name, kind FROM devices WHERE household = ? AND id != ? AND kind IN ('tv', 'desktop')",
         (request.state.household, request.state.device_id))
-    return [{"id": r["id"], "name": r["name"], "kind": r["kind"], "online": True}
+    salt = await asyncio.to_thread(get_household_salt)
+    return [{"id": _cast_public_id(r["id"], salt), "name": r["name"], "kind": r["kind"], "online": True}
             for r in rows if cast_hub.is_online(r["id"])]
 
 @app.get("/api/cast/settings")
@@ -1024,9 +1051,13 @@ async def patch_cast_settings_api(request: Request, body: dict):
     device_id = request.state.device_id
     await asyncio.to_thread(_db_cast_set_allow_control, device_id, value)
     if not value:
+        salt = await asyncio.to_thread(get_household_salt)
+        tv_public = _cast_public_id(device_id, salt)
         for controller_id in cast_hub.controllers_of(device_id):
             cast_hub.unlink(controller_id)
-            cast_hub.publish(device_id, "controller_left", {"controller_id": controller_id})
+            cast_hub.publish(device_id, "controller_left", {"controller_id": _cast_public_id(controller_id, salt)})
+            cast_hub.publish(controller_id, "unlinked", {"target_id": tv_public})
+        cast_hub.clear_pending(device_id)   # yêu cầu đang chờ không được duyệt sau khi đã tắt điều khiển
     return {"allow_control": value}
 
 CAST_PING_SECONDS = 15
@@ -1046,10 +1077,15 @@ async def cast_events_api(request: Request):
         # Đăng ký bên trong generator: nếu client ngắt trước khi luồng bắt đầu thì không có gì để dọn
         sub = cast_hub.subscribe(device_id)
         try:
-            ids = cast_hub.controllers_of(device_id)
-            names = await asyncio.to_thread(_db_device_names, ids)
-            yield format_sse("hello", {"device_id": device_id,
-                                       "controllers": [{"id": i, "name": names.get(i, "")} for i in ids]})
+            salt = await asyncio.to_thread(get_household_salt)
+            controllers = cast_hub.controllers_of(device_id)
+            pending = cast_hub.pending_for(device_id)
+            names = await asyncio.to_thread(_db_device_names, controllers + pending)
+            yield format_sse("hello", {
+                "device_id": _cast_public_id(device_id, salt),
+                "controllers": [{"id": _cast_public_id(i, salt), "name": names.get(i, "")} for i in controllers],
+                "pending": [{"controller_id": _cast_public_id(i, salt), "controller_name": names.get(i, "")} for i in pending],
+            })
             while not sub.closed:
                 events = await sub.next(CAST_PING_SECONDS)
                 if events:
@@ -1063,14 +1099,13 @@ async def cast_events_api(request: Request):
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"X-Accel-Buffering": "no", "Cache-Control": "private, no-store"})
 
-async def _cast_target(request: Request, target_id: str) -> dict:
+async def _cast_target(request: Request, public_id: str) -> dict:
     """Hàng devices của TV đích. 403 nếu không có, khác nhà, không phải tv/desktop, hoặc là chính mình
     (không phân biệt các trường hợp, để không dò được id)."""
-    row = await asyncio.to_thread(db_query_one, "SELECT * FROM devices WHERE id = ?", (target_id,))
-    if (row is None or row["household"] != request.state.household or row["kind"] not in ("tv", "desktop")
-            or target_id == request.state.device_id):
+    row = await _cast_resolve(request, public_id, kinds=("tv", "desktop"))
+    if row is None or row["id"] == request.state.device_id:
         raise HTTPException(status_code=403, detail="forbidden")
-    return dict(row)
+    return row
 
 async def _device_name(device_id: str) -> str:
     row = await asyncio.to_thread(db_query_one, "SELECT name FROM devices WHERE id = ?", (device_id,))
@@ -1078,38 +1113,43 @@ async def _device_name(device_id: str) -> str:
 
 @app.post("/api/cast/{target_id}/connect")
 async def cast_connect_api(request: Request, target_id: str):
-    await _cast_target(request, target_id)
-    if not await asyncio.to_thread(_db_cast_allow_control, target_id):
+    target = await _cast_target(request, target_id)
+    tv_id = target["id"]
+    if not await asyncio.to_thread(_db_cast_allow_control, tv_id):
         raise HTTPException(status_code=403, detail="target does not accept control")
     controller_id = request.state.device_id
+    controller_public = await asyncio.to_thread(_cast_public_id, controller_id)
     name = await _device_name(controller_id)
-    if await asyncio.to_thread(_db_cast_is_allowed, target_id, controller_id):
-        cast_hub.link(controller_id, target_id)
-        cast_hub.publish(target_id, "controller_joined", {"controller_id": controller_id, "name": name})
+    if await asyncio.to_thread(_db_cast_is_allowed, tv_id, controller_id):
+        cast_hub.link(controller_id, tv_id)
+        cast_hub.publish(tv_id, "controller_joined", {"controller_id": controller_public, "name": name})
         return {"status": "connected"}
-    if not cast_hub.has_subscribers(target_id):
+    if not cast_hub.has_subscribers(tv_id):
         raise HTTPException(status_code=409, detail="target offline")
-    if cast_hub.add_pending(target_id, controller_id):
-        cast_hub.publish(target_id, "connect_request", {"controller_id": controller_id, "controller_name": name})
+    if cast_hub.add_pending(tv_id, controller_id):
+        cast_hub.publish(tv_id, "connect_request", {"controller_id": controller_public, "controller_name": name},
+                         newest_only=True)
     return JSONResponse({"status": "pending"}, status_code=202)
 
 @app.post("/api/cast/requests/{controller_id}")
 async def cast_answer_request_api(request: Request, controller_id: str, body: dict):
-    """TV trả lời yêu cầu kết nối của một controller."""
+    """TV trả lời yêu cầu kết nối của một controller (id công khai trong đường dẫn)."""
     tv_id = request.state.device_id
     allow = body.get("allow")
     if not isinstance(allow, bool):
         raise HTTPException(status_code=422, detail="allow must be boolean")
-    controller = await asyncio.to_thread(db_query_one, "SELECT household FROM devices WHERE id = ?", (controller_id,))
-    if controller is None or controller["household"] != request.state.household:
+    controller = await _cast_resolve(request, controller_id)
+    if controller is None:
         raise HTTPException(status_code=403, detail="forbidden")
-    if not cast_hub.pop_pending(tv_id, controller_id):
+    real_controller = controller["id"]
+    if not cast_hub.pop_pending(tv_id, real_controller):
         raise HTTPException(status_code=403, detail="no pending request")
+    salt = await asyncio.to_thread(get_household_salt)
     if allow:
-        await asyncio.to_thread(_db_cast_allow, tv_id, controller_id)
-        cast_hub.link(controller_id, tv_id)
-        cast_hub.publish(tv_id, "controller_joined", {"controller_id": controller_id, "name": await _device_name(controller_id)})
-    cast_hub.publish(controller_id, "connect_result", {"target_id": tv_id, "allowed": allow})
+        await asyncio.to_thread(_db_cast_allow, tv_id, real_controller)
+        cast_hub.link(real_controller, tv_id)
+        cast_hub.publish(tv_id, "controller_joined", {"controller_id": controller_id, "name": controller["name"]})
+    cast_hub.publish(real_controller, "connect_result", {"target_id": _cast_public_id(tv_id, salt), "allowed": allow})
     return {"status": "ok"}
 
 @app.delete("/api/cast/link")
@@ -1117,29 +1157,37 @@ async def cast_unlink_api(request: Request):
     controller_id = request.state.device_id
     target_id = cast_hub.unlink(controller_id)
     if target_id:
-        cast_hub.publish(target_id, "controller_left", {"controller_id": controller_id})
+        cast_hub.publish(target_id, "controller_left",
+                         {"controller_id": await asyncio.to_thread(_cast_public_id, controller_id)})
     return {"status": "ok"}
 
-async def _cast_authorize(request: Request, target_id: str) -> dict:
+async def _cast_authorize(request: Request, public_id: str) -> dict:
     """Controller được điều khiển target: cùng nhà, TV bật công tắc, và TV đã cho phép controller này."""
-    target = await _cast_target(request, target_id)
-    if not await asyncio.to_thread(_db_cast_allow_control, target_id):
+    target = await _cast_target(request, public_id)
+    if not await asyncio.to_thread(_db_cast_allow_control, target["id"]):
         raise HTTPException(status_code=403, detail="target does not accept control")
-    if not await asyncio.to_thread(_db_cast_is_allowed, target_id, request.state.device_id):
+    if not await asyncio.to_thread(_db_cast_is_allowed, target["id"], request.state.device_id):
         raise HTTPException(status_code=403, detail="controller not allowed")
     return target
 
 @app.post("/api/cast/{target_id}/command")
 async def cast_command_api(request: Request, target_id: str, body: dict):
-    await _cast_authorize(request, target_id)
+    target = await _cast_authorize(request, target_id)
+    tv_id = target["id"]
     try:
         command = validate_command(body, _valid_slug)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    if not cast_hub.has_subscribers(target_id):
+    if not cast_hub.has_subscribers(tv_id):
         raise HTTPException(status_code=409, detail="target offline")
-    cast_hub.link(request.state.device_id, target_id)   # lệnh hợp lệ tự lập lại liên kết sau khi server khởi động lại
-    cast_hub.publish(target_id, "command", command)
+    controller_id = request.state.device_id
+    if cast_hub.linked_target(controller_id) != tv_id:
+        # Liên kết trong bộ nhớ đã mất (server khởi động lại): lập lại và cho TV biết để nó báo trạng thái
+        cast_hub.link(controller_id, tv_id)
+        cast_hub.publish(tv_id, "controller_joined", {
+            "controller_id": await asyncio.to_thread(_cast_public_id, controller_id),
+            "name": await _device_name(controller_id)})
+    cast_hub.publish(tv_id, "command", command, newest_only=True)
     return {"status": "sent"}
 
 @app.post("/api/cast/state")
@@ -1153,7 +1201,8 @@ async def cast_report_state_api(request: Request, body: dict):
         state = validate_state(body, _valid_slug)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    state["target_id"] = tv_id
+    await asyncio.to_thread(_sweep_stale_controllers, tv_id)
+    state["target_id"] = await asyncio.to_thread(_cast_public_id, tv_id)
     cast_hub.set_state(tv_id, state)
     for controller_id in cast_hub.controllers_of(tv_id):
         cast_hub.publish(controller_id, "state", state)
@@ -1161,8 +1210,8 @@ async def cast_report_state_api(request: Request, body: dict):
 
 @app.get("/api/cast/state/{target_id}")
 async def cast_get_state_api(request: Request, target_id: str):
-    await _cast_authorize(request, target_id)
-    return cast_hub.get_state(target_id) or {}
+    target = await _cast_authorize(request, target_id)
+    return cast_hub.get_state(target["id"]) or {}
 
 # GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
 app.add_middleware(GZipMiddleware, minimum_size=1024)

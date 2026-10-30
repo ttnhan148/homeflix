@@ -1,7 +1,7 @@
 // Cast phía client: heartbeat, luồng sự kiện SSE có nối lại, gọi API. Giao diện nằm ở các phần sau của file này.
 (function () {
     const defaults = { heartbeatMs: 15000, reconnectBaseMs: 2000, reconnectMaxMs: 30000, stateMs: 2000, silenceMs: 6000 };
-    const EVENTS = ['hello', 'connect_request', 'connect_result', 'controller_joined', 'controller_left', 'command', 'state'];
+    const EVENTS = ['hello', 'connect_request', 'connect_result', 'controller_joined', 'controller_left', 'command', 'state', 'unlinked'];
 
     const HFCast = window.HFCast = {
         config: Object.assign({}, defaults, window.__HF_CAST_CONFIG || {}),
@@ -115,7 +115,7 @@
 
     // Trả true khi đã gửi lệnh phát lên TV (chặn phát cục bộ). Kết quả đến sau: lỗi thì báo và quay về phát trên iPhone.
     HFCast.markUnresponsive = HFCast.markUnresponsive || function () {};
-    window.maybeCast = function (slug, episodeUrl) {
+    window.__castRoute = function (slug, episodeUrl) {
         const target = HFCast.linked;
         if (!target) return false;
         HFCast.api('POST', `/api/cast/${encodeURIComponent(target.id)}/command`,
@@ -177,13 +177,14 @@
             HFCast.emit('linked', HFCast.linked);
         }
 
-        HFCast.markUnresponsive = function () {
-            HFCast.notify('TV không phản hồi');
+        HFCast.markUnresponsive = function (message) {
+            HFCast.notify(typeof message === 'string' ? message : 'TV không phản hồi');
+            if (HFCast.linked) HFCast.api('DELETE', '/api/cast/link').catch(() => null);   // TV bỏ nhãn "đang kết nối"
             HFCast.linked = null;
             HFCast.pending = null;
             releaseEventsIfIdle();
             refreshUi();
-            HFCast.emit('unlinked', {});
+            HFCast.emit('link_lost', {});
         };
 
         // 'connected' | 'pending' | 'denied' | 'offline' | 'error'
@@ -219,8 +220,22 @@
             HFCast.pending = null;
             releaseEventsIfIdle();
             refreshUi();
-            HFCast.emit('unlinked', {});
+            HFCast.emit('link_lost', {});
         };
+
+        // Liên kết phía server nằm trong bộ nhớ: mất khi server khởi động lại hoặc khi iPhone im lặng quá 40 giây.
+        // Mỗi lần luồng sự kiện (nối lại) báo hello hoặc trang hiện lại, lập lại liên kết để TV báo trạng thái trở lại.
+        async function restoreLink() {
+            if (!HFCast.linked) return;
+            const target = HFCast.linked;
+            const res = await HFCast.api('POST', `/api/cast/${encodeURIComponent(target.id)}/connect`).catch(() => null);
+            if (!res || !HFCast.linked || HFCast.linked.id !== target.id) return;
+            if (res.status !== 200) HFCast.markUnresponsive();
+        }
+        HFCast.on('hello', restoreLink);
+        HFCast.on('unlinked', (d) => {
+            if (HFCast.linked && d.target_id === HFCast.linked.id) HFCast.markUnresponsive('TV đã tắt điều khiển từ xa');
+        });
 
         HFCast.on('connect_result', (d) => {
             if (!HFCast.pending || d.target_id !== HFCast.pending.id) return;
@@ -280,23 +295,35 @@
             renderRemote();
         }
 
+        let refreshing = 0;   // đang lấy trạng thái mới: người canh im lặng nghỉ cho tới khi có kết quả
+
         async function refreshRemote(strict) {
             if (!HFCast.linked) return;
-            const res = await HFCast.api('GET', `/api/cast/state/${encodeURIComponent(HFCast.linked.id)}`).catch(() => null);
-            if (res && res.status === 200 && res.data && res.data.target_id) applyState(res.data);
-            else if (strict) HFCast.markUnresponsive();   // sau khi iPhone thức dậy: không có trạng thái = TV đã mất
+            refreshing += 1;
+            try {
+                const res = await HFCast.api('GET', `/api/cast/state/${encodeURIComponent(HFCast.linked.id)}`).catch(() => null);
+                if (res && res.status === 200 && res.data && res.data.target_id) applyState(res.data);
+                else if (strict) HFCast.markUnresponsive();   // sau khi iPhone thức dậy: không có trạng thái = TV đã mất
+            } finally {
+                refreshing -= 1;
+                lastStateTs = Date.now();
+            }
         }
 
         HFCast.on('state', (state) => {
             if (HFCastUtils.acceptState(state, HFCast.linked && HFCast.linked.id)) applyState(state);
         });
         HFCast.on('linked', () => { remote = null; lastStateTs = null; renderRemote(); refreshRemote(false); });
-        HFCast.on('unlinked', () => { remote = null; renderRemote(); });
-        HFCast.on('resume', () => refreshRemote(true));
+        HFCast.on('link_lost', () => { remote = null; renderRemote(); });
+        HFCast.on('resume', () => {
+            lastStateTs = Date.now();   // đồng hồ tiếp tục chạy sau khi ngủ: đừng coi khoảng ngủ là TV im lặng
+            restoreLink();
+            refreshRemote(true);
+        });
 
         // Đang phát mà TV im lặng quá lâu: coi như mất kết nối (TV dừng thì không có state nên không tính)
         setInterval(() => {
-            if (HFCast.linked && remote && remote.playing && HFCastUtils.isStale(lastStateTs, Date.now(), HFCast.config.silenceMs)) {
+            if (!refreshing && HFCast.linked && remote && remote.playing && HFCastUtils.isStale(lastStateTs, Date.now(), HFCast.config.silenceMs)) {
                 HFCast.markUnresponsive();
             }
         }, 200);
@@ -390,7 +417,6 @@
 
         // --- trình duyệt chặn autoplay: lệnh cast đến mà chưa có thao tác người dùng ---
         const prompt = $('castAutoplayPrompt');
-        const realPlay = video.play;
         video.play = function () {
             const p = HTMLMediaElement.prototype.play.apply(video, arguments);
             if (p && p.catch) p.catch(err => {
@@ -462,15 +488,18 @@
             Promise.resolve(runCommand(cmd)).catch(e => console.warn('[cast] lệnh lỗi', cmd.type, e));
             setTimeout(reportState, 150);
         });
-        HFCast.on('connect_request', (req) => {
+        function enqueueRequest(req) {
+            if (confirmQueue.some(r => r.controller_id === req.controller_id)) return;   // đã hỏi rồi: không nhân đôi hộp thoại
             confirmQueue.push(req);
             if (confirmQueue.length === 1) showNextConfirm();
-        });
+        }
+        HFCast.on('connect_request', enqueueRequest);
         HFCast.on('hello', (d) => {
             controllers.clear();
             (d.controllers || []).forEach(c => controllers.set(c.id, c.name));
             updateLabel();
             reportState();
+            (d.pending || []).forEach(enqueueRequest);   // TV tải lại khi còn yêu cầu đang chờ: hỏi lại
         });
         HFCast.on('controller_joined', (d) => { controllers.set(d.controller_id, d.name); updateLabel(); reportState(); });
         HFCast.on('controller_left', (d) => { controllers.delete(d.controller_id); updateLabel(); });

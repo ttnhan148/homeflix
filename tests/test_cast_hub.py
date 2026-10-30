@@ -93,6 +93,39 @@ def test_link_unlink_controllers_of():
     assert hub.controllers_of("tv") == []
 
 
+def test_publish_newest_only_reaches_last_subscriber():
+    hub, _ = hub_with_clock()
+    old, new = hub.subscribe("tv"), hub.subscribe("tv")
+    assert hub.publish("tv", "command", {"type": "pause"}, newest_only=True) == 1
+    assert old.drain() == [] and new.drain() == [("command", {"type": "pause"})]
+    assert hub.publish("tv", "state", {}, newest_only=False) == 2
+
+
+def test_pending_retry_after_interval_pending_for_and_clear():
+    hub, t = hub_with_clock()
+    assert hub.add_pending("tv", "p") is True
+    t[0] += 5
+    assert hub.add_pending("tv", "p") is False            # dưới 10 giây: không phát lại
+    t[0] += 6
+    assert hub.add_pending("tv", "p") is True             # quá 10 giây: cho phép phát lại yêu cầu
+    hub.add_pending("tv", "q")
+    assert sorted(hub.pending_for("tv")) == ["p", "q"] and hub.pending_for("other") == []
+    t[0] += 601
+    assert hub.pending_for("tv") == []                    # yêu cầu quá cũ bị bỏ
+    hub.add_pending("tv", "r")
+    hub.clear_pending("tv")
+    assert hub.pending_for("tv") == [] and hub.add_pending("tv", "r") is True
+
+
+def test_presence_dict_is_purged_of_long_gone_devices():
+    hub, t = hub_with_clock()
+    for i in range(600):
+        hub.heartbeat(f"d{i}", "tv")
+    t[0] += PRESENCE_TTL * 11
+    hub.heartbeat("fresh", "tv")
+    assert len(hub._presence) < 50 and hub.is_online("fresh")
+
+
 def test_pending_is_deduplicated_per_pair():
     hub, _ = hub_with_clock()
     assert hub.add_pending("tv", "p") is True

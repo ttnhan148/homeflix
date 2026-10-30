@@ -48,7 +48,7 @@ def test_nearby_lists_only_same_household_tv_or_desktop_online(app_module, make_
     silent = make_client(); device_id(silent)               # TV cùng nhà nhưng chưa heartbeat
     silent.patch("/api/device", json={"kind": "tv"})
     ids = sorted(d["id"] for d in me.get("/api/devices/nearby").json())
-    assert ids == sorted([tv_id, desk_id])
+    assert ids == sorted(app_module._cast_public_id(i) for i in (tv_id, desk_id))
 
 
 def test_nearby_excludes_self_even_if_tv(app_module, make_client):
@@ -61,7 +61,7 @@ def test_nearby_drops_tv_after_40_seconds(app_module, make_client):
     app_module.cast_hub = CastHub(clock=lambda: t[0])
     me = make_client()
     _, tv_id = make_tv(make_client)
-    assert [d["id"] for d in me.get("/api/devices/nearby").json()] == [tv_id]
+    assert [d["id"] for d in me.get("/api/devices/nearby").json()] == [app_module._cast_public_id(tv_id)]
     t[0] += 41
     assert me.get("/api/devices/nearby").json() == []
 

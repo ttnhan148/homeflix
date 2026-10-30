@@ -139,7 +139,7 @@ def test_resume_after_sleep_fetches_state_and_drops_dead_link(app_module, make_c
     page.evaluate("HFCast.emit('resume', {})")
     page.wait_for_selector("#castMiniBar:not([hidden])")
     assert page.locator("#castMiniTitle").inner_text() == "Phim A"
-    app_module.cast_hub._state.pop(tv.id)                        # TV khởi động lại: không còn trạng thái
+    app_module.cast_hub._state.pop(tv.real_id)                        # TV khởi động lại: không còn trạng thái
     page.evaluate("HFCast.emit('resume', {})")
     page.wait_for_selector("#castToast:not([hidden])")
     assert page.evaluate("HFCast.linked") is None

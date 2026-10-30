@@ -14,11 +14,11 @@ def approved(m, make_client, **kw):
 
 
 def command(r, body, client=None, target=None):
-    return (client or r.phone).post(f"/api/cast/{target or r.tv_id}/command", json=body)
+    return (client or r.phone).post(f"/api/cast/{target or r.tv_pid}/command", json=body)
 
 
 def raw_command(r, raw):
-    return r.phone.post(f"/api/cast/{r.tv_id}/command", content=raw, headers={"content-type": "application/json"})
+    return r.phone.post(f"/api/cast/{r.tv_pid}/command", content=raw, headers={"content-type": "application/json"})
 
 
 def test_command_reaches_only_the_target_tv(app_module, make_client):
@@ -27,11 +27,11 @@ def test_command_reaches_only_the_target_tv(app_module, make_client):
     tv2_id = tv2.get("/api/device").json()["id"]
     tv2.post("/api/devices/heartbeat", json={"kind": "tv"})
     sub2 = app_module.cast_hub.subscribe(tv2_id)
-    r.phone.post(f"/api/cast/{tv2_id}/connect"); tv2.post(f"/api/cast/requests/{r.phone_id}", json={"allow": True})
+    r.phone.post(f"/api/cast/{app_module._cast_public_id(tv2_id)}/connect"); tv2.post(f"/api/cast/requests/{r.phone_pid}", json={"allow": True})
     sub2.drain()
     assert command(r, {"type": "pause"}).json() == {"status": "sent"}
-    assert r.tv_events() == [("command", {"type": "pause"})]
-    assert sub2.drain() == []
+    assert [e for e in r.tv_events() if e[0] == "command"] == [("command", {"type": "pause"})]
+    assert [e for e in sub2.drain() if e[0] == "command"] == []
 
 
 def test_play_command_is_normalised_and_delivered(app_module, make_client):
@@ -71,9 +71,12 @@ def test_command_auto_links_after_server_memory_reset(app_module, make_client):
     app_module.cast_hub = CastHub()                       # server khởi động lại: bộ nhớ trống, DB còn quyền
     tv_sub = app_module.cast_hub.subscribe(r.tv_id)
     phone_sub = app_module.cast_hub.subscribe(r.phone_id)
+    r.phone.post("/api/devices/heartbeat", json={"kind": "phone"})   # nhịp tim kế tiếp của iPhone sau khi server khởi động lại
     assert app_module.cast_hub.linked_target(r.phone_id) is None
     assert command(r, {"type": "resume"}).json() == {"status": "sent"}
-    assert tv_sub.drain() == [("command", {"type": "resume"})]
+    # TV được báo controller vừa được lập lại liên kết, nên sẽ báo trạng thái trở lại
+    assert tv_sub.drain() == [("controller_joined", {"controller_id": r.phone_pid, "name": "iPhone"}),
+                              ("command", {"type": "resume"})]
     assert r.tv.post("/api/cast/state", json={"slug": None, "playing": False}).status_code == 200
     assert [e for e, _ in phone_sub.drain()] == ["state"]
 
@@ -111,7 +114,7 @@ def test_state_fans_out_to_linked_controllers_only(app_module, make_client):
     other_id = other.get("/api/device").json()["id"]
     other_sub = app_module.cast_hub.subscribe(other_id)          # cùng nhà nhưng chưa liên kết
     assert r.tv.post("/api/cast/state", json=STATE).json() == {"status": "ok"}
-    assert r.phone_events() == [("state", {**STATE, "position": 10.0, "duration": 100.0, "target_id": r.tv_id})]
+    assert r.phone_events() == [("state", {**STATE, "position": 10.0, "duration": 100.0, "target_id": r.tv_pid})]
     assert other_sub.drain() == []
 
 
@@ -127,19 +130,19 @@ def test_state_rejects_bad_payload_and_non_tv_caller(app_module, make_client):
 
 def test_get_state_returns_latest_or_empty_and_enforces_access(app_module, make_client):
     r = approved(app_module, make_client)
-    assert r.phone.get(f"/api/cast/state/{r.tv_id}").json() == {}
+    assert r.phone.get(f"/api/cast/state/{r.tv_pid}").json() == {}
     r.tv.post("/api/cast/state", json=STATE)
-    got = r.phone.get(f"/api/cast/state/{r.tv_id}").json()
-    assert got["slug"] == "phim-a" and got["target_id"] == r.tv_id
+    got = r.phone.get(f"/api/cast/state/{r.tv_pid}").json()
+    assert got["slug"] == "phim-a" and got["target_id"] == r.tv_pid
     stranger = make_client(ip=OTHER_IP)
-    assert stranger.get(f"/api/cast/state/{r.tv_id}").status_code == 403
+    assert stranger.get(f"/api/cast/state/{r.tv_pid}").status_code == 403
     unapproved = make_client()
-    assert unapproved.get(f"/api/cast/state/{r.tv_id}").status_code == 403
+    assert unapproved.get(f"/api/cast/state/{r.tv_pid}").status_code == 403
 
 
 def test_switching_control_off_unlinks_and_blocks_next_command(app_module, make_client):
     r = approved(app_module, make_client)
     assert r.tv.patch("/api/cast/settings", json={"allow_control": False}).status_code == 200
-    assert r.tv_events() == [("controller_left", {"controller_id": r.phone_id})]
+    assert r.tv_events() == [("controller_left", {"controller_id": r.phone_pid})]
     assert app_module.cast_hub.linked_target(r.phone_id) is None
     assert command(r, {"type": "pause"}).status_code == 403

@@ -149,6 +149,7 @@ Server chạy một tiến trình uvicorn (`install.sh` và `Dockerfile` không 
 - `play` có `episode_url` và `position` tùy chọn: TV tự quyết tập và vị trí từ tiến độ riêng của nó, vì tiến độ ghi ở TV.
 - Nhãn trên TV dùng tên thiết bị của controller ("iPhone đang kết nối"), vì server không biết tên người.
 - Quyền lưu bền trong bảng `cast_allowed`; công tắc của TV ở `app_settings`. Liên kết, hiện diện và trạng thái chỉ ở bộ nhớ; lệnh hợp lệ tự lập lại liên kết.
+- Id thiết bị là cookie đăng nhập nên không bao giờ gửi cho thiết bị khác: mọi route và sự kiện cast dùng id công khai `HMAC(salt, id)[:20]`, server chỉ giải ngược trong phạm vi cùng nhà. Lệnh và yêu cầu kết nối chỉ tới tab mới nhất của TV; controller im lặng quá 40 giây bị gỡ khỏi TV; liên kết trong bộ nhớ được lập lại khi luồng sự kiện báo `hello` hoặc iPhone thức dậy.
 - Khi lệnh phát lên TV thất bại, iPhone báo "TV không phản hồi" và đưa nút Phát về phát cục bộ nhưng không tự phát (phát bất đồng bộ làm mất cử chỉ người dùng trên iOS).
 
 ## Gói 4 — Tự động hóa trình phát

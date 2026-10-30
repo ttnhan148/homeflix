@@ -12,6 +12,8 @@ from collections import deque
 PRESENCE_TTL = 40
 MAX_SUBSCRIBERS_PER_DEVICE = 4
 QUEUE_LIMIT = 100
+PENDING_RETRY_SECONDS = 10   # yêu cầu kết nối lặp lại chỉ phát lại cho TV sau chừng này giây
+PENDING_MAX_AGE = 600        # yêu cầu chờ quá lâu bị bỏ
 
 
 class Subscriber:
@@ -88,7 +90,7 @@ class CastHub:
         self._subs: dict[str, list[Subscriber]] = {}
         self._presence: dict[str, tuple[float, str]] = {}
         self._links: dict[str, str] = {}
-        self._pending: set[tuple[str, str]] = set()
+        self._pending: dict[tuple[str, str], float] = {}
         self._state: dict[str, dict] = {}
 
     # --- kết nối SSE ---
@@ -115,9 +117,13 @@ class CastHub:
         with self._lock:
             return bool(self._subs.get(device_id))
 
-    def publish(self, device_id: str, event: str, data: dict) -> int:
+    def publish(self, device_id: str, event: str, data: dict, newest_only: bool = False) -> int:
+        """Gửi tới mọi kết nối của thiết bị, hoặc chỉ kết nối mới nhất (lệnh và yêu cầu: một thiết bị
+        mở nhiều tab thì chỉ tab mới nhất hành động)."""
         with self._lock:
             subs = list(self._subs.get(device_id, []))
+            if newest_only:
+                subs = subs[-1:]
         for sub in subs:
             sub.put(event, data)
         return len(subs)
@@ -125,7 +131,11 @@ class CastHub:
     # --- hiện diện ---
     def heartbeat(self, device_id: str, kind: str) -> None:
         with self._lock:
-            self._presence[device_id] = (self._clock(), kind)
+            now = self._clock()
+            self._presence[device_id] = (now, kind)
+            if len(self._presence) > 500:   # dọn thiết bị đã biến mất từ lâu
+                cutoff = now - PRESENCE_TTL * 10
+                self._presence = {d: v for d, v in self._presence.items() if v[0] >= cutoff}
 
     def is_online(self, device_id: str) -> bool:
         with self._lock:
@@ -150,18 +160,28 @@ class CastHub:
             return [c for c, t in self._links.items() if t == target_id]
 
     def add_pending(self, target_id: str, controller_id: str) -> bool:
+        """True nếu nên (phát lại) yêu cầu tới TV: yêu cầu mới, hoặc đã quá PENDING_RETRY_SECONDS."""
         with self._lock:
-            if (target_id, controller_id) in self._pending:
+            now = self._clock()
+            last = self._pending.get((target_id, controller_id))
+            if last is not None and now - last < PENDING_RETRY_SECONDS:
                 return False
-            self._pending.add((target_id, controller_id))
+            self._pending[(target_id, controller_id)] = now
             return True
 
     def pop_pending(self, target_id: str, controller_id: str) -> bool:
         with self._lock:
-            if (target_id, controller_id) not in self._pending:
-                return False
-            self._pending.discard((target_id, controller_id))
-            return True
+            return self._pending.pop((target_id, controller_id), None) is not None
+
+    def pending_for(self, target_id: str) -> list[str]:
+        with self._lock:
+            now = self._clock()
+            self._pending = {k: t for k, t in self._pending.items() if now - t < PENDING_MAX_AGE}
+            return [c for (t, c) in self._pending if t == target_id]
+
+    def clear_pending(self, target_id: str) -> None:
+        with self._lock:
+            self._pending = {k: t for k, t in self._pending.items() if k[0] != target_id}
 
     # --- trạng thái phát ---
     def set_state(self, target_id: str, state: dict) -> None:
@@ -178,7 +198,7 @@ class CastHub:
             self._presence.pop(device_id, None)
             self._state.pop(device_id, None)
             self._links = {c: t for c, t in self._links.items() if c != device_id and t != device_id}
-            self._pending = {p for p in self._pending if device_id not in p}
+            self._pending = {k: t for k, t in self._pending.items() if device_id not in k}
         for sub in subs:
             sub.close()
 

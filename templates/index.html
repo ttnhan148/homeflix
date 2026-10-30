@@ -2637,6 +2637,11 @@ document.addEventListener('visibilitychange', () => {
             activeGridTab: 'all'
         };
 
+        // cast.js đăng ký window.__castRoute; nếu nó không nạp được thì mọi nút Phát vẫn phát cục bộ
+        function maybeCast(slug, episodeUrl) {
+            return typeof window.__castRoute === 'function' ? window.__castRoute(slug, episodeUrl) : false;
+        }
+
         function homeKey(tab) {
             const map = { 'all': 'all', 'phim-chieu-rap': 'phimChieuRap', 'phim-le': 'phimLe', 'phim-bo': 'phimBo', 'tv-shows': 'tvShows' };
             return map[tab] || 'all';

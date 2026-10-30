@@ -15,17 +15,18 @@ class Tv:
     def __init__(self, m, make_client, name=None):
         self.m = m
         self.client = make_client(ip="testclient")
-        self.id = self.client.get("/api/device").json()["id"]
+        self.real_id = self.client.get("/api/device").json()["id"]
+        self.id = m._cast_public_id(self.real_id)        # id công khai: cái iPhone nhìn thấy và dùng trong route
         self.client.post("/api/devices/heartbeat", json={"kind": "tv"})
         if name:
             self.client.patch("/api/device", json={"name": name})
-        self.sub = m.cast_hub.subscribe(self.id)
+        self.sub = m.cast_hub.subscribe(self.real_id)
 
     def events(self):
         return self.sub.drain()
 
     def answer(self, phone_id, allow=True):
-        return self.client.post(f"/api/cast/requests/{phone_id}", json={"allow": allow})
+        return self.client.post(f"/api/cast/requests/{self.m._cast_public_id(phone_id)}", json={"allow": allow})
 
 
 def open_phone(open_app, init=None, **kw):

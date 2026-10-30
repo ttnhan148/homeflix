@@ -28,7 +28,7 @@ def test_stream_headers_and_hello_first(app_module, make_client):
     assert headers["x-accel-buffering"] == "no"
     assert "no-store" in headers["cache-control"]
     first = text(chunks)
-    assert first.startswith("event: hello") and dev in first
+    assert first.startswith("event: hello") and app_module._cast_public_id(dev) in first and dev not in first
 
 
 def test_hello_lists_current_controllers_with_names(app_module, make_client):
@@ -37,7 +37,9 @@ def test_hello_lists_current_controllers_with_names(app_module, make_client):
     phone_id = phone.get("/api/device").json()["id"]
     app_module.cast_hub.link(phone_id, tv_id)
     _, _, chunks, _ = run(asgi_stream(app_module.app, "/api/cast/events", cookies=tv_cookies, until=lambda c: True))
-    assert f'"id": "{phone_id}"' in text(chunks) and '"name": "iPhone"' in text(chunks)
+    body = text(chunks)
+    assert f'"id": "{app_module._cast_public_id(phone_id)}"' in body and '"name": "iPhone"' in body
+    assert phone_id not in body
 
 
 def test_event_published_to_device_arrives_on_stream(app_module, make_client):
