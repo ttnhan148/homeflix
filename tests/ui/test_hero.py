@@ -111,7 +111,8 @@ def test_tv_hero_arrow_keys_change_slide_and_buttons_focusable(open_app):
     page.wait_for_selector(".hero-slide")
     page.focus(".hero-btn-play")
     assert page.evaluate("document.activeElement.classList.contains('hero-btn-play')")
-    page.keyboard.press("ArrowRight")
+    page.keyboard.press("ArrowRight")  # Phát -> Lưu
+    page.keyboard.press("ArrowRight")  # Lưu -> slide kế
     page.wait_for_function("heroState.index === 1")
     page.focus(".hero-btn-save")
     assert page.evaluate("document.activeElement.classList.contains('hero-btn-save')")

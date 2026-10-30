@@ -684,3 +684,9 @@ body.device-tv .hero-btn-play,
 body.device-tv .hero-btn-save {
     min-height: 56px;
 }
+
+/* Lớp tìm kiếm toàn màn hình: chữ và nút nằm dưới dải Dynamic Island, nội dung chừa chỗ tab bar */
+body.device-mobile .search-overlay {
+    padding-top: calc(var(--safe-top) + 1rem);
+    padding-bottom: calc(var(--safe-bottom) + 8px + 64px + 16px);
+}

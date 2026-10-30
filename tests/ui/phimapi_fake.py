@@ -30,7 +30,8 @@ def _page(prefix, page, count=PER_PAGE, tag=""):
 class FakePhimapi:
     """Thay httpx.AsyncClient của app: trả dữ liệu phimapi cố định, không gọi mạng."""
 
-    def __init__(self, fail=(), content=None, names=None, counts=None):
+    def __init__(self, fail=(), content=None, names=None, counts=None, categories=None):
+        self.categories = categories
         self.counts = counts or {}
         self.fail = tuple(fail)
         self.content = content or {}
@@ -52,9 +53,13 @@ class FakePhimapi:
             tag = f"-{params['country']}" if params.get("country") else ""
             return _Resp(self._with_names(_page(kind, page, self.counts.get(kind, PER_PAGE), tag)))
         if url.endswith("/v1/api/the-loai"):
-            return _Resp({"data": {"items": [{"name": "Hành Động", "slug": "hanh-dong"}, {"name": "Tình Cảm", "slug": "tinh-cam"}]}})
+            names = self.categories or ["Hành Động", "Tình Cảm"]
+            return _Resp({"data": {"items": [{"name": n, "slug": f"cat-{i}"} for i, n in enumerate(names)]}})
         if url.endswith("/v1/api/quoc-gia"):
             return _Resp({"data": {"items": [{"name": "Hàn Quốc", "slug": "han-quoc"}, {"name": "Mỹ", "slug": "my"}]}})
+        if "/v1/api/tim-kiem" in url:
+            item = {**_item("search-1", self.names.get("search-1")), "type": "single"}
+            return _Resp({"status": "success", "data": {"items": [item], "APP_DOMAIN_CDN_IMAGE": "https://phimimg.com"}})
         if "/phim/" in url:
             return _Resp(self._detail(url.rsplit("/", 1)[1]))
         raise AssertionError(f"FakePhimapi: unexpected URL {url}")
