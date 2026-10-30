@@ -2314,6 +2314,59 @@ video.addEventListener('play', () => {
     }
 });
 
+// --- Gửi vị trí xem (giây) về server, theo từng thiết bị ---
+const POSITION_REPORT_INTERVAL_MS = 10000;
+// Chỉ báo vị trí sau khi media của tập mới tải xong metadata, tránh gửi giây của tập cũ
+let positionTrackReady = false;
+video.addEventListener('loadedmetadata', () => { positionTrackReady = true; });
+
+// Listener đặt lại vị trí khi tập sắp phát có vị trí xem dở. Phải gỡ khi đổi tập hoặc thoát,
+// nếu không nó sẽ tua nhầm tập kế tiếp tới giây của tập trước.
+let resumeHandler = null;
+function clearResumeHandler() {
+    if (resumeHandler) {
+        video.removeEventListener('loadedmetadata', resumeHandler);
+        resumeHandler = null;
+    }
+}
+
+function reportPosition(useBeacon) {
+    if (!positionTrackReady || !currentMovie || !currentMovie.slug) return;
+    if (!document.body.classList.contains('player-active')) return;
+    const ep = playbackEpisodes && playbackEpisodes[currentPlaybackIndex];
+    if (!ep || !isFinite(video.duration) || video.currentTime < 1) return;
+    const body = {
+        slug: currentMovie.slug,
+        last_watched_episode: ep.name,
+        last_watched_url: ep.link_m3u8,
+        position: video.currentTime,
+        duration: video.duration
+    };
+    const saved = savedMoviesList.find(i => i.slug === currentMovie.slug);
+    if (saved && saved.last_watched_url === ep.link_m3u8) {
+        saved.position = body.position;
+        saved.duration = body.duration;
+    }
+    const payload = JSON.stringify(body);
+    if (useBeacon && navigator.sendBeacon) {
+        navigator.sendBeacon('/api/saved/progress', new Blob([payload], { type: 'application/json' }));
+    } else {
+        fetch('/api/saved/progress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+        }).catch(() => {});
+    }
+}
+
+setInterval(() => { if (!video.paused) reportPosition(false); }, POSITION_REPORT_INTERVAL_MS);
+video.addEventListener('pause', () => reportPosition(false));
+window.addEventListener('pagehide', () => reportPosition(true));
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') reportPosition(true);
+});
+
         // --- AirPlay Remote Control Mode ---
         let isAirplayActive = false;
         let airplaySeekInterval = null;
@@ -3120,6 +3173,18 @@ video.addEventListener('play', () => {
             currentPlaybackIndex = idx;
             syncDrawerToPlaying(url);
 
+            // Vị trí xem dở của thiết bị này (đọc trước khi POST tiến độ làm đổi last_watched_url)
+            positionTrackReady = false;
+            clearResumeHandler();
+            let resumeAt = 0;
+            if (currentMovie && currentMovie.slug) {
+                const saved = savedMoviesList.find(i => i.slug === currentMovie.slug);
+                if (saved && saved.last_watched_url === url && saved.position > 5
+                        && saved.duration && saved.position < saved.duration - 30) {
+                    resumeAt = saved.position;
+                }
+            }
+
             // Gửi báo cáo tiến trình xem phim về Server (nếu phim đã được lưu)
             if (currentMovie && currentMovie.slug) {
                 console.log("[Play] Gửi tiến trình xem cho:", currentMovie.slug);
@@ -3138,6 +3203,10 @@ video.addEventListener('play', () => {
                         if (sIdx > -1) {
                             savedMoviesList[sIdx].last_watched_episode = title;
                             savedMoviesList[sIdx].last_watched_url = url;
+                            if (data.movie) {
+                                savedMoviesList[sIdx].position = data.movie.position;
+                                savedMoviesList[sIdx].duration = data.movie.duration;
+                            }
                             // Cập nhật state trực tiếp để render màu sắc động tức thời
                             if (!savedMoviesList[sIdx].episode_states) {
                                 savedMoviesList[sIdx].episode_states = {};
@@ -3192,6 +3261,14 @@ video.addEventListener('play', () => {
             };
 
             console.log("[Play] useMp4 =", useMp4, "mp4Url =", mp4Url);
+
+            if (resumeAt > 0) {
+                resumeHandler = () => {
+                    video.currentTime = resumeAt;
+                    clearResumeHandler();
+                };
+                video.addEventListener('loadedmetadata', resumeHandler);
+            }
 
             // Set poster for AirPlay bg
             if (currentMovie && currentMovie.poster_url) {
@@ -3259,6 +3336,8 @@ video.addEventListener('play', () => {
 
         // --- EXIT PLAYER (QUAY LẠI TRANG CHỦ) ---
         function exitPlayer() {
+            reportPosition(false);
+            clearResumeHandler();
             video.pause();
             video.onerror = null;
             if (hlsObj) {

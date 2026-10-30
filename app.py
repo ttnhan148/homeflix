@@ -10,6 +10,9 @@ import sqlite3
 import re
 import unicodedata
 import threading
+import uuid
+import math
+import secrets
 from datetime import datetime, date
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -22,6 +25,8 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
 import json
+from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
+                     household_id, parse_trusted_proxies)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -35,6 +40,14 @@ POSTER_CACHE_DIR = os.path.join(CACHE_DIR, "posters")
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 DB_FILE = os.path.join(BASE_DIR, "homeflix.db")
 DOWNLOADS_STATUS_FILE = os.path.join(BASE_DIR, "downloads.json")
+
+# --- Định danh thiết bị (không đăng nhập) ---
+DEVICE_COOKIE = "hf_device"
+DEVICE_COOKIE_MAX_AGE = 63072000  # 2 năm
+# Chỉ cấp cookie ở "/" và các route này; không cấp ở /proxy, /media, /static
+DEVICE_COOKIE_PATHS = ("/api/saved", "/api/device", "/api/cast")
+# IP của reverse proxy tin cậy (cách nhau bằng dấu phẩy) mới được đọc X-Forwarded-For
+TRUSTED_PROXIES = parse_trusted_proxies(os.environ.get("TRUSTED_PROXIES"))
 
 MAX_CACHE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB
 MAX_CACHE_AGE = 6 * 60 * 60              # 6 giờ (giây)
@@ -147,6 +160,48 @@ def init_db():
                 ttl_seconds INTEGER NOT NULL
             )
         """)
+        # --- Thiết bị: mỗi thiết bị có danh sách lưu và tiến độ xem riêng ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS devices (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                household TEXT NOT NULL,
+                user_agent TEXT,
+                last_seen REAL NOT NULL,
+                created_at REAL NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS device_movies (
+                device_id TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                name TEXT NOT NULL,
+                poster_url TEXT,
+                year TEXT,
+                episode_current TEXT,
+                total_episodes INTEGER,
+                last_watched_episode TEXT,
+                last_watched_url TEXT,
+                position_sec REAL,
+                duration_sec REAL,
+                episodes TEXT,
+                episode_states TEXT,
+                saved INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (device_id, slug)
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_household ON devices(household)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_updated ON device_movies(device_id, updated_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_slug ON device_movies(slug)")
         # --- INDEX: tăng tốc query thường dùng ---
         # episode_downloads: query theo movie_slug (rất thường xuyên)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ep_dl_slug ON episode_downloads(movie_slug)")
@@ -224,52 +279,122 @@ async def cached_fetch(cache_key: str, ttl_seconds: int, fetch_fn):
             return cached["data"]
         raise
 
-# Helper SQLite cho saved_movies
-def _db_get_all_movies():
-    rows = db_query("SELECT * FROM saved_movies ORDER BY updated_at DESC")
-    movies = []
-    for r in rows:
-        m = dict(r)
-        m["episodes"] = json.loads(m["episodes"]) if m["episodes"] else []
-        m["episode_states"] = json.loads(m["episode_states"]) if m["episode_states"] else {}
-        movies.append(m)
-    return movies
+# --- Thiết bị ---
+def get_household_salt() -> str:
+    """Salt dùng băm IP thành "nhà". Sinh một lần, lưu trong DB."""
+    conn = get_db()
+    with _db_lock:
+        row = conn.execute("SELECT value FROM app_settings WHERE key = 'household_salt'").fetchone()
+        if row:
+            return row[0]
+        salt = secrets.token_hex(16)
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('household_salt', ?)", (salt,))
+        conn.commit()
+        return salt
 
-async def get_all_movies_from_db():
-    return await asyncio.to_thread(_db_get_all_movies)
+DEVICE_LAST_SEEN_THROTTLE = 60  # giây: không ghi last_seen thường hơn mức này
 
-def _db_get_movie(slug):
-    row = db_query_one("SELECT * FROM saved_movies WHERE slug = ?", (slug,))
-    if row:
-        m = dict(row)
-        m["episodes"] = json.loads(m["episodes"]) if m["episodes"] else []
-        m["episode_states"] = json.loads(m["episode_states"]) if m["episode_states"] else {}
-        return m
-    return None
+def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str, now: float,
+                     adopt_legacy: bool = True) -> dict:
+    """Thêm thiết bị nếu chưa có, ngược lại cập nhật last_seen (tối đa mỗi 60 giây)."""
+    conn = get_db()
+    with _db_lock:
+        row = conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        created = row is None
+        if created:
+            conn.execute(
+                "INSERT INTO devices (id, name, kind, household, user_agent, last_seen, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (device_id, default_device_name(kind, user_agent), kind, household, user_agent, now, now),
+            )
+            flagged = conn.execute("SELECT 1 FROM app_settings WHERE key = 'legacy_adopted'").fetchone()
+            if adopt_legacy and not flagged:
+                # Thiết bị đầu tiên (qua /api, không phải bot tải "/") nhận toàn bộ tủ phim chung cũ.
+                # Cờ legacy_adopted đảm bảo chỉ nhập một lần, kể cả sau khi mọi thiết bị bị dọn.
+                conn.execute("INSERT INTO app_settings (key, value) VALUES ('legacy_adopted', '1')")
+                conn.execute("""
+                    INSERT INTO device_movies (
+                        device_id, slug, name, poster_url, year, episode_current, total_episodes,
+                        last_watched_episode, last_watched_url, position_sec, duration_sec,
+                        episodes, episode_states, saved, updated_at)
+                    SELECT ?, slug, name, poster_url, year, episode_current, total_episodes,
+                           last_watched_episode, last_watched_url, NULL, NULL,
+                           episodes, episode_states, 1, updated_at
+                    FROM saved_movies
+                """, (device_id,))
+        elif row["household"] != household or now - row["last_seen"] >= DEVICE_LAST_SEEN_THROTTLE:
+            conn.execute("UPDATE devices SET household = ?, last_seen = ? WHERE id = ?",
+                         (household, now, device_id))
+        conn.commit()
+        result = dict(conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone())
+    result["created"] = created
+    return result
 
-async def get_movie_from_db(slug):
-    return await asyncio.to_thread(_db_get_movie, slug)
+def _register_request_device(device_id: str, ip: str, user_agent: str, adopt_legacy: bool = True) -> dict:
+    household = household_id(ip, get_household_salt())
+    return _db_touch_device(device_id, household, device_kind(user_agent), user_agent, time.time(),
+                            adopt_legacy=adopt_legacy)
 
-def _db_save_movie(movie):
-    slug = movie.get("slug")
-    name = movie.get("name", "")
-    poster_url = movie.get("poster_url", "")
-    year = str(movie.get("year", ""))
-    episode_current = movie.get("episode_current", "")
-    total_episodes = movie.get("total_episodes")
-    last_watched_episode = movie.get("last_watched_episode", "")
-    last_watched_url = movie.get("last_watched_url", "")
-    
-    episodes = json.dumps(movie.get("episodes", []), ensure_ascii=False)
-    episode_states = json.dumps(movie.get("episode_states", {}), ensure_ascii=False)
-    updated_at = datetime.now().isoformat()
-    
+def _public_device(row: dict) -> dict:
+    return {k: row[k] for k in ("id", "name", "kind", "created_at", "last_seen")}
+
+def _valid_device_cookie(value: str | None) -> str | None:
+    """Chỉ nhận UUIDv4 dạng chuẩn có gạch nối; mọi thứ khác bị coi là không có cookie."""
+    if not value:
+        return None
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        return None
+    if parsed.version != 4 or str(parsed) != value.lower():
+        return None
+    return str(parsed)
+
+DEVICE_MAX_INACTIVE_DAYS = 180
+
+def _db_prune_inactive_devices(now: float, max_age_days: int = DEVICE_MAX_INACTIVE_DAYS) -> int:
+    """Xóa thiết bị không hoạt động quá max_age_days cùng phim của chúng. Trả số thiết bị đã xóa."""
+    cutoff = now - max_age_days * 86400
+    conn = get_db()
+    with _db_lock:
+        old_ids = [r[0] for r in conn.execute("SELECT id FROM devices WHERE last_seen < ?", (cutoff,))]
+        for device_id in old_ids:
+            conn.execute("DELETE FROM device_movies WHERE device_id = ?", (device_id,))
+            conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+        conn.commit()
+    return len(old_ids)
+
+# --- Phim theo thiết bị (device_movies) ---
+def _device_movie_dict(row) -> dict:
+    m = dict(row)
+    m["episodes"] = json.loads(m["episodes"]) if m["episodes"] else []
+    m["episode_states"] = json.loads(m["episode_states"]) if m["episode_states"] else {}
+    m["position"] = m.pop("position_sec")
+    m["duration"] = m.pop("duration_sec")
+    m["saved"] = bool(m["saved"])
+    m.pop("device_id", None)
+    return m
+
+def _db_list_device_movies(device_id: str) -> list[dict]:
+    """Phim đã lưu hoặc có tiến độ xem của thiết bị, mới cập nhật nhất trước."""
+    rows = db_query(
+        "SELECT * FROM device_movies WHERE device_id = ? AND (saved = 1 "
+        "OR (last_watched_url IS NOT NULL AND last_watched_url != '') OR position_sec IS NOT NULL) "
+        "ORDER BY updated_at DESC", (device_id,))
+    return [_device_movie_dict(r) for r in rows]
+
+def _db_get_device_movie(device_id: str, slug: str) -> dict | None:
+    row = db_query_one("SELECT * FROM device_movies WHERE device_id = ? AND slug = ?", (device_id, slug))
+    return _device_movie_dict(row) if row else None
+
+def _db_upsert_device_movie(device_id: str, movie: dict) -> None:
     db_execute("""
-        INSERT INTO saved_movies (
-            slug, name, poster_url, year, episode_current, total_episodes,
-            last_watched_episode, last_watched_url, episodes, episode_states, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(slug) DO UPDATE SET
+        INSERT INTO device_movies (
+            device_id, slug, name, poster_url, year, episode_current, total_episodes,
+            last_watched_episode, last_watched_url, position_sec, duration_sec,
+            episodes, episode_states, saved, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(device_id, slug) DO UPDATE SET
             name=excluded.name,
             poster_url=excluded.poster_url,
             year=excluded.year,
@@ -277,22 +402,52 @@ def _db_save_movie(movie):
             total_episodes=excluded.total_episodes,
             last_watched_episode=excluded.last_watched_episode,
             last_watched_url=excluded.last_watched_url,
+            position_sec=COALESCE(excluded.position_sec, device_movies.position_sec),
+            duration_sec=COALESCE(excluded.duration_sec, device_movies.duration_sec),
             episodes=excluded.episodes,
             episode_states=excluded.episode_states,
+            saved=excluded.saved,
             updated_at=excluded.updated_at
     """, (
-        slug, name, poster_url, year, episode_current, total_episodes,
-        last_watched_episode, last_watched_url, episodes, episode_states, updated_at
+        device_id, movie.get("slug"), movie.get("name", ""), movie.get("poster_url", ""),
+        str(movie.get("year", "")), movie.get("episode_current", ""), movie.get("total_episodes"),
+        movie.get("last_watched_episode", ""), movie.get("last_watched_url", ""),
+        movie.get("position"), movie.get("duration"),
+        json.dumps(movie.get("episodes", []), ensure_ascii=False),
+        json.dumps(movie.get("episode_states", {}), ensure_ascii=False),
+        1 if movie.get("saved", True) else 0,
+        datetime.now().isoformat(),
     ))
 
-async def save_movie_to_db(movie):
-    await asyncio.to_thread(_db_save_movie, movie)
+def _db_delete_device_movie(device_id: str, slug: str) -> bool:
+    cursor = db_execute("DELETE FROM device_movies WHERE device_id = ? AND slug = ?", (device_id, slug))
+    return cursor.rowcount > 0
 
-def _db_delete_movie(slug):
-    db_execute("DELETE FROM saved_movies WHERE slug = ?", (slug,))
+def _db_other_devices_hold(device_id: str, slug: str) -> bool:
+    """True nếu còn thiết bị khác giữ phim này (file tải xuống và cache là dùng chung)."""
+    return db_query_one("SELECT 1 FROM device_movies WHERE slug = ? AND device_id != ? LIMIT 1",
+                        (slug, device_id)) is not None
 
-async def delete_movie_from_db(slug):
-    await asyncio.to_thread(_db_delete_movie, slug)
+def _db_all_device_movies() -> list[dict]:
+    """Mỗi slug một bản (bản cập nhật mới nhất), dùng cho worker tải xuống."""
+    seen, result = set(), []
+    for r in db_query("SELECT * FROM device_movies ORDER BY updated_at DESC"):
+        if r["slug"] not in seen:
+            seen.add(r["slug"])
+            result.append(_device_movie_dict(r))
+    return result
+
+async def get_device_movies(device_id: str):
+    return await asyncio.to_thread(_db_list_device_movies, device_id)
+
+async def get_device_movie(device_id: str, slug: str):
+    return await asyncio.to_thread(_db_get_device_movie, device_id, slug)
+
+async def save_device_movie(device_id: str, movie: dict):
+    await asyncio.to_thread(_db_upsert_device_movie, device_id, movie)
+
+async def delete_device_movie(device_id: str, slug: str):
+    return await asyncio.to_thread(_db_delete_device_movie, device_id, slug)
 
 # Tải xuống MP4 qua ffmpeg
 @lru_cache(maxsize=512)
@@ -422,7 +577,7 @@ async def download_worker():
     await asyncio.sleep(2)
     try:
         queued = await asyncio.to_thread(_db_get_queued_downloads)
-        movies = await get_all_movies_from_db()
+        movies = await asyncio.to_thread(_db_all_device_movies)
         movies_by_slug = {m["slug"]: m for m in movies}
         for movie_slug, ep_name in queued:
             if movie_slug in movies_by_slug:
@@ -589,7 +744,13 @@ async def prune_cache():
             await asyncio.to_thread(_cleanup_disk)
         except Exception as e:
             logger.error(f"Lỗi dọn dẹp cache: {e}")
-            
+        try:
+            removed = await asyncio.to_thread(_db_prune_inactive_devices, time.time())
+            if removed:
+                logger.info(f"[Devices] Đã xóa {removed} thiết bị không hoạt động")
+        except Exception as e:
+            logger.error(f"Lỗi dọn thiết bị không hoạt động: {e}")
+
         await asyncio.sleep(3600)  # Chạy mỗi giờ một lần
 
 async def _prefetch_one(target_url: str, sid: str):
@@ -740,6 +901,55 @@ async def api_cache_headers(request: Request, call_next):
         elif path.startswith("/proxy/image"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
+
+# Cấp và đọc cookie hf_device cho "/" và các route theo thiết bị.
+@app.middleware("http")
+async def device_middleware(request: Request, call_next):
+    path = request.url.path
+    if not (path == "/" or path.startswith(DEVICE_COOKIE_PATHS)):
+        return await call_next(request)
+    device_id = _valid_device_cookie(request.cookies.get(DEVICE_COOKIE))
+    issue_cookie = device_id is None
+    if issue_cookie:
+        device_id = str(uuid.uuid4())
+    ip = client_ip(request.client.host if request.client else None,
+                   request.headers.get("x-forwarded-for"), TRUSTED_PROXIES)
+    row = await asyncio.to_thread(_register_request_device, device_id, ip,
+                                  request.headers.get("user-agent", ""), path != "/")
+    request.state.device_id = device_id
+    request.state.household = row["household"]
+    response = await call_next(request)
+    if issue_cookie:
+        response.set_cookie(DEVICE_COOKIE, device_id, max_age=DEVICE_COOKIE_MAX_AGE, path="/",
+                            httponly=True, samesite="lax", secure=request.url.scheme == "https")
+    if path != "/":
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Vary"] = "Cookie"
+    return response
+
+@app.get("/api/device")
+async def get_device_api(request: Request):
+    row = await asyncio.to_thread(
+        lambda: dict(db_query_one("SELECT * FROM devices WHERE id = ?", (request.state.device_id,))))
+    return _public_device(row)
+
+@app.patch("/api/device")
+async def patch_device_api(request: Request, body: dict):
+    updates = {}
+    if "name" in body:
+        name = body["name"].strip() if isinstance(body["name"], str) else ""
+        if not 1 <= len(name) <= 40:
+            raise HTTPException(status_code=422, detail="name must be 1-40 characters")
+        updates["name"] = name
+    if "kind" in body:
+        if body["kind"] not in DEVICE_KINDS:
+            raise HTTPException(status_code=422, detail="kind must be one of " + ", ".join(DEVICE_KINDS))
+        updates["kind"] = body["kind"]
+    if updates:
+        sets = ", ".join(f"{col} = ?" for col in updates)
+        await asyncio.to_thread(db_execute, f"UPDATE devices SET {sets} WHERE id = ?",
+                                (*updates.values(), request.state.device_id))
+    return await get_device_api(request)
 
 # GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -1050,17 +1260,20 @@ async def get_movie_detail(slug: str):
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/saved")
-async def get_saved_movies_api():
-    movies = await get_all_movies_from_db()
-    return movies
+async def get_saved_movies_api(request: Request):
+    return await get_device_movies(request.state.device_id)
 
 @app.post("/api/saved")
-async def save_movie_api(movie: dict):
+async def save_movie_api(request: Request, movie: dict):
     slug = movie.get("slug")
     if not slug:
         return {"status": "error", "message": "Missing slug"}
-    
-    existing = await get_movie_from_db(slug)
+    if not _valid_slug(slug):
+        return {"status": "error", "message": "Invalid slug"}
+    _clean_client_movie(movie)
+
+    device_id = request.state.device_id
+    existing = await get_device_movie(device_id, slug)
     if existing:
         existing.update(movie)
         movie = existing
@@ -1071,39 +1284,137 @@ async def save_movie_api(movie: dict):
             movie["last_watched_url"] = ""
         if "episode_states" not in movie:
             movie["episode_states"] = {}
-            
+    movie["saved"] = True
+
     # Sửa lỗi total_episodes dựa trên độ dài episodes
     if "episodes" in movie and isinstance(movie["episodes"], list):
         movie["total_episodes"] = len(movie["episodes"])
-        
-    await save_movie_to_db(movie)
+
+    await save_device_movie(device_id, movie)
     return {"status": "success", "movie": movie}
 
+def _valid_slug(slug) -> bool:
+    """Slug phải là chuỗi một đoạn đường dẫn: không rỗng, không '.', '..', '/', '\\' hay NUL."""
+    return (isinstance(slug, str) and 0 < len(slug) <= 200 and slug not in (".", "..")
+            and not any(c in slug for c in "/\\\x00"))
+
+def _safe_rmtree_under(base: str, target: str) -> bool:
+    """rmtree target chỉ khi nó nằm thật sự bên dưới base (sau khi giải symlink và '..')."""
+    real_base = os.path.realpath(base)
+    real_target = os.path.realpath(target)
+    if real_target == real_base or not real_target.startswith(real_base + os.sep):
+        logger.warning(f"Từ chối xóa ngoài {base}: {target}")
+        return False
+    if not os.path.exists(real_target):
+        return False
+    shutil.rmtree(real_target)
+    return True
+
+_SCALAR_MOVIE_FIELDS = ("name", "poster_url", "year", "episode_current", "total_episodes",
+                        "last_watched_episode", "last_watched_url")
+
+def _clean_client_movie(movie: dict) -> dict:
+    """Bỏ các trường server tự quản và các trường không phải số/chuỗi trước khi lưu."""
+    for key in ("position", "duration", "saved"):
+        movie.pop(key, None)
+    for key in _SCALAR_MOVIE_FIELDS:
+        if key in movie and not isinstance(movie[key], (str, int, float, type(None))):
+            del movie[key]
+    return movie
+
+def _clean_position(position, duration):
+    """Chuẩn hóa (position, duration) tính bằng giây. Trả None nếu position không hợp lệ.
+
+    position None = client không gửi vị trí. Số âm quy về 0; lớn hơn duration thì bằng duration.
+    duration không hữu hạn hoặc <= 0 bị bỏ qua (None).
+    """
+    def _number(v):
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            return None
+        return float(v)
+
+    clean_duration = _number(duration)
+    if clean_duration is not None and clean_duration <= 0:
+        clean_duration = None
+    if position is None:
+        return None, clean_duration
+    clean_position = _number(position)
+    if clean_position is None:
+        return None
+    clean_position = max(0.0, clean_position)
+    if clean_duration is not None:
+        clean_position = min(clean_position, clean_duration)
+    return clean_position, clean_duration
+
 @app.post("/api/saved/progress")
-async def save_movie_progress_api(progress: dict):
+async def save_movie_progress_api(request: Request, progress: dict):
     slug = progress.get("slug")
     last_ep = progress.get("last_watched_episode")
     last_url = progress.get("last_watched_url")
     if not slug:
         return {"status": "error", "message": "Missing slug"}
-        
-    movie = await get_movie_from_db(slug)
-    if movie:
-        movie["last_watched_episode"] = last_ep
-        movie["last_watched_url"] = last_url
-        
-        if "episode_states" not in movie:
-            movie["episode_states"] = {}
-            
-        previously_watching_urls = []
-        for ep_url, state in list(movie["episode_states"].items()):
-            if state == "watching":
-                movie["episode_states"][ep_url] = "watched"
-                previously_watching_urls.append(ep_url)
-                
-        movie["episode_states"][last_url] = "watching"
-        
-        # Xóa các file tập đã xem sau 3 giờ
+    if not _valid_slug(slug):
+        return {"status": "error", "message": "Invalid slug"}
+    if any(v is not None and not isinstance(v, str) for v in (last_ep, last_url)):
+        return {"status": "error", "message": "Invalid episode"}
+
+    cleaned = _clean_position(progress.get("position"), progress.get("duration"))
+    if cleaned is None:
+        return {"status": "error", "message": "Invalid position"}
+    position, duration = cleaned
+
+    device_id = request.state.device_id
+    movie = await get_device_movie(device_id, slug)
+    if not movie:
+        # Phim chưa lưu: chỉ tạo hàng lịch sử khi client gửi kèm thông tin phim
+        if not progress.get("name"):
+            return {"status": "error", "message": "Movie not in saved list"}
+        episodes = progress.get("episodes") if isinstance(progress.get("episodes"), list) else []
+        movie = {
+            "slug": slug, "name": progress["name"], "poster_url": progress.get("poster_url", ""),
+            "year": progress.get("year", ""), "episodes": episodes, "total_episodes": len(episodes),
+            "episode_states": {}, "last_watched_episode": "", "last_watched_url": "", "saved": False,
+        }
+
+    # Báo cáo vị trí đến muộn của một tập đã xem xong (vd. sự kiện pause của tập trước
+    # đến sau khi tập sau đã bắt đầu): bỏ qua, không lùi tiến độ về tập cũ.
+    if (position is not None and last_url and last_url != movie.get("last_watched_url")
+            and movie.get("episode_states", {}).get(last_url) == "watched"):
+        return {"status": "success", "movie": movie}
+
+    # Cùng tập đang xem: chỉ cập nhật vị trí, không đổi trạng thái hay lên lịch xóa file.
+    if not last_url or last_url == movie.get("last_watched_url"):
+        if position is not None:
+            movie["position"] = position
+        if duration is not None:
+            movie["duration"] = duration
+        await save_device_movie(device_id, movie)
+        return {"status": "success", "movie": movie}
+
+    movie["last_watched_episode"] = last_ep
+    movie["last_watched_url"] = last_url
+    movie["position"] = position if position is not None else 0.0
+    if duration is not None:
+        movie["duration"] = duration
+    if "episode_states" not in movie:
+        movie["episode_states"] = {}
+
+    previously_watching_urls = []
+    for ep_url, state in list(movie["episode_states"].items()):
+        if state == "watching":
+            movie["episode_states"][ep_url] = "watched"
+            previously_watching_urls.append(ep_url)
+    movie["episode_states"][last_url] = "watching"
+
+    # Tập sắp xem không được nằm trong lịch xóa (vd. xem lại tập đã xem xong)
+    for ep in movie.get("episodes", []):
+        if ep.get("link_m3u8") == last_url:
+            st = await asyncio.to_thread(_db_get_download_status, slug, ep.get("name"))
+            if st["delete_at"] is not None:
+                await update_download_status(slug, ep.get("name"), st["status"], delete_at=None)
+
+    # Xóa các file tập đã xem sau 3 giờ, trừ khi thiết bị khác còn giữ phim (file dùng chung)
+    if previously_watching_urls and not await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
         for ep in movie.get("episodes", []):
             if ep.get("link_m3u8") in previously_watching_urls:
                 clean_ep = clean_filename(ep.get("name"))
@@ -1114,17 +1425,23 @@ async def save_movie_progress_api(progress: dict):
                         logger.info(f"Đã lên lịch xóa file tập đã xem xong sau 3 giờ: {file_path}")
                     except Exception as e:
                         logger.warning(f"Không thể đặt lịch xóa file {file_path}: {e}")
-                        
-        await save_movie_to_db(movie)
-        return {"status": "success", "movie": movie}
-    return {"status": "error", "message": "Movie not in saved list"}
+
+    await save_device_movie(device_id, movie)
+    return {"status": "success", "movie": movie}
 
 @app.delete("/api/saved/{slug}")
-async def delete_saved_movie_api(slug: str):
-    movie = await get_movie_from_db(slug)
+async def delete_saved_movie_api(request: Request, slug: str):
+    if not _valid_slug(slug):
+        return {"status": "error", "message": "Invalid slug"}
+    device_id = request.state.device_id
+    movie = await get_device_movie(device_id, slug)
     if movie:
-        await delete_movie_from_db(slug)
-        
+        await delete_device_movie(device_id, slug)
+        # File tải xuống, cache và record tải xuống là dùng chung: chỉ dọn khi
+        # không còn thiết bị nào khác giữ phim này.
+        if await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
+            return {"status": "success"}
+
         # 1. Xóa các record tải xuống của phim trong DB
         await asyncio.to_thread(
             lambda ms=slug: db_execute("DELETE FROM episode_downloads WHERE movie_slug = ?", (ms,))
@@ -1147,8 +1464,8 @@ async def delete_saved_movie_api(slug: str):
         movie_dir = os.path.join(DOWNLOAD_DIR, slug)
         if os.path.exists(movie_dir):
             try:
-                shutil.rmtree(movie_dir)
-                logger.info(f"Đã xóa thư mục tải xuống: {movie_dir}")
+                if _safe_rmtree_under(DOWNLOAD_DIR, movie_dir):
+                    logger.info(f"Đã xóa thư mục tải xuống: {movie_dir}")
             except Exception as e:
                 logger.warning(f"Lỗi khi xóa thư mục {movie_dir}: {e}")
         return {"status": "success"}
