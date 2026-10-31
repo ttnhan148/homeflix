@@ -7,7 +7,7 @@ from typing import Callable
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 
-from hometv import db, sources
+from hometv import db, health_store, sources
 
 ID_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 BAD_BODY = {"errors": {"body": "Dữ liệu không hợp lệ"}}
@@ -44,7 +44,13 @@ def make_router(require_admin: Callable) -> APIRouter:
 
     @router.get("")
     async def list_all():
-        return await _run(sources.list_sources, time.time())
+        items = await _run(sources.list_sources, time.time())
+        if isinstance(items, JSONResponse):
+            return items
+        health = await _run(health_store.source_health, time.time())
+        if isinstance(health, JSONResponse):
+            return health
+        return [{**item, "health": health.get(item["id"])} for item in items]
 
     @router.post("", status_code=201)
     async def create(request: Request):

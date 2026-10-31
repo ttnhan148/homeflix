@@ -33,7 +33,7 @@ def test_list_has_seeded_defaults(admin_client):
     r = admin_client.get(BASE)
     assert r.status_code == 200
     assert [s["id"] for s in r.json()] == ["doubo-vn", "iptv-org-vn", "dangdvd-iptv", "khanh71-http"]
-    assert len(r.json()[0]) == 13
+    assert len(r.json()[0]) == 14
 
 
 def test_create_and_validate(admin_client, public_dns):

@@ -13,15 +13,17 @@ checking: set[str] = set()
 
 def eligible(source_id: str) -> bool:
     """Nguồn còn được phép kiểm: tồn tại, đang bật, đã duyệt."""
-    r = db.conn().execute("SELECT 1 FROM sources WHERE id=? AND enabled=1 AND rights_status='approved'",
-                          (source_id,)).fetchone()
+    with db.lock:
+        r = db.conn().execute("SELECT 1 FROM sources WHERE id=? AND enabled=1 AND rights_status='approved'",
+                              (source_id,)).fetchone()
     return r is not None
 
 
 def streams_to_check(source_id: str) -> list[dict]:
-    rows = db.conn().execute(
-        "SELECT id, url, http_headers FROM streams WHERE source_id=? AND active=1 AND drm_hint=0 ORDER BY id",
-        (source_id,)).fetchall()
+    with db.lock:
+        rows = db.conn().execute(
+            "SELECT id, url, http_headers FROM streams WHERE source_id=? AND active=1 AND drm_hint=0 ORDER BY id",
+            (source_id,)).fetchall()
     out = []
     for r in rows:
         try:
@@ -52,9 +54,10 @@ def record(stream_id: int, result: HealthResult, https: bool, now: float) -> Non
 
 
 def due_sources(now: float) -> list[str]:
-    rows = db.conn().execute(
-        "SELECT id FROM sources WHERE enabled=1 AND rights_status='approved' "
-        "AND (next_check_at IS NULL OR next_check_at <= ?) ORDER BY priority, name", (now,)).fetchall()
+    with db.lock:
+        rows = db.conn().execute(
+            "SELECT id FROM sources WHERE enabled=1 AND rights_status='approved' "
+            "AND (next_check_at IS NULL OR next_check_at <= ?) ORDER BY priority, name", (now,)).fetchall()
     return [r["id"] for r in rows]
 
 
@@ -71,14 +74,16 @@ def request_check(source_id: str, now: float) -> bool:
 
 
 def source_health(now: float) -> dict[str, dict]:
-    c = db.conn()
-    out = {r["id"]: {"checked": 0, "alive": 0, "dead": 0, "unknown": 0, "checking": r["id"] in checking}
-           for r in c.execute("SELECT id FROM sources")}
-    for r in c.execute(
+    with db.lock:
+        c = db.conn()
+        ids = [r["id"] for r in c.execute("SELECT id FROM sources")]
+        counts = c.execute(
             "SELECT s.source_id, COUNT(h.stream_id) AS checked, COALESCE(SUM(h.ok = 1), 0) AS alive, "
             "COALESCE(SUM(h.ok = 0), 0) AS dead, COALESCE(SUM(h.stream_id IS NULL), 0) AS unknown "
             "FROM streams s LEFT JOIN stream_health h ON h.stream_id = s.id "
-            "WHERE s.active = 1 AND s.drm_hint = 0 GROUP BY s.source_id"):
+            "WHERE s.active = 1 AND s.drm_hint = 0 GROUP BY s.source_id").fetchall()
+    out = {i: {"checked": 0, "alive": 0, "dead": 0, "unknown": 0, "checking": i in checking} for i in ids}
+    for r in counts:
         if r["source_id"] in out:
             out[r["source_id"]].update(checked=r["checked"], alive=r["alive"], dead=r["dead"], unknown=r["unknown"])
     return out
@@ -86,10 +91,11 @@ def source_health(now: float) -> dict[str, dict]:
 
 def dead_streams(source_id: str, status: str, limit: int) -> list[dict]:
     where = "AND h.ok = 0" if status == "dead" else ""
-    rows = db.conn().execute(
-        "SELECT s.id AS stream_id, COALESCE(NULLIF(s.display_name, ''), ch.display_name, ch.normalized_name, '') "
-        "AS channel_name, h.ok, h.error, h.fail_streak, h.width, h.height, h.score "
-        "FROM stream_health h JOIN streams s ON s.id = h.stream_id JOIN channels ch ON ch.id = s.channel_id "
-        f"WHERE s.source_id = ? AND s.active = 1 AND s.drm_hint = 0 {where} "
-        "ORDER BY h.fail_streak DESC, s.id LIMIT ?", (source_id, limit)).fetchall()
+    with db.lock:
+        rows = db.conn().execute(
+            "SELECT s.id AS stream_id, COALESCE(NULLIF(s.display_name, ''), ch.display_name, ch.normalized_name, '') "
+            "AS channel_name, h.ok, h.error, h.fail_streak, h.width, h.height, h.score "
+            "FROM stream_health h JOIN streams s ON s.id = h.stream_id JOIN channels ch ON ch.id = s.channel_id "
+            f"WHERE s.source_id = ? AND s.active = 1 AND s.drm_hint = 0 {where} "
+            "ORDER BY h.fail_streak DESC, s.id LIMIT ?", (source_id, limit)).fetchall()
     return [{**dict(r), "ok": bool(r["ok"])} for r in rows]

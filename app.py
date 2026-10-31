@@ -1162,6 +1162,7 @@ def require_admin(request: Request):
 
 # Route admin HomeTV (router tự gắn require_admin cho mọi route)
 app.include_router(hometv.api.make_router(require_admin))
+app.include_router(hometv.health_api.make_health_router(require_admin))
 # Route công khai HomeTV: kênh, yêu thích, đường phát
 app.include_router(hometv.public_api.make_public_router(lambda: get_hometv_play_client()))
 

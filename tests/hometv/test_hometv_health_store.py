@@ -176,3 +176,27 @@ def test_stale_health_ignored_when_disabled(db):
         health_store.record(1, DEAD, True, float(n))
     assert len(catalog.list_channels(9.0)) == 1
     assert len(catalog.list_channels(9.0, use_health=False)) == 1
+
+
+def test_concurrent_reads_share_the_connection_safely(db):
+    """Nhiều thread đọc cùng lúc (bộ kiểm + API) không được làm hỏng kết nối dùng chung."""
+    import threading
+    setup(db, 3)
+    health_store.record(1, OK, True, 1.0)
+    errors = []
+
+    def hammer():
+        try:
+            for _ in range(150):
+                health_store.eligible("a")
+                health_store.streams_to_check("a")
+                health_store.source_health(1.0)
+                catalog.list_channels(1.0, use_health=True)
+                catalog.channel_streams(1, use_health=True)
+                catalog.valid_stream(1)
+        except Exception as e:  # noqa: BLE001
+            errors.append(repr(e))
+    threads = [threading.Thread(target=hammer) for _ in range(12)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert errors == []
