@@ -376,7 +376,9 @@ def test_check_now_posts_and_shows_checking(pw, open_app, monkeypatch):
         assert "Đang kiểm tra…" in meta(page, "doubo-vn")
     finally:
         health_store.checking.discard("doubo-vn")
+    # đã thấy bật rồi tắt thì hết ngay; lượt nhanh hơn chu kỳ tải lại thì hết sau QUEUED_MAX_MS
     page.clock.fast_forward(3100)
+    page.clock.fast_forward(91000)
     wait_meta(page, "doubo-vn", "Đang kiểm tra…", present=False)
 
 
