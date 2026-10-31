@@ -229,3 +229,27 @@ def test_job_duration_is_real(db, public_dns):
     with hdb.lock:
         r = hdb.conn().execute("SELECT started_at, completed_at, duration_ms FROM jobs").fetchone()
     assert r[0] == 1000.0 and r[2] >= 40 and r[1] >= 1000.04
+
+
+def test_dns_failure_schedules_retry(db, public_dns, monkeypatch):
+    import socket
+    import hometv.netguard
+    src = sources.create("A", "https://a.example/a.m3u", 1.0)
+
+    def boom(host):
+        raise socket.gaierror(-3, "Temporary failure")
+    monkeypatch.setattr(hometv.netguard, "resolve", boom)
+    assert refresh(client(), src["id"], now=5.0) == "error"
+    assert sources.get(src["id"])["last_error"] == "Không kết nối được"
+    assert sources.internal(src["id"])["next_fetch_at"] == 5.0 + 60
+
+
+def test_manual_refresh_bypasses_drop_check(db, public_dns):
+    src = sources.create("A", "https://a.example/a.m3u", 1.0)
+    refresh(client(), src["id"])
+    small = ("#EXTM3U\n" + "".join(
+        f'#EXTINF:-1 tvg-id="k{i}",Kênh {i}\nhttps://s.example/{i}.m3u8\n' for i in range(4))).encode()
+    assert refresh(client(small), src["id"], now=10.0) == "error"
+    sources.request_refresh(src["id"], 20.0)
+    assert refresh(client(small), src["id"], now=20.0) == "ok"
+    assert count("streams WHERE active=1") == 4

@@ -28,6 +28,8 @@ async def _guard(url: str) -> None:
     try:
         host = netguard.check_url(url)
         await asyncio.to_thread(netguard.check_host, host)
+    except netguard.Unresolvable:  # DNS lỗi tạm thời: thử lại theo lịch, không khóa nguồn
+        raise FetchError("Không kết nối được", retryable=True)
     except netguard.BlockedURL as e:
         raise FetchError(e.reason, retryable=False)
 

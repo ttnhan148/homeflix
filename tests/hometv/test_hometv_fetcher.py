@@ -1,6 +1,7 @@
 import asyncio
 import gzip
-import time
+import os
+import tracemalloc
 import zlib
 
 import httpx
@@ -220,14 +221,44 @@ def test_deflate_playlist_decoded(public_dns):
                                           headers={"content-encoding": "deflate"})) == body
 
 
-def test_gzip_bomb_capped(public_dns):
+def test_gzip_bomb_memory_bounded(public_dns):
+    # 50 MB giải nén từ ~50 KB: bộ nhớ đỉnh phải ~ max_bytes, không phải 50 MB
     bomb = _gz(b"\0" * (50 * MB))
     assert len(bomb) < 100_000
-    t = time.monotonic()
-    e = fail(lambda r: _resp(200, content=bomb, headers={"content-encoding": "gzip"}),
-             max_bytes=1 * MB)
+    tracemalloc.start()
+    try:
+        e = fail(lambda r: _resp(200, content=bomb, headers={"content-encoding": "gzip"}),
+                 max_bytes=1 * MB)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
     assert e.message == "Quá 1 MB" and e.retryable
-    assert time.monotonic() - t < 2
+    assert peak < 8 * MB, peak
+
+
+def test_trailing_garbage_counts_raw_bytes(public_dns):
+    # sau luồng gzip hợp lệ là rác: phải đếm byte thô để dừng
+    body = _gz(b"#EXTM3U\n") + os.urandom(2 * MB)
+    e = fail(lambda r: _resp(200, stream=httpx.ByteStream(body),
+                             headers={"content-encoding": "gzip"}), max_bytes=1 * MB)
+    assert e.message == "Quá 1 MB"
+
+
+def test_truncated_gzip_is_broken(public_dns):
+    gz = _gz(b"#EXTM3U\n" * 1000)[:-4]
+    e = fail(lambda r: _resp(200, content=gz, headers={"content-encoding": "gzip"}))
+    assert (e.message, e.retryable) == ("Playlist hỏng", True)
+
+
+def test_dns_failure_is_retryable(monkeypatch):
+    import socket
+    import hometv.netguard
+
+    def boom(host):
+        raise socket.gaierror(-3, "Temporary failure")
+    monkeypatch.setattr(hometv.netguard, "resolve", boom)
+    e = fail(lambda r: _resp(200, content=b"x"))
+    assert (e.message, e.retryable) == ("Không kết nối được", True)
 
 
 def test_stacked_encoding_rejected(public_dns):

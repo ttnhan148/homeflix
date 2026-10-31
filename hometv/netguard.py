@@ -23,6 +23,10 @@ class BlockedURL(ValueError):
         self.reason = reason
 
 
+class Unresolvable(BlockedURL):
+    """Không phân giải được tên miền (lỗi DNS tạm thời): khác với IP bị chặn, nên thử lại được."""
+
+
 def _blocked_v4(ip: ipaddress.IPv4Address) -> bool:
     return (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
             or ip.is_reserved or ip.is_unspecified or ip in CGNAT)
@@ -103,7 +107,7 @@ def check_host(host: str) -> None:
         try:
             ips = resolve(host)
         except (OSError, UnicodeError):
-            raise BlockedURL(BLOCKED)
+            raise Unresolvable(BLOCKED)  # create/update vẫn báo 422 "Địa chỉ bị chặn"
     if not ips or any(is_blocked_ip(ip) for ip in ips):
         raise BlockedURL(BLOCKED)
 

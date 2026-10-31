@@ -49,7 +49,9 @@ def _process(source_id: str, body: bytes, now: float, rand: float):
         sources.record_unchanged(source_id, now=now)
         return "unchanged", None, 0, 0
     playlist = m3u.parse(m3u.decode(body))
-    reason = sources.check_version(sources.last_good_entry_count(source_id), playlist)
+    forced = source_id in sources._force_next  # làm mới tay: bỏ qua kiểm tra mất kênh
+    sources._force_next.discard(source_id)
+    reason = sources.check_version(None if forced else sources.last_good_entry_count(source_id), playlist)
     if reason:  # giữ bản tốt, không nhập
         sources.record_failure(source_id, now=now, message=reason, retryable=True, rand=rand)
         return "error", reason, 0, playlist.skipped_lines

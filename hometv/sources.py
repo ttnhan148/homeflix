@@ -198,10 +198,18 @@ def delete(source_id: str) -> bool:
     return n > 0
 
 
+# Nguồn được bấm "Làm mới ngay": lượt tới bỏ qua kiểm tra mất quá nửa kênh.
+# Giữ trong bộ nhớ (mất khi khởi động lại: lúc đó chỉ cần bấm lại).
+_force_next: set[str] = set()
+
+
 def request_refresh(source_id: str, now: float) -> bool:
     with db.tx() as c:
-        return c.execute("UPDATE sources SET next_fetch_at=?, retry_count=0 WHERE id=?",
-                         (now, source_id)).rowcount > 0
+        ok = c.execute("UPDATE sources SET next_fetch_at=?, retry_count=0 WHERE id=?",
+                       (now, source_id)).rowcount > 0
+    if ok:
+        _force_next.add(source_id)
+    return ok
 
 
 def due(now: float) -> list[dict]:
