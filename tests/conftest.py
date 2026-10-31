@@ -52,3 +52,10 @@ def admin_client(pw, make_client):
     r = c.post("/api/admin/login", json={"password": "mk-test"})
     assert r.status_code == 204, r.text
     return c
+
+
+@pytest.fixture
+def public_dns(monkeypatch):
+    # DNS giả: mọi host phân giải về IP công khai, không chạm mạng thật
+    import hometv.netguard
+    monkeypatch.setattr(hometv.netguard, "resolve", lambda host: ["185.199.108.153"])
