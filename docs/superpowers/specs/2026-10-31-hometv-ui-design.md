@@ -25,13 +25,13 @@ Server dev nằm ở UK nên nhiều CDN Việt Nam từ chối kết nối (xem
 
 `/proxy/m3u8` và `/proxy/ts` hiện có **không dùng được** cho HomeTV: nhận URL tuỳ ý từ client (không chặn SSRF), không gắn header theo stream, và `/proxy/ts` ghi từng đoạn xuống đĩa cho mỗi session, sẽ làm đầy đĩa với truyền hình trực tiếp chạy liên tục. Gói này thêm cặp route riêng, không đổi hành vi của cặp cũ:
 
-- `GET /api/hometv/play/{stream_id}/index.m3u8`: tải playlist của stream (qua `netguard` ở mỗi lần kết nối và chuyển hướng), viết lại mọi URI bên trong thành `/api/hometv/play/{stream_id}/seg?u=<token>`. Master playlist, media playlist, key và map đều được viết lại.
-- `GET /api/hometv/play/{stream_id}/seg?u=<token>`: stream thẳng từ upstream về client, **không ghi đĩa**. `<token>` là URL tuyệt đối do server ký (HMAC với khoá của app) và chỉ hợp lệ cho đúng `stream_id` đó; client không tạo được token cho URL tuỳ ý.
+- `GET /api/hometv/play/{stream_id}/index.m3u8`: tải playlist của stream (qua `netguard` ở mỗi lần kết nối và chuyển hướng), viết lại mọi URI bên trong thành `/api/hometv/play/{stream_id}/seg?u=<token>`. Master playlist, media playlist, key và map đều được viết lại. URI tương đối được giải theo URL cuối cùng sau chuyển hướng.
+- `GET /api/hometv/play/{stream_id}/seg?u=<token>`: stream thẳng từ upstream về client, **không ghi đĩa**. `<token>` là một khối do server ký (HMAC-SHA256 với khoá ngẫu nhiên sinh lúc khởi động, hết hạn sau 2 giờ) gồm `stream_id`, URL tuyệt đối và loại (`pl` playlist con: được viết lại như `index.m3u8`; `seg` đoạn hoặc key: dùng giới hạn 20 MB; `direct` stream không phải HLS: không giới hạn kích thước). Token chỉ hợp lệ cho đúng `stream_id` đó; client không tạo được token cho URL tuỳ ý. Khởi động lại server làm token cũ mất hiệu lực, player tự lấy lại playlist.
+- Stream `.ts`, `.mp4`, `.mkv`, `.flv`, `.webm`, `.aac`, `.mp3` (theo đuôi path) coi là `direct`: `/streams` trả `play_url` là chính URL `seg` với token `direct`, client gán thẳng vào `<video>` thay vì dùng hls.js. Route này chuyển tiếp header `Range` của client và trả lại `206`, `Content-Range`, `Accept-Ranges`.
 - Server tải upstream với `http_headers` của stream (`user_agent`, `referrer`). Client không thấy header này.
 - `stream_id` phải tồn tại, `active=1`, `drm_hint=0`, nguồn `approved` và đang bật; ngược lại `404`. Kiểm tra mỗi lần, không cache.
 - Giới hạn: timeout kết nối 10 giây, đoạn tối đa 20 MB, tối đa 5 lần chuyển hướng, mỗi phản hồi playlist tối đa 2 MB.
-- Chỉ nhận `Content-Type` của HLS (`application/vnd.apple.mpegurl`, `audio/mpegurl`, `video/MP2T`, `application/octet-stream`, `video/*`). Khác thì `502`.
-- Stream không phải HLS (ví dụ `.ts` hay `.mp4` trực tiếp) đi qua `seg` với token của chính URL đó; chỉ stream HLS được viết lại.
+- Với `seg` và `direct`, chỉ nhận `Content-Type` dạng media: `application/vnd.apple.mpegurl`, `application/x-mpegurl`, `audio/mpegurl`, `application/octet-stream`, `binary/octet-stream`, `video/*`, `audio/*`. Khác thì `502`. Với `pl`, nội dung phải bắt đầu bằng `#EXTM3U`, không thì `502`.
 
 ## API công khai (`hometv/public_api.py`)
 
@@ -49,16 +49,16 @@ Gắn bằng `APIRouter` giống `hometv/api.py`. Không cần quyền admin. Ch
 - `logo` là `/proxy/image?url=...` (URL logo gốc không bao giờ trả thẳng). Logo rỗng thì để `null`.
 - `play_url` là `/api/hometv/play/{stream_id}/index.m3u8`. URL gốc của stream, `http_headers` và `drm_hint` không nằm trong phản hồi.
 - Thứ tự stream: ưu tiên nguồn cao hơn trước, rồi `url` `https` trước `http`. Gói 4 sẽ thêm điểm sức khỏe vào thứ tự này.
-- Các route `PUT/DELETE/POST` cần `Content-Type: application/json` hoặc không có thân; đồng bộ với quy tắc JSON-only của app (`415`).
+- Các route `PUT/DELETE/POST` cần `Content-Type: application/json`, nếu không thì `415`.
 - `hometv.db` không mở được: `503`, HomeFlix vẫn chạy.
 - Bảng mới trong `hometv.db` (migrate `schema_version`): `favorites(channel_id PK, created_at)` và `recents(channel_id PK, viewed_at)`; cả hai `FOREIGN KEY ... ON DELETE CASCADE` tới `channels`.
-- `/api/hometv/*` phải có trong danh sách route cho phép của middleware cookie thiết bị (xem chú thích ở `app.py` về `/proxy`, `/media`, `/static`). Route `play` không cấp cookie, giống `/proxy`.
+- Yêu thích và gần đây là dữ liệu chung của cả nhà nên không cần cookie thiết bị: `/api/hometv/*` **không** thêm vào `DEVICE_COOKIE_PATHS`. Quy tắc JSON-only (`415`) của middleware mở rộng sang `PUT` và sang đường dẫn `/api/hometv/favorites`, `/api/hometv/recent`; client gửi thân `{}`.
 
 ## Giao diện
 
 ### Chuyển mode
 
-- Nút icon HomeFlix ⇄ HomeTV ngay sau `.brand` trong `appHeader`. Bấm thì `body` đổi class `mode-tv` (HomeTV) và lưu lựa chọn trong `localStorage`, bọc `try/catch` giống đoạn truy cập `localStorage` đã có (Safari chế độ riêng tư).
+- Nút icon HomeFlix ⇄ HomeTV ngay sau `.brand` trong `appHeader`. Bấm thì `body` đổi class `mode-hometv` và lưu lựa chọn trong `localStorage`, bọc `try/catch` giống đoạn truy cập `localStorage` đã có (Safari chế độ riêng tư).
 - Mode HomeTV ẩn `.tabs-nav` của phim và hiện `#hometv-root` do `static/hometv.js` dựng. Cast và Cài đặt giữ nguyên chỗ.
 - Nút mode ẩn khi `/api/hometv/channels` trả `503`.
 - `/channels` trả rỗng: hiện "Chưa có kênh nào." Nếu người xem là admin thì thêm "Duyệt nguồn trong Cài đặt → HomeTV."
@@ -96,7 +96,8 @@ Dùng lại CSS của lưới phim trong `static/hf.css`, không thêm màu mớ
 
 - Lưới: mũi tên di chuyển giữa chip và thẻ kênh, Enter mở kênh, phím `f` (hoặc nút màu của remote) bật/tắt ★.
 - Player: ↑/↓ đổi kênh theo thứ tự đang hiển thị (cùng nhóm hoặc bộ lọc), Esc về lưới. Đổi kênh có độ trễ 400 ms (debounce) để bấm nhanh không tạo hàng loạt request.
-- Dùng lại logic điều hướng lưới trong `static/settings.js`. Nếu nó gắn chặt vào Cài đặt thì tách phần chung thành `static/tv-nav.js`, và `settings.js` gọi lại; hành vi Cài đặt không đổi.
+- Dùng lại `HFSettingsUtils.gridMove` (đã nằm ở `static/settings-utils.js`, thuần, dùng chung được). Phần dò lưới theo DOM của `settings.js` gắn chặt vào Cài đặt nên không tách; `hometv.js` tự dựng ma trận ô từ DOM của lưới HomeTV.
+- Ngoài ra thêm `static/hometv-utils.js` cho logic thuần (bỏ dấu, lọc, thứ tự nhóm, đổi kênh) để test bằng Node như các `*-utils.js` khác.
 
 ## Xử lý lỗi
 
