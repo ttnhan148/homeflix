@@ -32,35 +32,36 @@ def _protocol(url: str) -> str:
         return ""
 
 
-def _find_channel(c, source_id, tvg, norm, bc, disp):
-    """Thứ tự: tvg-id; tên chuẩn hóa + đài (khác rỗng); tên gốc do chính nguồn này tạo (khi không rõ đài)."""
+def _find_channel(c, tvg, norm, bc, disp, tvg_map, name_map):
+    """Thứ tự: tvg-id (không gộp nếu hai đài khác rỗng và khác nhau); tên chuẩn hóa + đài;
+    tên gốc do chính nguồn này tạo (khi không rõ đài hoặc tên chuẩn hóa rỗng).
+    tvg_map/name_map: tra cứu trong lượt nhập (tvg -> [(kênh, đài)], tên gốc của nguồn -> kênh)."""
     if tvg:
-        r = c.execute("SELECT id FROM channels WHERE tvg_id=? ORDER BY id LIMIT 1", (tvg,)).fetchone()
-        if r:
-            return r[0]
+        cands = list(tvg_map.get(tvg, ()))
+        cands += [(r[0], r[1]) for r in c.execute(
+            "SELECT id, broadcaster FROM channels WHERE tvg_id=? ORDER BY id", (tvg,))]
+        for cid, cbc in cands:
+            if not (bc and cbc and bc != cbc):
+                return cid
     if norm and bc:
         r = c.execute("SELECT id FROM channels WHERE normalized_name=? AND broadcaster=? ORDER BY id LIMIT 1",
                       (norm, bc)).fetchone()
         if r:
             return r[0]
-    if not bc:
-        r = c.execute("SELECT channel_id FROM streams WHERE source_id=? AND display_name=? "
-                      "ORDER BY channel_id LIMIT 1", (source_id, disp)).fetchone()
-        if r:
-            return r[0]
+    if not bc or not norm:
+        return name_map.get(disp)
     return None
 
 
 def _still_matches(ch, old_disp, tvg, norm, bc, disp) -> bool:
-    """Quy tắc không chuyển kênh: stream đã có chỉ đổi kênh khi khóa gộp của chính nó đổi,
-    tức kênh hiện tại không còn khớp mục theo tvg-id, tên+đài, hay tên gốc (không rõ đài)."""
+    """Quy tắc không chuyển kênh: stream đã có chỉ đổi kênh khi khóa gộp của chính nó đổi.
+    Khóa vẫn còn: cùng tên gốc, hoặc cùng tvg-id, hoặc cùng tên chuẩn hóa + đài.
+    Kênh mang tvg-id khác (tvg_id chỉ điền khi trống) KHÔNG phải là khóa đổi."""
+    if old_disp == disp:
+        return True
     if tvg and ch["tvg_id"] == tvg:
         return True
-    if tvg and ch["tvg_id"]:
-        return False  # tvg-id đổi sang giá trị khác
-    if norm and bc and ch["normalized_name"] == norm and ch["broadcaster"] == bc:
-        return True
-    return not bc and old_disp == disp
+    return bool(norm and bc and ch["normalized_name"] == norm and ch["broadcaster"] == bc)
 
 
 def _refresh_channel(c, cid, now):
@@ -80,6 +81,11 @@ def ingest(source_id: str, playlist: Playlist, now: float) -> IngestStats:
         touched: set[int] = set()
         cats: dict[int, str] = {}
         seen: set[str] = set()
+        tvg_map: dict[str, list] = {}
+        name_map: dict[str, int] = {
+            r[0]: r[1] for r in c.execute(
+                "SELECT display_name, MIN(channel_id) FROM streams WHERE source_id=? GROUP BY display_name",
+                (source_id,))}
         new_streams = 0
         for e in playlist.entries:
             url = e.url.strip()
@@ -102,7 +108,7 @@ def ingest(source_id: str, playlist: Playlist, now: float) -> IngestStats:
                 if ch and _still_matches(ch, old["display_name"], tvg, norm, bc, disp):
                     cid = ch["id"]
             if cid is None:
-                cid = _find_channel(c, source_id, tvg, norm, bc, disp)
+                cid = _find_channel(c, tvg, norm, bc, disp, tvg_map, name_map)
             if cid is None:
                 cid = c.execute(
                     "INSERT INTO channels(tvg_id, normalized_name, broadcaster, display_name, category, "
@@ -119,6 +125,9 @@ def ingest(source_id: str, playlist: Playlist, now: float) -> IngestStats:
                 touched.add(old["channel_id"])
             touched.add(cid)
             cats[cid] = cat
+            name_map.setdefault(disp, cid)
+            if tvg:
+                tvg_map.setdefault(tvg, []).append((cid, bc))
             c.execute(
                 "INSERT INTO streams(channel_id, source_id, url, url_hash, protocol, http_headers, display_name, "
                 "quality_hint, drm_hint, first_seen_at, last_seen_at, active) VALUES (?,?,?,?,?,?,?,?,?,?,?,1) "

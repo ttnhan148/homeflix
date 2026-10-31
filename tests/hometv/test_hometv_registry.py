@@ -201,3 +201,67 @@ def test_stream_moves_when_its_key_changes(db):
     assert len({r[0] for r in chans}) == 2
     assert count("channels") == 2  # kênh VTV2 cũ trống nên bị xoá, VTV3 mới
     assert hdb.conn().execute("SELECT normalized_name FROM channels ORDER BY id").fetchall()[1][0] == "vtv3"
+
+
+def stream_channels():
+    return {r[0]: r[1] for r in hdb.conn().execute("SELECT url, channel_id FROM streams")}
+
+
+def test_reingest_does_not_move_stream_on_different_channel_tvg(db):
+    seed_source("a", 10); seed_source("b", 20); seed_source("c", 30)
+    pa = PL(E("VTV1 HD", "https://a/1", "vtv1.vn@hd"))
+    pb = PL(E("VTV1", "https://b/1", "vtv1hd"))
+    pc = PL(E("Kênh Một", "https://c/1", "vtv1hd"))
+    for sid, p, t in (("a", pa, 1.0), ("b", pb, 2.0), ("c", pc, 3.0)):
+        registry.ingest(sid, p, t)
+    before = stream_channels()
+    for sid, p, t in (("c", pc, 4.0), ("b", pb, 5.0), ("a", pa, 6.0), ("b", pb, 7.0)):
+        registry.ingest(sid, p, t)
+    assert stream_channels() == before
+
+
+def test_same_source_same_tvg_share_one_channel(db):
+    seed_source("a", 10); seed_source("b", 20)
+    registry.ingest("a", PL(E("VTV5 Tây Nam Bộ", "https://a/1", "x.vn@hd")), 1.0)
+    registry.ingest("b", PL(E("VTV5 Tây Nam Bộ", "https://b/1", "vtv5hdtnb"),
+                            E("VTV5 HD Tây Nam Bộ", "https://b/2", "vtv5hdtnb")), 2.0)
+    assert count("channels") == 1
+    before = stream_channels()
+    registry.ingest("b", PL(E("VTV5 Tây Nam Bộ", "https://b/1", "vtv5hdtnb"),
+                            E("VTV5 HD Tây Nam Bộ", "https://b/2", "vtv5hdtnb")), 3.0)
+    assert stream_channels() == before
+
+
+def test_empty_norm_with_broadcaster_keeps_channel(db):
+    seed_source("a", 10)
+    pl = PL(E("HD", "https://a/1", group="🇻🇳| VTV"))
+    registry.ingest("a", pl, 1.0)
+    cid = hdb.conn().execute("SELECT id FROM channels").fetchone()[0]
+    hdb.conn().execute("UPDATE channels SET category='Kids', category_source='manual'")
+    registry.ingest("a", pl, 2.0)
+    registry.ingest("a", pl, 3.0)
+    r = hdb.conn().execute("SELECT id, category FROM channels").fetchall()
+    assert [(x[0], x[1]) for x in r] == [(cid, "Kids")]
+
+
+def test_tvg_does_not_merge_across_different_broadcasters(db):
+    seed_source("a", 10); seed_source("b", 20)
+    registry.ingest("a", PL(E("Tiền Giang TV", "https://a/1", "TienGiangTV.vn@SD")), 1.0)
+    registry.ingest("b", PL(E("Đồng Tháp TV2", "https://b/1", "TienGiangTV.vn@SD")), 2.0)
+    assert count("channels") == 2
+
+
+def test_tvg_merges_when_one_broadcaster_empty(db):
+    seed_source("a", 10); seed_source("b", 20)
+    registry.ingest("a", PL(E("Tiền Giang TV", "https://a/1", "tg.vn")), 1.0)
+    registry.ingest("b", PL(E("Kênh lạ", "https://b/1", "tg.vn")), 2.0)
+    assert count("channels") == 1
+
+
+def test_first_ingest_is_not_quadratic(db):
+    import time
+    seed_source("a", 10)
+    pl = PL(*[E(f"Chan {i}", f"https://a/{i}", f"id{i % 2500}") for i in range(5000)])
+    t = time.time()
+    registry.ingest("a", pl, 1.0)
+    assert time.time() - t < 2.0
