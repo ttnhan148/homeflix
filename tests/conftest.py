@@ -33,3 +33,11 @@ def make_client(app_module):
 @pytest.fixture
 def pw(monkeypatch):
     monkeypatch.setenv("HOMEFLIX_ADMIN_PASSWORD", "mk-test")
+
+
+@pytest.fixture
+def admin_client(pw, make_client):
+    c = make_client()
+    r = c.post("/api/admin/login", json={"password": "mk-test"})
+    assert r.status_code == 204, r.text
+    return c

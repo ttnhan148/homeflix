@@ -29,6 +29,7 @@ import logging
 import json
 import ipaddress
 import admin
+import settings
 from cast import CastHub, format_sse, validate_command, validate_state
 from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
                      household_id, parse_trusted_proxies)
@@ -57,11 +58,8 @@ DEVICE_COOKIE_PATHS = ("/api/saved", "/api/device", "/api/cast", "/api/settings"
 # IP của reverse proxy tin cậy (cách nhau bằng dấu phẩy) mới được đọc X-Forwarded-For
 TRUSTED_PROXIES = parse_trusted_proxies(os.environ.get("TRUSTED_PROXIES"))
 
-MAX_CACHE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB
-MAX_CACHE_AGE = 6 * 60 * 60              # 6 giờ (giây)
-
-PREFETCH_CONCURRENCY = 4
-prefetch_semaphore = asyncio.Semaphore(PREFETCH_CONCURRENCY)
+# Cài đặt hệ thống (cache, prefetch, làm mới trang chủ) đọc trực tiếp từ settings_store
+_prefetch_sem: tuple[int, asyncio.Semaphore] | None = None
 
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -130,6 +128,19 @@ def db_query_one(sql: str, params=()) -> sqlite3.Row | None:
         cursor = conn.cursor()
         cursor.execute(sql, params)
         return cursor.fetchone()
+
+settings_store = settings.SettingsStore(lambda: get_db(), _db_lock)
+
+def setting(key: str) -> int | bool:
+    return settings_store.get(key)
+
+def get_prefetch_semaphore() -> asyncio.Semaphore:
+    """Semaphore hiện tại; đổi prefetch.concurrency thì tạo cái mới, các prefetch đang chạy giữ cái cũ."""
+    global _prefetch_sem
+    n = setting("prefetch.concurrency")
+    if _prefetch_sem is None or _prefetch_sem[0] != n:
+        _prefetch_sem = (n, asyncio.Semaphore(n))
+    return _prefetch_sem[1]
 
 def init_db():
     conn = get_db()
@@ -233,6 +244,7 @@ def init_db():
         # api_cache: cleanup theo cached_at
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_cache_cached_at ON api_cache(cached_at)")
         conn.commit()
+    settings_store.invalidate()  # bỏ cache giá trị cũ (DB có thể đã đổi)
     logger.info("[DB] Tables + indexes initialized")
 
 def migrate_downloads_json_to_db():
@@ -749,6 +761,8 @@ async def download_worker():
 
 def _cleanup_disk():
     now = time.time()
+    max_age = setting("cache.max_age_hours") * 3600  # giờ -> giây
+    max_size = setting("cache.max_gb") * 1024 ** 3   # GB -> byte
     total_size = 0
     cleaned_sessions = 0
     all_files = []
@@ -757,7 +771,7 @@ def _cleanup_disk():
         item_path = os.path.join(CACHE_DIR, item)
         if os.path.isdir(item_path):
             stats = os.stat(item_path)
-            if now - stats.st_mtime > MAX_CACHE_AGE:
+            if now - stats.st_mtime > max_age:
                 try:
                     shutil.rmtree(item_path)
                     cleaned_sessions += 1
@@ -782,11 +796,11 @@ def _cleanup_disk():
     if cleaned_sessions > 0:
         logger.info(f"Đã xóa {cleaned_sessions} phiên làm việc (session) hết hạn.")
 
-    if total_size > MAX_CACHE_SIZE:
+    if total_size > max_size:
         all_files.sort(key=lambda x: x[1])
         removed_size = 0
         for file_path, _, size in all_files:
-            if total_size - removed_size <= MAX_CACHE_SIZE:
+            if total_size - removed_size <= max_size:
                 break
             try:
                 os.remove(file_path)
@@ -827,7 +841,7 @@ async def _prefetch_one(target_url: str, sid: str):
     if lock_id in download_locks:
         return
 
-    async with prefetch_semaphore:
+    async with get_prefetch_semaphore():
         # Re-check to avoid race condition
         if os.path.exists(cache_path) or lock_id in download_locks:
             return
@@ -1023,6 +1037,30 @@ def require_admin(request: Request):
     require_admin_enabled()
     if not _db_is_admin(request.state.device_id):
         raise HTTPException(status_code=403, detail="admin required")
+
+# --- Cài đặt hệ thống ---
+def _settings_payload(request: Request) -> dict:
+    is_admin = admin.configured() and _db_is_admin(request.state.device_id)
+    return {"admin_enabled": admin.configured(), "is_admin": is_admin,
+            "groups": settings_store.describe() if is_admin else []}
+
+@app.get("/api/settings")
+async def get_settings_api(request: Request):
+    return await asyncio.to_thread(_settings_payload, request)
+
+@app.patch("/api/settings", dependencies=[Depends(require_admin)])
+async def patch_settings_api(request: Request):
+    try:
+        body = await request.json()
+    except ValueError:
+        return JSONResponse({"errors": {"_": "JSON không hợp lệ"}}, status_code=422)
+    if not isinstance(body, dict):
+        return JSONResponse({"errors": {"_": "cần một đối tượng JSON"}}, status_code=422)
+    try:
+        await asyncio.to_thread(settings_store.update, body)
+    except settings.SettingsError as e:
+        return JSONResponse({"errors": e.errors}, status_code=422)
+    return await asyncio.to_thread(_settings_payload, request)
 
 def _lockout_ip_key(ip: str) -> str:
     """Khóa theo IP: IPv6 gộp về /64 để không xoay địa chỉ trong cùng dải."""
@@ -1539,13 +1577,14 @@ async def get_cache_status():
     """Lấy thông tin dung lượng cache hiện tại (chống nghẽn Event Loop)"""
     try:
         total_size = await asyncio.to_thread(_calculate_cache_size)
-        percent = (total_size / MAX_CACHE_SIZE) * 100
+        max_gb = setting("cache.max_gb")
+        percent = (total_size / (max_gb * 1024 ** 3)) * 100
         total_gb = total_size / (1024 * 1024 * 1024)
         
         return {
             "size_gb": round(total_gb, 2),
             "percent": round(percent, 1),
-            "max_gb": round(MAX_CACHE_SIZE / (1024**3), 1)
+            "max_gb": max_gb
         }
     except Exception as e:
         return {"error": str(e)}
@@ -2079,8 +2118,6 @@ async def home_countries():
         return {"items": [], "error": str(e)}
 
 # --- Background cache warmer cho Homepage ---
-WARM_CACHE_INTERVAL = 600  # 10 phút refresh cache homepage
-
 async def _warm_section(section_name: str, page: int, ttl: int, url_template: str):
     """Helper: fetch + cache một section."""
     async def _fetch():
@@ -2120,5 +2157,6 @@ async def home_cache_warmer():
         await _warm_danh_sach("phim-chieu-rap", 1)
         await _warm_danh_sach("phim-bo", 1)
         await _warm_danh_sach("tv-shows", 1)
-        logger.info(f"[CacheWarmer] Đợi {WARM_CACHE_INTERVAL}s cho lần refresh tiếp theo...")
-        await asyncio.sleep(WARM_CACHE_INTERVAL)
+        interval = setting("home.refresh_minutes") * 60  # đọc lại trước mỗi lần ngủ
+        logger.info(f"[CacheWarmer] Đợi {interval}s cho lần refresh tiếp theo...")
+        await asyncio.sleep(interval)
