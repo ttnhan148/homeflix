@@ -1,0 +1,17 @@
+#EXTM3U x-tvg-url="https://example.org/epg.xml"
+#-------------------VTV-------------------
+#EXTINF:-1 tvg-id="vtv1hd" group-title="🇻🇳| VTV" tvg-logo="https://i.imgur.com/nfkmvAY.png",VTV1 HD
+#EXTVLCOPT:http-user-agent=ReactNativeVideo/3.4.4 (Linux;Android 9) ExoPlayerLib/2.13.3
+https://e2.endpoint.cdn.sctvonline.vn/hls/vtv1/index.m3u8
+#EXTINF:-1 tvg-id="VTV1.vn" tvg-logo="https://i.imgur.com/x.png" group-title="General",VTV 1 (1080p)
+https://example.vn/vtv1/index.m3u8
+#EXTINF:-1 tvg-id='no_epg' group-title=Undefined,Kênh, có dấu phẩy
+#EXTVLCOPT:http-referrer=https://ref.example/
+http://plain.example/live.m3u8
+#EXTINF:-1 tvg-id="kplus1",K+ SPORT 1
+#KODIPROP:inputstream.adaptive.license_type=clearkey
+#KODIPROP:inputstream.adaptive.license_key=abc:def
+https://drm.example/kplus1.mpd
+#EXTINF:broken line without url
+#EXTINF:-1,Ftp sai
+ftp://bad.example/x
