@@ -3,7 +3,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Khóa ghi: mọi transaction giữ khóa này
 lock = threading.Lock()
@@ -82,6 +82,14 @@ CREATE TABLE IF NOT EXISTS jobs (
     skipped_lines INTEGER,
     error_message TEXT
 );
+CREATE TABLE IF NOT EXISTS favorites (
+    channel_id INTEGER PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recents (
+    channel_id INTEGER PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+    viewed_at REAL NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_channels_tvg_id ON channels(tvg_id);
 CREATE INDEX IF NOT EXISTS idx_channels_normalized_name ON channels(normalized_name);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_streams_source_hash ON streams(source_id, url_hash);
@@ -103,6 +111,8 @@ def open(path: str) -> None:
         c.executescript(_SCHEMA)
         if c.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 0:
             c.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
+        else:
+            c.execute("UPDATE schema_version SET version = ? WHERE version < ?", (SCHEMA_VERSION, SCHEMA_VERSION))
     except Exception:
         c.close()
         raise

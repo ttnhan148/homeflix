@@ -11,7 +11,7 @@ def test_open_creates_schema_wal_fk(tmp_path):
     c = hometv.db.conn()
     assert c.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert c.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 1
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 2
     tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"sources", "source_versions", "channels", "streams", "jobs", "schema_version"} <= tables
     idx = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='index'")}
@@ -106,3 +106,27 @@ def test_source_refresh_interval_defaults_to_6h(db):
     with hometv.db.tx() as c:
         c.execute("INSERT INTO sources(id, name, url) VALUES ('s', 'S', 'http://x')")
     assert db.execute("SELECT refresh_interval FROM sources").fetchone()[0] == 21600
+
+
+def test_favorites_recents_tables_cascade(db):
+    db.execute("INSERT INTO channels(id, display_name) VALUES (1, 'a')")
+    db.execute("INSERT INTO favorites(channel_id, created_at) VALUES (1, 1.0)")
+    db.execute("INSERT INTO recents(channel_id, viewed_at) VALUES (1, 1.0)")
+    db.execute("DELETE FROM channels WHERE id = 1")
+    assert db.execute("SELECT COUNT(*) FROM favorites").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM recents").fetchone()[0] == 0
+
+
+def test_open_upgrades_v1_db(tmp_path):
+    import sqlite3
+    p = str(tmp_path / "old.db")
+    old = sqlite3.connect(p)
+    old.executescript("CREATE TABLE schema_version (version INTEGER NOT NULL); INSERT INTO schema_version VALUES (1);")
+    old.commit()
+    old.close()
+    hometv.db.open(p)
+    c = hometv.db.conn()
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 2
+    tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert {"favorites", "recents"} <= tables
+    hometv.db.close()
