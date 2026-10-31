@@ -318,3 +318,35 @@ def test_caller_client_with_redirects_cannot_bypass(monkeypatch):
         asyncio.run(run())
     assert e.value.message == "Địa chỉ bị chặn"
     assert urls == [URL]
+
+
+def test_final_url_after_redirects(public_dns):
+    def handler(request):
+        if request.url.path == "/a.m3u8":
+            return _resp(302, b"", {"location": "/live/b.m3u8"})
+        return _resp(200, b"#EXTM3U\n")
+
+    async def run():
+        async with fetcher.make_client(httpx.MockTransport(handler)) as client:
+            return await fetcher.fetch_playlist_url(client, "http://example.com/a.m3u8", timeout=5, max_bytes=MB)
+    body, final = asyncio.run(run())
+    assert body == b"#EXTM3U\n" and final == "http://example.com/live/b.m3u8"
+
+
+def test_extra_headers_sent_each_hop_but_not_accept_encoding(public_dns):
+    seen = []
+
+    def handler(request):
+        seen.append((request.headers["user-agent"], request.headers.get("referer"),
+                     request.headers["accept-encoding"]))
+        if len(seen) == 1:
+            return _resp(302, b"", {"location": "/b"})
+        return _resp(200, b"x")
+
+    async def run():
+        async with fetcher.make_client(httpx.MockTransport(handler)) as client:
+            return await fetcher.fetch_playlist_url(
+                client, "http://example.com/a", timeout=5, max_bytes=MB,
+                headers={"User-Agent": "UA", "Referer": "https://r/", "Accept-Encoding": "gzip"})
+    asyncio.run(run())
+    assert seen == [("UA", "https://r/", "identity")] * 2

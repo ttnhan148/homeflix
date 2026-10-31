@@ -975,6 +975,16 @@ async def prefetch_episode(segment_urls: list[str], key_url: str | None, sid: st
 
 # HTTP client (khởi tạo trong lifespan; None cho đến khi app start)
 client: httpx.AsyncClient | None = None
+# Client riêng cho đường phát HomeTV (không tự chuyển hướng, không đọc biến proxy); tạo lười khi cần
+hometv_play_client: httpx.AsyncClient | None = None
+
+
+def get_hometv_play_client() -> httpx.AsyncClient:
+    global hometv_play_client
+    if hometv_play_client is None:
+        hometv_play_client = hometv.fetcher.make_client()
+    return hometv_play_client
+
 
 # --- Lifespan handler (thay thế @app.on_event deprecated) ---
 # Quản lý startup + shutdown trong 1 context manager duy nhất.
@@ -1029,6 +1039,8 @@ async def lifespan(app: FastAPI):
     await asyncio.gather(*_bg_tasks, return_exceptions=True)
     if client is not None:
         await client.aclose()
+    if hometv_play_client is not None:
+        await hometv_play_client.aclose()
     logger.info("[Shutdown] HomeFlix stopped — tasks cancelled, httpx client closed")
 
 app = FastAPI(title="HomeFlix Proxy Player", lifespan=lifespan)
@@ -1149,6 +1161,8 @@ def require_admin(request: Request):
 
 # Route admin HomeTV (router tự gắn require_admin cho mọi route)
 app.include_router(hometv.api.make_router(require_admin))
+# Route công khai HomeTV: kênh, yêu thích, đường phát
+app.include_router(hometv.public_api.make_public_router(lambda: get_hometv_play_client()))
 
 # --- Cài đặt hệ thống ---
 def _settings_payload(request: Request) -> dict:

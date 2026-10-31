@@ -80,3 +80,8 @@ test('streamSource and rememberDirect survive a missing storage', () => {
   assert.equal(U.streamSource(null, 'https://cdn.test/a.m3u8', 1), '/proxy/m3u8?url=https%3A%2F%2Fcdn.test%2Fa.m3u8');
   U.rememberDirect(null, 1);
 });
+
+test('hlsConfig: TV vs other, proxied vs direct', () => {
+  assert.deepEqual(U.hlsConfig(true, true), { maxBufferLength: 20, maxMaxBufferLength: 120, manifestLoadingMaxRetry: 1, lowLatencyMode: false });
+  assert.deepEqual(U.hlsConfig(false, false), { maxBufferLength: 30, maxMaxBufferLength: 600, manifestLoadingMaxRetry: 5, lowLatencyMode: true });
+});

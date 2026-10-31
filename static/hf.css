@@ -3318,3 +3318,163 @@ body.device-tv .set-row[tabindex="0"]:focus-visible {
     outline: 4px solid #fff !important;
     outline-offset: -4px;
 }
+
+/* ---------- HomeTV: lưới kênh, dùng lại kiểu lưới phim ---------- */
+.hometv-toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--tap);
+    height: var(--tap);
+    border: 0;
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--muted);
+}
+
+.hometv-toggle[aria-pressed="true"] {
+    color: var(--accent);
+}
+
+body.mode-hometv .tab-content,
+body.mode-hometv .tabs-nav,
+body.mode-hometv .float-tabbar {
+    display: none !important;
+}
+
+.tv-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.tv-search {
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0 16px;
+    border: 0;
+    border-radius: var(--pill);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.tv-chips {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+}
+
+.tv-chips .filter-option {
+    flex: none;
+    border-radius: var(--pill);
+    background: var(--surface);
+}
+
+.tv-empty {
+    padding: 48px 0;
+    text-align: center;
+    color: var(--faint);
+}
+
+.tv-card .poster-wrap {
+    aspect-ratio: 16 / 9;
+    display: grid;
+    place-items: center;
+}
+
+.tv-card .poster-wrap img {
+    width: 100%;
+    height: 100%;
+    padding: 10%;
+    box-sizing: border-box;
+    object-fit: contain;
+}
+
+.tv-initial {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--faint);
+}
+
+.tv-star {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.tv-star[aria-pressed="true"] {
+    color: var(--accent);
+}
+
+body.device-mobile #tvGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* HomeTV: lớp phủ player toàn màn hình */
+.tv-player {
+    position: fixed;
+    inset: 0;
+    z-index: 960; /* dưới các hộp thoại và bảng cast (970+) để nhận cast khi đang xem kênh */
+    background: var(--ground);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tv-player video {
+    width: 100%;
+    height: 100%;
+    background: var(--ground);
+}
+
+.tv-player-title {
+    position: absolute;
+    top: calc(var(--safe-top) + 16px);
+    left: var(--edge);
+    right: 72px;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 500;
+    pointer-events: none;
+}
+
+.tv-player-close {
+    position: absolute;
+    top: calc(var(--safe-top) + 8px);
+    right: var(--edge);
+    width: var(--tap);
+    height: var(--tap);
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--text);
+    font-size: 18px;
+}
+
+.tv-toast,
+.tv-player-error {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--safe-bottom) + 72px);
+    transform: translateX(-50%);
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: var(--raised);
+    color: var(--text);
+    font-size: 14px;
+}
+
+body.device-tv .tv-player-title {
+    font-size: 24px;
+}
