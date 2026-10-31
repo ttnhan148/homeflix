@@ -25,6 +25,10 @@ def is_playlist_url(url: str) -> bool:
     return urlsplit(url).path.lower().endswith((".m3u8", ".m3u"))
 
 
+def looks_like_playlist(chunk: bytes) -> bool:
+    return chunk.decode("utf-8", errors="replace").lstrip("\ufeff \t\r\n").startswith("#EXTM3U")
+
+
 def index_url(stream_id: int) -> str:
     return f"{BASE}/{stream_id}/index.m3u8"
 

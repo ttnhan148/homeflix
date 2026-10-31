@@ -61,6 +61,7 @@ def make_public_router(get_client: Callable[[], httpx.AsyncClient]) -> APIRouter
         stream = await _db(catalog.valid_stream, stream_id)
         if stream is None:
             return _not_found("Kênh không còn khả dụng")
+        is_index = url is None
         url = url or stream["url"]
         headers = play.upstream_headers(stream["http_headers"], request.headers.get("range"))
         try:
@@ -68,17 +69,34 @@ def make_public_router(get_client: Callable[[], httpx.AsyncClient]) -> APIRouter
         except FetchError as e:
             return PlainTextResponse(e.message, status_code=502, headers={"Cache-Control": "no-store"})
         ctype = resp.headers.get("content-type", "")
-        if "mpegurl" in ctype.lower() or play.is_playlist_url(final):
+        by_hint = "mpegurl" in ctype.lower() or play.is_playlist_url(final)
+        first = b""
+        chunks = resp.aiter_raw().__aiter__()
+        playlist = by_hint
+        if not by_hint and not play.is_direct_url(final):
+            # CDN trả playlist với Content-Type lạ hoặc URL không có đuôi: nhận ra qua byte đầu
+            first = await anext(chunks, b"")
+            playlist = play.looks_like_playlist(first)
+        if playlist:
             try:
-                body = await resp.aread()
+                body = await resp.aread() if by_hint else first + b"".join([c async for c in chunks])
                 text = play.rewrite_playlist(body, final, stream_id)
             except (play.PlaylistError, httpx.HTTPError):
                 return PlainTextResponse("Playlist hỏng", status_code=502, headers={"Cache-Control": "no-store"})
             finally:
                 await resp.aclose()
             return Response(text, media_type=PLAYLIST_TYPE, headers={"Cache-Control": "no-store"})
+        if is_index:  # index.m3u8 của stream mà nội dung không phải playlist: để client thử nguồn khác
+            await resp.aclose()
+            return PlainTextResponse("Không phải playlist HLS", status_code=502, headers={"Cache-Control": "no-store"})
+
+        async def body_stream():
+            if first:
+                yield first
+            async for c in chunks:
+                yield c
         out = {h: resp.headers[h] for h in PASS_HEADERS if h in resp.headers}
-        return StreamingResponse(resp.aiter_raw(), status_code=resp.status_code, headers=out,
+        return StreamingResponse(body_stream(), status_code=resp.status_code, headers=out,
                                  background=BackgroundTask(resp.aclose))
 
     @router.get("/play/{stream_id}/index.m3u8")

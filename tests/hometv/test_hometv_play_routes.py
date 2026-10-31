@@ -107,3 +107,22 @@ def test_direct_forwards_range_and_206(app_module, make_client):
     r = make_client().get(seg(1, "http://cdn.example/live.mp4"), headers={"range": "bytes=0-2"})
     assert r.status_code == 206 and r.content == b"abc"
     assert r.headers["content-range"] == "bytes 0-2/10" and seen["range"] == "bytes=0-2"
+
+
+def test_playlist_served_as_text_plain_after_redirect_is_rewritten(app_module, make_client):
+    seed()
+
+    def handler(request):
+        if request.url.path.endswith("index.m3u8"):
+            return httpx.Response(302, headers={"location": "http://edge.example/hls/abc?token=1"})
+        return streamed(200, MEDIA, {"content-type": "text/plain"})
+    upstream(app_module, handler)
+    r = make_client().get("/api/hometv/play/1/index.m3u8")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/vnd.apple.mpegurl")
+    assert seg(1, "http://edge.example/hls/seg1.ts") in r.text
+
+
+def test_index_502_when_body_is_not_a_playlist(app_module, make_client):
+    seed("http://cdn.example/xtream/1")
+    upstream(app_module, lambda r: streamed(200, b"\x47" * 2000, {"content-type": "video/MP2T"}))
+    assert make_client().get("/api/hometv/play/1/index.m3u8").status_code == 502

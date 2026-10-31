@@ -75,7 +75,8 @@
     card.append(wrap, info);
     card.addEventListener('click', () => open(c.id));
     card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.target === card) { e.preventDefault(); open(c.id); }
+      // stopPropagation: trình xử lý Enter chung của trang không click thêm lần nữa
+      if (e.key === 'Enter' && e.target === card) { e.preventDefault(); e.stopPropagation(); open(c.id); }
     });
     return card;
   }
@@ -269,6 +270,7 @@
     play.streams = [];
     $('tvPlayerTitle').textContent = c ? c.name : '';
     $('tvPlayer').hidden = false;
+    $('tvPlayer').focus({ preventScroll: true });  // focus rời lưới phía sau, Enter không mở lại thẻ cũ
     $('tvPlayerError').hidden = true;
     toast('');
     const my = play.token;
@@ -327,6 +329,11 @@
   function onKey(e) {
     if (!document.body.classList.contains('mode-hometv') || e.altKey || e.ctrlKey || e.metaKey) return;
     if (!$('tvPlayer').hidden) {
+      if (e.key === 'Enter' && !(e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (e.key === 'Escape') { e.preventDefault(); closePlayer(); }
       else if (isTVDevice() && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
@@ -365,6 +372,7 @@
   }
 
   function leave() {
+    if (!$('tvPlayer').hidden) closePlayer();
     document.body.classList.remove('mode-hometv');
     $('hometv-root').hidden = true;
     $('hometvToggle').setAttribute('aria-pressed', 'false');
@@ -382,7 +390,8 @@
     }
     $('tvPlayerClose').addEventListener('click', closePlayer);
     $('tvPlayerRetry').addEventListener('click', () => { if (play.streams.length) attempt(0); else openChannel(play.channelId); });
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);  // capture: chạy trước trình xử lý Enter chung của trang
+    $('settingsBtn').addEventListener('click', () => { if (document.body.classList.contains('mode-hometv')) leave(); });
     if (remembered()) enter();
   }
 

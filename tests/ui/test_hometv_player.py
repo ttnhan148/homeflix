@@ -157,3 +157,46 @@ def test_tv_up_down_changes_channel_debounced_and_escape_restores_focus(app_modu
     page.keyboard.press("Escape")
     assert page.is_hidden("#tvPlayer")
     assert page.evaluate("document.activeElement.dataset.id") == "4"
+
+
+def test_enter_inside_player_does_not_reopen_grid_channel(app_module, open_app):
+    seed(channels=3, streams=1)
+    page = open_tv(open_app, tv=True)
+    page.focus('#tvGrid .tv-card[data-id="1"]')
+    page.keyboard.press("Enter")
+    page.wait_for_function("window.__hlsSource === '/api/hometv/play/1/index.m3u8'")
+    page.keyboard.press("ArrowDown")
+    page.keyboard.press("ArrowDown")
+    page.wait_for_function("window.__hlsSource === '/api/hometv/play/3/index.m3u8'")
+    n = len([r for r in page.requests if "/streams" in r])
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(500)
+    assert source(page) == "/api/hometv/play/3/index.m3u8"
+    assert len([r for r in page.requests if "/streams" in r]) == n
+
+
+def test_one_enter_on_grid_card_opens_once(app_module, open_app):
+    seed(channels=2, streams=1)
+    page = open_tv(open_app, tv=True)
+    page.focus('#tvGrid .tv-card[data-id="1"]')
+    page.keyboard.press("Enter")
+    page.wait_for_function("window.__hlsSource !== undefined")
+    page.wait_for_timeout(300)
+    assert len([r for r in page.requests if "/streams" in r]) == 1
+
+
+def test_settings_button_works_in_hometv_mode(app_module, open_app):
+    seed()
+    page = open_tv(open_app)
+    tap(page, "#settingsBtn")
+    page.wait_for_selector("#settings-tab", state="visible")
+    assert page.is_hidden("#hometv-root")
+
+
+def test_cast_playback_leaves_hometv_mode(app_module, open_app):
+    seed()
+    page = open_tv(open_app)
+    play(page)
+    page.evaluate("playEpisodesListDirect([{name: 'T1', link_m3u8: 'https://x/a.m3u8'}], 0)")
+    assert page.evaluate("document.body.classList.contains('mode-hometv')") is False
+    assert page.is_hidden("#tvPlayer") and page.is_hidden("#hometv-root")

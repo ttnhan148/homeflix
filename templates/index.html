@@ -1922,7 +1922,7 @@
             <div id="tvGrid" class="movies-grid"></div>
             <div id="tvMore" class="grid-load-more" hidden>Đang tải thêm</div>
         </div>
-        <div id="tvPlayer" class="tv-player" hidden>
+        <div id="tvPlayer" class="tv-player" tabindex="-1" hidden>
             <video id="tvVideo" playsinline webkit-playsinline controls></video>
             <div id="tvPlayerTitle" class="tv-player-title"></div>
             <button type="button" id="tvPlayerClose" class="tv-player-close" aria-label="Đóng">✕</button>
@@ -3517,6 +3517,7 @@ document.addEventListener('visibilitychange', () => {
             }
             
             playbackEpisodes = episodesArray;
+            if (window.HFTV) HFTV.leave(); // phim (kể cả từ cast) phát thì rời mode HomeTV, không để lớp phủ che
             
             if (stickyHeader) stickyHeader.style.display = 'none';
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');

@@ -3425,7 +3425,7 @@ body.device-mobile #tvGrid {
 .tv-player {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: 960; /* dưới các hộp thoại và bảng cast (970+) để nhận cast khi đang xem kênh */
     background: var(--ground);
     display: flex;
     align-items: center;
