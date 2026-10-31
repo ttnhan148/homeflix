@@ -18,9 +18,10 @@ def test_seed_defaults_once(db):
     assert sources.seed_defaults(1.0) == 5 and sources.seed_defaults(2.0) == 0
     assert sources.delete("doubo-vn") is True
     assert sources.seed_defaults(3.0) == 0
-    s = sources.get("iptv-org-vn")
+    s = sources.internal("iptv-org-vn")
     assert s["rights_status"] == "pending_review" and s["enabled"] and s["priority"] == 20
     assert s["refresh_interval"] == 21600 and s["next_fetch_at"] == 1.0
+    assert sources.get("iptv-org-vn")["enabled"] is True
     assert [d["priority"] for d in sources.DEFAULT_SOURCES] == [10, 20, 30, 40, 50]
 
 
@@ -44,7 +45,8 @@ def test_create_validates(db, public_dns):
 def test_create_ok(db, public_dns):
     s = sources.create("Nguồn Thử", URL, 5.0)
     assert s["id"] == "nguon-thu" and s["rights_status"] == "pending_review"
-    assert s["enabled"] and s["next_fetch_at"] == 5.0 and s["refresh_hours"] == 6
+    assert s["enabled"] is True and s["refresh_hours"] == 6
+    assert sources.internal("nguon-thu")["next_fetch_at"] == 5.0
 
 
 def test_create_blocks_private_url(db, monkeypatch):
@@ -83,9 +85,9 @@ def test_update_ok(db, public_dns):
     sources.create("A", URL, 1.0)
     s = sources.update("a", {"name": "B", "priority": 7, "refresh_hours": 12, "enabled": False,
                              "rights_status": "approved"}, 2.0)
-    assert (s["name"], s["priority"], s["refresh_interval"], s["enabled"], s["rights_status"]) == \
-        ("B", 7, 43200, 0, "approved")
-    assert s["id"] == "a" and s["updated_at"] == 2.0
+    assert (s["name"], s["priority"], s["refresh_hours"], s["enabled"], s["rights_status"]) == \
+        ("B", 7, 12, False, "approved")
+    assert s["id"] == "a" and sources.internal("a")["updated_at"] == 2.0
 
 
 def test_update_url_resets_fetch_state(db, public_dns):
@@ -93,7 +95,9 @@ def test_update_url_resets_fetch_state(db, public_dns):
     hdb.conn().execute("UPDATE sources SET content_hash='h', retry_count=2, last_error='e', "
                        "next_fetch_at=NULL WHERE id='a'")
     s = sources.update("a", {"url": "https://example.com/b.m3u"}, 9.0)
-    assert s["url"].endswith("/b.m3u") and s["content_hash"] is None
+    assert s["url"].endswith("/b.m3u") and s["last_error"] is None
+    s = sources.internal("a")
+    assert s["content_hash"] is None
     assert s["next_fetch_at"] == 9.0 and s["retry_count"] == 0 and s["last_error"] is None
 
 
@@ -215,3 +219,19 @@ def test_list_sources_fetching_flag(db, public_dns):
 
 def test_init_seeds(app_module):
     assert len(sources.list_sources(1.0)) == 5
+
+
+def test_get_create_update_list_same_shape(db, public_dns):
+    created = sources.create("A", URL, 1.0)
+    got = sources.get("a", 1.0)
+    updated = sources.update("a", {"priority": 3}, 2.0)
+    listed = sources.list_sources(2.0)[0]
+    keys = ["id", "name", "url", "enabled", "priority", "rights_status", "refresh_hours", "last_fetch_at",
+            "last_success_at", "last_error", "channel_count", "stream_count", "fetching"]
+    for d in (created, got, updated, listed):
+        assert list(d) == keys
+        assert d["enabled"] is True and d["fetching"] is False
+    assert updated == listed
+    assert sources.get("nope") is None and sources.internal("nope") is None
+    assert {"content_hash", "retry_count", "timeout", "max_size_mb", "next_fetch_at",
+            "refresh_interval"} <= set(sources.internal("a"))

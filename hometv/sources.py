@@ -1,6 +1,7 @@
 """Nguồn IPTV: CRUD có kiểm tra đầu vào, nguồn mặc định, giữ bản tốt, lịch thử lại."""
 import gzip
 import re
+import time
 import unicodedata
 
 from hometv import db, netguard, registry
@@ -111,29 +112,49 @@ def seed_defaults(now: float) -> int:
 
 
 def _out(r) -> dict:
+    """Dòng sources đầy đủ + refresh_hours (nội bộ, cho scheduler)."""
     d = dict(r)
     d["refresh_hours"] = d["refresh_interval"] // 3600
     return d
 
 
-def get(source_id: str) -> dict | None:
+def _row(source_id: str):
+    """Dòng sources thô (content_hash, retry_count, timeout, max_size_mb, next_fetch_at...)."""
     with db.lock:
-        r = db.conn().execute("SELECT * FROM sources WHERE id=?", (source_id,)).fetchone()
+        return db.conn().execute("SELECT * FROM sources WHERE id=?", (source_id,)).fetchone()
+
+
+def internal(source_id: str) -> dict | None:
+    r = _row(source_id)
     return _out(r) if r else None
+
+
+_SELECT_API = ("SELECT s.*, EXISTS(SELECT 1 FROM jobs j WHERE j.source_id=s.id AND j.status='running' "
+               "AND j.started_at > ?) AS fetching FROM sources s ")
+
+
+def _api(r) -> dict:
+    """Shape API duy nhất cho get/create/update/list_sources."""
+    return {"id": r["id"], "name": r["name"], "url": r["url"], "enabled": bool(r["enabled"]),
+            "priority": r["priority"], "rights_status": r["rights_status"],
+            "refresh_hours": r["refresh_interval"] // 3600,
+            "last_fetch_at": r["last_fetch_at"], "last_success_at": r["last_success_at"],
+            "last_error": r["last_error"], "channel_count": r["channel_count"],
+            "stream_count": r["stream_count"], "fetching": bool(r["fetching"])}
+
+
+def get(source_id: str, now: float | None = None) -> dict | None:
+    now = time.time() if now is None else now
+    with db.lock:
+        r = db.conn().execute(_SELECT_API + "WHERE s.id=?", (now - FETCH_STALE, source_id)).fetchone()
+    return _api(r) if r else None
 
 
 def list_sources(now: float) -> list[dict]:
     with db.lock:
-        rows = db.conn().execute(
-            "SELECT s.*, EXISTS(SELECT 1 FROM jobs j WHERE j.source_id=s.id AND j.status='running' "
-            "AND j.started_at > ?) AS fetching FROM sources s ORDER BY s.priority, s.name",
-            (now - FETCH_STALE,)).fetchall()
-    return [{"id": r["id"], "name": r["name"], "url": r["url"], "enabled": bool(r["enabled"]),
-             "priority": r["priority"], "rights_status": r["rights_status"],
-             "refresh_hours": r["refresh_interval"] // 3600,
-             "last_fetch_at": r["last_fetch_at"], "last_success_at": r["last_success_at"],
-             "last_error": r["last_error"], "channel_count": r["channel_count"],
-             "stream_count": r["stream_count"], "fetching": bool(r["fetching"])} for r in rows]
+        rows = db.conn().execute(_SELECT_API + "ORDER BY s.priority, s.name",
+                                 (now - FETCH_STALE,)).fetchall()
+    return [_api(r) for r in rows]
 
 
 def create(name: str, url: str, now: float) -> dict:
@@ -146,11 +167,11 @@ def create(name: str, url: str, now: float) -> dict:
                   "refresh_interval, next_fetch_at, created_at, updated_at) "
                   "VALUES (?,?,?,50,1,'pending_review',?,?,?,?)",
                   (sid, ok["name"], ok["url"], DEFAULT_REFRESH, now, now, now))
-    return get(sid)
+    return get(sid, now)
 
 
 def update(source_id: str, changes: dict, now: float) -> dict:
-    if get(source_id) is None:
+    if _row(source_id) is None:
         raise KeyError(source_id)
     ok, errors = _validate(changes)
     if errors:
@@ -163,7 +184,7 @@ def update(source_id: str, changes: dict, now: float) -> dict:
                         (*sets.values(), source_id))
         if cur.rowcount == 0:  # bị xoá giữa chừng
             raise KeyError(source_id)
-    return get(source_id)
+    return get(source_id, now)
 
 
 def delete(source_id: str) -> bool:
