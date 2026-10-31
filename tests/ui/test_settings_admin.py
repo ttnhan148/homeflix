@@ -405,13 +405,6 @@ def test_clear_cache_asks_confirmation(pw, open_app):
     assert page.console_errors == []
 
 
-def test_hometv_placeholder(pw, open_app):
-    page = admin_page(open_app)
-    rows = page.locator('[data-group="hometv"] .set-row')
-    assert rows.count() == 1
-    assert rows.inner_text().strip() == "Nguồn IPTV · có ở bản sau"
-
-
 def test_logout_hides_admin_groups(pw, open_app):
     page = admin_page(open_app)
     tap(page, '[data-key="admin.logout"]')
@@ -441,6 +434,7 @@ def active_desc(page):
 
 def test_tv_every_row_reachable_by_arrows(pw, open_app):
     page = admin_page(open_app, tv=True)
+    page.wait_for_selector('[data-key="hometv.add"]')   # nhóm HomeTV tải nguồn sau khi trang dựng
     page.focus('[data-key="device.name"] button')
     seen = ["device.name"]
     for _ in range(40):
@@ -448,7 +442,7 @@ def test_tv_every_row_reachable_by_arrows(pw, open_app):
         seen.append(active_desc(page)[0])
     expected = page.evaluate("[...document.querySelectorAll('#settingsBody .set-row')].map(r => r.dataset.key || r.dataset.id)")
     assert set(expected) <= set(seen), set(expected) - set(seen)
-    assert page.evaluate("document.activeElement.closest('.set-row').dataset.key") == "hometv.iptv"
+    assert page.evaluate("document.activeElement.closest('.set-row').dataset.key") == "hometv.add"
     # và ngược lên
     for _ in range(40):
         page.keyboard.press("ArrowUp")

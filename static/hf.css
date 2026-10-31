@@ -2892,10 +2892,6 @@ body.device-tv .cast-switch {
     font-size: 13px;
 }
 
-.set-muted {
-    color: var(--muted);
-}
-
 .set-row.is-saving .set-action,
 .set-row.is-saving .set-form,
 .set-row.is-saving .set-pill {
@@ -2971,7 +2967,8 @@ body.device-tv .cast-switch {
     min-width: 0;
 }
 
-.set-device-name {
+.set-device-name,
+.set-source-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2979,7 +2976,8 @@ body.device-tv .cast-switch {
     font-size: 15px;
 }
 
-.set-device-meta {
+.set-device-meta,
+.set-source-meta {
     color: var(--muted);
     font-size: 13px;
 }
@@ -2993,11 +2991,13 @@ body.device-tv .cast-switch {
     font-weight: 600;
 }
 
-.set-device .set-action[aria-expanded="true"] .set-chevron {
+.set-device .set-action[aria-expanded="true"] .set-chevron,
+.set-source > .set-action[aria-expanded="true"] .set-chevron {
     transform: rotate(90deg);
 }
 
-.set-device-actions {
+.set-device-actions,
+.set-source-actions {
     flex-basis: 100%;
     padding: 0 16px 12px;
 }
@@ -3074,6 +3074,69 @@ body.device-tv .cast-switch {
     height: 100%;
     border-radius: inherit;
     background: #fff;
+}
+
+/* Nguồn IPTV (nhóm HomeTV): dòng như dòng thiết bị; lỗi tải màu --danger, nguồn tắt thì mờ */
+.set-source-error {
+    color: var(--danger);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.set-source.is-off .set-main {
+    opacity: 0.5;
+}
+
+/* URL dài trong khối Sửa không được nới khối thao tác ra ngoài màn hình (cắt bằng dấu …) */
+.set-source-actions {
+    min-width: 0;
+}
+
+/* Khối Sửa nằm trong khối thao tác --raised, giữa Sửa và Xoá */
+.hometv-edit {
+    border-top: 1px solid var(--surface);
+}
+
+.hometv-edit .set-row {
+    padding: 4px 16px;
+}
+
+.hometv-edit .set-row + .set-row {
+    border-top-color: var(--surface);
+}
+
+.hometv-edit .set-text {
+    max-width: 70%;
+}
+
+.hometv-edit + .set-subaction {
+    border-top: 1px solid var(--surface);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+/* Form thêm nguồn: Tên, URL xếp dọc, nút Thêm ở cuối */
+.hometv-form {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.hometv-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.hometv-field .set-input {
+    flex: none;
+    width: 100%;
+}
+
+.hometv-field .set-error {
+    padding: 6px 4px 0;
+}
+
+.hometv-form .set-pill {
+    align-self: flex-end;
 }
 
 body.device-tv .settings-head h2 {
@@ -3177,6 +3240,8 @@ body.device-tv .set-row-action .set-note {
 
 body.device-tv .set-note,
 body.device-tv .set-device-meta,
+body.device-tv .set-source-meta,
+body.device-tv .set-source-error,
 body.device-tv .set-sub {
     font-size: 18px;
 }
@@ -3204,7 +3269,8 @@ body.device-tv .set-code {
 
 body.device-tv .set-action .set-countdown,
 body.device-tv .set-meter-text,
-body.device-tv .set-device-name {
+body.device-tv .set-device-name,
+body.device-tv .set-source-name {
     font-size: 22px;
 }
 
@@ -3213,7 +3279,8 @@ body.device-tv .set-tag {
     padding: 2px 10px;
 }
 
-body.device-tv .set-device-actions {
+body.device-tv .set-device-actions,
+body.device-tv .set-source-actions {
     padding: 4px 24px 16px;
 }
 
@@ -3231,6 +3298,15 @@ body.device-tv .set-subaction:focus {
 
 body.device-tv .set-meter {
     height: 8px;
+}
+
+body.device-tv .hometv-edit .set-row {
+    min-height: 72px;
+    padding: 6px 20px;
+}
+
+body.device-tv .hometv-field .set-error {
+    padding: 8px 4px 0;
 }
 
 /* Dòng chỉ-đọc nhận focus để điều khiển từ xa tới được */

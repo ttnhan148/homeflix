@@ -120,8 +120,9 @@
     return row;
   }
 
+  // Lỗi và chữ phụ của chính dòng, không đụng dòng con (khối Sửa của nguồn IPTV nằm trong dòng nguồn)
   function clearError(row) {
-    const old = row.querySelector('.set-error');
+    const old = row.querySelector(':scope > .set-error');
     if (old) old.remove();
   }
 
@@ -132,7 +133,7 @@
 
   // Dòng chữ phụ dưới dòng (màu --muted), vd. "Đã xoá cache"
   function clearNote(row) {
-    const old = row.querySelector('.set-note');
+    const old = row.querySelector(':scope > .set-note');
     if (old) old.remove();
   }
 
@@ -292,10 +293,10 @@
 
   // Sửa chữ ngay trong dòng: `anchor` nhường chỗ cho ô nhập. Enter hoặc rời ô thì onDone(chữ đã bỏ
   // khoảng trắng hai đầu), Esc thì thôi. `focusBack()` chọn chỗ đặt lại focus (mặc định là anchor)
-  function editInline(anchor, value, label, onDone, focusBack) {
+  function editInline(anchor, value, label, onDone, focusBack, maxLength = 40) {
     const input = el('input', 'set-input');
     input.type = 'text';
-    input.maxLength = 40;
+    input.maxLength = maxLength;
     input.value = value;
     input.autocomplete = 'off';
     input.enterKeyHint = 'done';
@@ -818,14 +819,16 @@
     ]);
   }
 
-  // --- HomeTV: khung, nội dung thật ở gói sau ---
+  // --- HomeTV: nguồn IPTV (static/settings-hometv.js) dùng chung các hàm dựng dòng ở trên ---
+  const ui = {
+    el, chevron, api, every, stopTimer, render, groupShell, baseRow, clearError, showError, setSaving,
+    saveFailed, act, stepperRow, actionRow, editInline, subAction,
+    lastSeenText: (t) => U.lastSeenText(t, serverNow()),
+    isOpen: () => isOpen,
+  };
+
   function hometvGroup() {
-    const row = baseRow('hometv.iptv');
-    row.tabIndex = 0;   // chỉ-đọc nhưng điều khiển từ xa phải tới được
-    const label = el('span', 'set-label', 'Nguồn IPTV');
-    label.appendChild(el('span', 'set-muted', ' · có ở bản sau'));
-    row.appendChild(label);
-    return renderGroup('hometv', 'HomeTV', [row]);
+    return root.HFSettingsHometv ? root.HFSettingsHometv.renderGroup(ui) : null;
   }
 
   // --- Dựng trang, giữ focus ---
@@ -867,9 +870,10 @@
     const groups = [deviceGroup(device, cast)];
     if (isAdmin) groups.push(adminGroup(), devicesGroup(extra[0], extra[1]), systemGroup(conf, extra[2]), hometvGroup());
     else if (enabled) groups.push(guestAdminGroup(extra[0]));
+    const shown = groups.filter(Boolean);   // settings-hometv.js không tải được: bỏ nhóm HomeTV
     const body = $('settingsBody');
     const spot = focusSpot();
-    body.replaceChildren(...groups);
+    body.replaceChildren(...shown);
     if (spot) {
       restoreFocus(spot, $('settingsBtn'));   // dòng không còn (vd. vừa mất quyền admin): về bánh răng
     } else if (document.body.classList.contains('device-tv') && $('settings-tab').classList.contains('active')) {
@@ -921,18 +925,25 @@
   const NAV_FOCUSABLE = 'button, input, [tabindex="0"]';
   const visible = (n) => !n.disabled && n.getClientRects().length > 0;
 
+  // Khối xếp dọc trong một dòng: thao tác của máy hoặc nguồn đang mở, form thêm nguồn
+  const STACKED = '.set-device-actions, .set-source-actions, .hometv-form';
+
   // Lưới: mỗi .set-row có phần tử focus được là một dòng (chính dòng đó tính nếu có tabindex),
-  // cột là các phần tử ấy theo thứ tự DOM. Quy tắc cho máy đang mở: mọi phần tử nằm trong
-  // .set-device-actions (xếp dọc) tự thành một dòng riêng, nên Xuống đi qua từng thao tác
+  // cột là các phần tử ấy theo thứ tự DOM; phần tử thuộc dòng gần nhất bao nó (dòng con trong
+  // khối Sửa của nguồn là dòng riêng). Mọi phần tử nằm thẳng trong khối xếp dọc (STACKED) tự thành
+  // một dòng riêng, nên Xuống đi qua từng thao tác
   function navGrid() {
     const grid = [];
-    $('settingsBody').querySelectorAll('.set-row').forEach((row) => {
-      const own = [];
-      if (row.matches('[tabindex="0"]') && visible(row)) own.push(row);
-      const cells = [...row.querySelectorAll(NAV_FOCUSABLE)].filter(visible);
-      cells.forEach((n) => { if (!n.closest('.set-device-actions')) own.push(n); });
-      if (own.length) grid.push(own);
-      cells.forEach((n) => { if (n.closest('.set-device-actions')) grid.push([n]); });
+    let last = null;
+    $('settingsBody').querySelectorAll(NAV_FOCUSABLE).forEach((n) => {
+      if (!visible(n)) return;
+      const row = n.closest('.set-row');
+      if (!row) return;
+      const stack = n.closest(STACKED);
+      const line = stack && row.contains(stack) ? n : row;
+      if (line === last) grid[grid.length - 1].push(n);
+      else grid.push([n]);
+      last = line;
     });
     return grid;
   }
