@@ -3409,8 +3409,9 @@ document.addEventListener('visibilitychange', () => {
                 document.getElementById('tabBtnSaved').classList.add('active');
                 renderSavedMovies();
             }
-            // Cài đặt: không tô nút nào ở thanh tab; nút ‹ quay về tab trước
+            // Cài đặt: không tô nút nào ở thanh tab; nút ‹ quay về tab trước. Rời trang thì dừng các bộ đếm của nó
             if (tabId === 'settings-tab' && window.HFSettings) HFSettings.open(prevTab && prevTab.id);
+            else if (prevTab && prevTab.id === 'settings-tab' && window.HFSettings) HFSettings.close();
             setTimeout(initTabbing, 100);
         }
 

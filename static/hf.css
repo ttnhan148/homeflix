@@ -2879,6 +2879,203 @@ body.device-tv .cast-switch {
     color: var(--accent);
 }
 
+/* Dòng thao tác không có padding: lỗi và chữ phụ tự lùi vào thẳng mép chữ */
+.set-row-action .set-error,
+.set-row-action .set-note {
+    padding: 0 16px 10px;
+}
+
+.set-note {
+    flex-basis: 100%;
+    padding-bottom: 6px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.set-muted {
+    color: var(--muted);
+}
+
+.set-row.is-saving .set-action,
+.set-row.is-saving .set-form,
+.set-row.is-saving .set-pill {
+    opacity: 0.5;
+}
+
+/* Nút viên: Từ chối / Cho phép, thao tác với một máy */
+.set-pill {
+    flex: none;
+    min-height: var(--tap);
+    padding: 0 16px;
+    border: 1px solid var(--control);
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.set-pill.is-primary {
+    border-color: #fff;
+    background: #fff;
+    color: #000;
+}
+
+.set-subaction.set-danger {
+    color: var(--accent);
+}
+
+/* Ô mật khẩu admin ngay trong dòng */
+.set-form {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: calc(var(--tap) + 12px);
+    padding: 6px 16px;
+}
+
+.set-form .set-input {
+    flex: 1 1 auto;
+}
+
+/* Mã xin duyệt: to, dễ đọc từ xa */
+.set-code {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    font-variant-numeric: tabular-nums;
+}
+
+.set-countdown {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Thiết bị và yêu cầu chờ: tên trên, chữ phụ dưới */
+.set-main {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.set-name-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.set-device-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+}
+
+.set-device-meta {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.set-tag {
+    flex: none;
+    padding: 1px 8px;
+    border-radius: var(--pill);
+    background: var(--raised);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.set-device .set-action[aria-expanded="true"] .set-chevron {
+    transform: rotate(90deg);
+}
+
+.set-device-actions {
+    flex-basis: 100%;
+    padding: 0 16px 12px;
+}
+
+/* Khối nổi --raised trong dòng máy: Đổi tên, Cấp/Thu quyền admin, Xoá thiết bị */
+.set-subactions {
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    background: var(--raised);
+}
+
+.set-subaction {
+    min-height: var(--tap);
+    padding: 0 16px;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.set-subaction + .set-subaction {
+    border-top: 1px solid var(--surface);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.set-device-actions .set-input {
+    width: 100%;
+}
+
+.set-list[hidden] {
+    display: none;
+}
+
+.set-requests {
+    margin-bottom: 20px;
+}
+
+.set-households {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.set-sub {
+    margin: 0 0 8px 4px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+/* Thanh dung lượng cache: nền --raised, phần đã dùng màu trắng */
+.set-meter-text {
+    flex: none;
+    color: var(--muted);
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+}
+
+.set-meter {
+    flex-basis: 100%;
+    height: 6px;
+    margin: 2px 0 8px;
+    border-radius: var(--pill);
+    background: var(--raised);
+    overflow: hidden;
+}
+
+.set-meter-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: #fff;
+}
+
 body.device-tv .settings-head h2 {
     font-size: 30px;
     line-height: 38px;
@@ -2971,4 +3168,67 @@ body.device-tv .set-step svg,
 body.device-tv .set-chevron {
     width: 24px;
     height: 24px;
+}
+
+body.device-tv .set-row-action .set-error,
+body.device-tv .set-row-action .set-note {
+    padding: 0 24px 12px;
+}
+
+body.device-tv .set-note,
+body.device-tv .set-device-meta,
+body.device-tv .set-sub {
+    font-size: 18px;
+}
+
+body.device-tv .set-pill {
+    min-height: 56px;
+    padding: 0 24px;
+    font-size: 20px;
+}
+
+body.device-tv .set-form {
+    min-height: 80px;
+    padding: 10px 24px;
+    gap: 16px;
+}
+
+/* Ô nhập trong dòng: vòng focus không phóng to (đè lên nút bên cạnh) */
+body.device-tv .set-input:focus {
+    transform: none;
+}
+
+body.device-tv .set-code {
+    font-size: 30px;
+}
+
+body.device-tv .set-action .set-countdown,
+body.device-tv .set-meter-text,
+body.device-tv .set-device-name {
+    font-size: 22px;
+}
+
+body.device-tv .set-tag {
+    font-size: 16px;
+    padding: 2px 10px;
+}
+
+body.device-tv .set-device-actions {
+    padding: 4px 24px 16px;
+}
+
+body.device-tv .set-subaction {
+    min-height: 64px;
+    padding: 0 20px;
+    font-size: 22px;
+}
+
+/* Dòng rộng hết khối: vòng focus vẽ phía trong, không phóng to */
+body.device-tv .set-subaction:focus {
+    outline-offset: -4px !important;
+    transform: none;
+}
+
+body.device-tv .set-meter {
+    height: 8px;
 }
