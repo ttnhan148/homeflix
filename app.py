@@ -1147,6 +1147,9 @@ def require_admin(request: Request):
     if not _db_is_admin(request.state.device_id):
         raise HTTPException(status_code=403, detail="admin required")
 
+# Route admin HomeTV (router tự gắn require_admin cho mọi route)
+app.include_router(hometv.api.make_router(require_admin))
+
 # --- Cài đặt hệ thống ---
 def _settings_payload(request: Request) -> dict:
     is_admin = admin.configured() and _db_is_admin(request.state.device_id)
