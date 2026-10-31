@@ -1922,6 +1922,16 @@
             <div id="tvGrid" class="movies-grid"></div>
             <div id="tvMore" class="grid-load-more" hidden>Đang tải thêm</div>
         </div>
+        <div id="tvPlayer" class="tv-player" hidden>
+            <video id="tvVideo" playsinline webkit-playsinline controls></video>
+            <div id="tvPlayerTitle" class="tv-player-title"></div>
+            <button type="button" id="tvPlayerClose" class="tv-player-close" aria-label="Đóng">✕</button>
+            <div id="tvToast" class="tv-toast" role="status" hidden></div>
+            <div id="tvPlayerError" class="tv-player-error" hidden>
+                <span id="tvPlayerMsg"></span>
+                <button type="button" id="tvPlayerRetry" class="filter-option">Thử lại</button>
+            </div>
+        </div>
 
         <!-- TAB CONTENT 1: MANUAL LINK -->
         <div id="player-tab" class="tab-content">

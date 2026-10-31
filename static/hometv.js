@@ -168,16 +168,192 @@
 
   async function toggleFavorite(c) {
     const want = !c.favorite;
+    const redraw = () => {
+      // Vẽ lại lưới làm mất focus: trả focus về thẻ vừa thao tác (nếu còn trong danh sách)
+      const hadFocus = !!document.activeElement && !!document.activeElement.closest('#tvGrid');
+      renderChips();
+      renderGrid();
+      const card = hadFocus && document.querySelector('#tvGrid .tv-card[data-id="' + c.id + '"]');
+      if (card) card.focus({ preventScroll: true });
+    };
     c.favorite = want;
-    renderChips();
-    renderGrid();
+    redraw();
     try {
       await api(want ? 'PUT' : 'DELETE', '/api/hometv/favorites/' + c.id);
     } catch (e) {
       c.favorite = !want;
-      renderChips();
-      renderGrid();
+      redraw();
     }
+  }
+
+
+  // ---------- Player ----------
+  const STALL_MS = 8000;
+  const SWITCH_DEBOUNCE_MS = 400;
+  const play = { token: 0, hls: null, timer: null, streams: [], index: 0, channelId: null, recentSent: false,
+    pendingId: null, switchTimer: null };
+
+  function channelById(id) {
+    return state.channels.find((c) => c.id === id) || null;
+  }
+
+  function isTVDevice() {
+    return document.body.classList.contains('device-tv');
+  }
+
+  function stopAttempt() {
+    play.token += 1;
+    if (play.timer) { clearTimeout(play.timer); play.timer = null; }
+    if (play.hls) { play.hls.destroy(); play.hls = null; }
+    const video = $('tvVideo');
+    video.onerror = null;
+    video.onloadeddata = null;
+  }
+
+  function toast(text) {
+    const t = $('tvToast');
+    t.hidden = !text;
+    t.textContent = text || '';
+  }
+
+  function playerError(text) {
+    toast('');
+    $('tvPlayerMsg').textContent = text;
+    $('tvPlayerError').hidden = false;
+  }
+
+  function attempt(i) {
+    stopAttempt();
+    const my = play.token;
+    play.index = i;
+    $('tvPlayerError').hidden = true;
+    toast(i > 0 ? 'Đang thử nguồn ' + (i + 1) + '/' + play.streams.length : '');
+    const video = $('tvVideo');
+    const url = play.streams[i].play_url;
+    const fail = () => { if (my === play.token) next(); };
+    play.timer = setTimeout(fail, STALL_MS);
+    video.onerror = fail;
+    video.onloadeddata = () => {
+      if (my !== play.token) return;
+      clearTimeout(play.timer);
+      play.timer = null;
+      toast('');
+      if (!play.recentSent) {
+        play.recentSent = true;
+        api('POST', '/api/hometv/recent/' + play.channelId).catch(() => {});
+      }
+    };
+    if (/\/index\.m3u8$/.test(url) && typeof root.Hls !== 'undefined' && root.Hls.isSupported()) {
+      const hls = new root.Hls(root.HFPlayerUtils.hlsConfig(isTVDevice(), true));
+      play.hls = hls;
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(root.Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+      hls.on(root.Hls.Events.ERROR, (event, data) => { if (data && data.fatal) fail(); });
+    } else {
+      video.src = url;
+      video.play().catch(() => {});
+    }
+  }
+
+  function next() {
+    if (play.index + 1 < play.streams.length) attempt(play.index + 1);
+    else { stopAttempt(); playerError('Kênh tạm thời không phát được.'); }
+  }
+
+  async function openChannel(id) {
+    const c = channelById(id);
+    stopAttempt();
+    play.channelId = id;
+    play.recentSent = false;
+    play.streams = [];
+    $('tvPlayerTitle').textContent = c ? c.name : '';
+    $('tvPlayer').hidden = false;
+    $('tvPlayerError').hidden = true;
+    toast('');
+    const my = play.token;
+    try {
+      const streams = await api('GET', '/api/hometv/channels/' + id + '/streams');
+      if (my !== play.token) return;
+      play.streams = streams;
+      attempt(0);
+    } catch (e) {
+      if (my !== play.token) return;
+      playerError(e.status === 404 ? 'Kênh không còn khả dụng.' : 'Không tải được kênh.');
+      if (e.status === 404) load();
+    }
+  }
+
+  function closePlayer() {
+    stopAttempt();
+    if (play.switchTimer) { clearTimeout(play.switchTimer); play.switchTimer = null; }
+    const video = $('tvVideo');
+    video.pause();
+    video.removeAttribute('src');
+    $('tvPlayer').hidden = true;
+    const card = document.querySelector('#tvGrid .tv-card[data-id="' + play.channelId + '"]');
+    if (card) card.focus({ preventScroll: true });
+  }
+
+  // Đổi kênh bằng phím Lên/Xuống: gom các lần bấm nhanh thành một lần mở
+  function stepPlayer(dir) {
+    const list = visible();
+    const from = play.pendingId != null ? play.pendingId : play.channelId;
+    const to = U.stepChannel(list, from, dir);
+    if (to == null) return;
+    play.pendingId = to;
+    const c = channelById(to);
+    $('tvPlayerTitle').textContent = c ? c.name : '';
+    if (play.switchTimer) clearTimeout(play.switchTimer);
+    play.switchTimer = setTimeout(() => {
+      play.switchTimer = null;
+      const id = play.pendingId;
+      play.pendingId = null;
+      openChannel(id);
+    }, SWITCH_DEBOUNCE_MS);
+  }
+
+  // ---------- Remote TV ----------
+  function gridRows() {
+    const rows = [[$('tvSearch')], [...document.querySelectorAll('#tvChips [data-chip]')]];
+    let top = null;
+    for (const card of document.querySelectorAll('#tvGrid .tv-card')) {
+      if (top === null || Math.abs(card.offsetTop - top) > 4) { rows.push([]); top = card.offsetTop; }
+      rows[rows.length - 1].push(card);
+    }
+    return rows.filter((r) => r.length);
+  }
+
+  function onKey(e) {
+    if (!document.body.classList.contains('mode-hometv') || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!$('tvPlayer').hidden) {
+      if (e.key === 'Escape') { e.preventDefault(); closePlayer(); }
+      else if (isTVDevice() && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        stepPlayer(e.key === 'ArrowDown' ? 1 : -1);
+      }
+      return;
+    }
+    if (!isTVDevice()) return;
+    const target = e.target;
+    if (e.key === 'f' && target && target.classList && target.classList.contains('tv-card')) {
+      const c = channelById(Number(target.dataset.id));
+      if (c) { e.preventDefault(); toggleFavorite(c); }
+      return;
+    }
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    if (target === $('tvSearch') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
+    const rows = gridRows();
+    let row = -1;
+    let col = -1;
+    rows.forEach((cells, r) => { const c = cells.indexOf(target); if (c >= 0) { row = r; col = c; } });
+    if (row < 0) return;
+    const [r, c] = root.HFSettingsUtils.gridMove(rows.map((cells) => cells.length), row, col, e.key);
+    const dest = rows[r] && rows[r][c];
+    if (!dest || dest === target) return;
+    e.preventDefault();
+    dest.focus({ preventScroll: true });
+    dest.scrollIntoView({ block: 'nearest' });
   }
 
   function enter() {
@@ -204,10 +380,13 @@
         { rootMargin: '400px' });
       observer.observe($('tvMore'));
     }
+    $('tvPlayerClose').addEventListener('click', closePlayer);
+    $('tvPlayerRetry').addEventListener('click', () => { if (play.streams.length) attempt(0); else openChannel(play.channelId); });
+    document.addEventListener('keydown', onKey);
     if (remembered()) enter();
   }
 
-  root.HFTV = Object.assign(root.HFTV || {}, { enter, leave, channels: () => state.channels });
+  root.HFTV = Object.assign(root.HFTV || {}, { enter, leave, channels: () => state.channels, openChannel, closePlayer });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })(typeof globalThis !== 'undefined' ? globalThis : this);
