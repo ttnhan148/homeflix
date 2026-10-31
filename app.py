@@ -228,6 +228,18 @@ def init_db():
         # Cột quyền admin cho DB cũ
         if "is_admin" not in [r[1] for r in cursor.execute("PRAGMA table_info(devices)")]:
             cursor.execute("ALTER TABLE devices ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+        # Yêu cầu quyền admin bằng mã 6 số (hết hạn tính lúc đọc)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS admin_requests (
+                id TEXT PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                code TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at REAL NOT NULL
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_admin_requests_device ON admin_requests(device_id, created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_admin_requests_status ON admin_requests(status, created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_household ON devices(household)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_updated ON device_movies(device_id, updated_at DESC)")
@@ -409,6 +421,75 @@ def _db_set_admin(device_id: str, on: bool) -> None:
 
 def _db_admin_count() -> int:
     return db_query_one("SELECT COUNT(*) FROM devices WHERE is_admin = 1")[0]
+
+def _now() -> float:
+    return time.time()
+
+# --- Xin quyền admin bằng mã 6 số: TV xin, máy admin duyệt hoặc từ chối ---
+def _db_create_admin_request(device_id: str, now: float) -> dict | None:
+    """Tạo yêu cầu mới (thay yêu cầu cũ của máy này). None khi đã đủ MAX_PENDING yêu cầu còn hạn."""
+    conn = get_db()
+    with _db_lock:
+        conn.execute("DELETE FROM admin_requests WHERE created_at < ?", (now - 86400,))
+        conn.execute("DELETE FROM admin_requests WHERE device_id = ?", (device_id,))
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM admin_requests WHERE status = 'pending' AND created_at + ? > ?",
+            (admin.REQUEST_TTL, now)).fetchone()[0]
+        if pending >= admin.MAX_PENDING:
+            conn.commit()
+            return None
+        req = {"id": secrets.token_urlsafe(9), "code": admin.new_code()}
+        conn.execute("INSERT INTO admin_requests (id, device_id, code, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+                     (req["id"], device_id, req["code"], now))
+        conn.commit()
+    req["expires_at"] = now + admin.REQUEST_TTL
+    return req
+
+def _db_my_admin_request(device_id: str, now: float) -> dict:
+    row = db_query_one(
+        "SELECT code, status, created_at FROM admin_requests WHERE device_id = ? ORDER BY created_at DESC LIMIT 1",
+        (device_id,))
+    if row is None:
+        return {"status": "none"}
+    expires_at = row["created_at"] + admin.REQUEST_TTL
+    if row["status"] == "pending":
+        if expires_at <= now:
+            return {"status": "expired"}
+        return {"status": "pending", "code": row["code"], "expires_at": expires_at}
+    return {"status": row["status"]}
+
+def _db_pending_admin_requests(now: float) -> list[dict]:
+    rows = db_query(
+        "SELECT r.id, r.code, r.created_at, d.id AS device_id, d.name, d.kind "
+        "FROM admin_requests r JOIN devices d ON d.id = r.device_id "
+        "WHERE r.status = 'pending' AND r.created_at + ? > ? ORDER BY r.created_at",
+        (admin.REQUEST_TTL, now))
+    salt = get_household_salt()
+    return [{"id": r["id"],
+             "device": {"id": _cast_public_id(r["device_id"], salt), "name": r["name"], "kind": r["kind"]},
+             "code": r["code"], "expires_at": r["created_at"] + admin.REQUEST_TTL} for r in rows]
+
+def _db_decide_admin_request(request_id: str, approve: bool, now: float) -> bool:
+    """Chốt yêu cầu bằng một UPDATE có điều kiện (chỉ một bên thắng); duyệt thì cấp admin cùng giao dịch."""
+    conn = get_db()
+    with _db_lock:
+        try:
+            cur = conn.execute(
+                "UPDATE admin_requests SET status = ? WHERE id = ? AND status = 'pending' "
+                "AND created_at + ? > ? AND EXISTS (SELECT 1 FROM devices WHERE id = admin_requests.device_id)",
+                ("approved" if approve else "denied", request_id, admin.REQUEST_TTL, now))
+            if cur.rowcount != 1:
+                conn.rollback()
+                return False
+            if approve:
+                conn.execute(
+                    "UPDATE devices SET is_admin = 1 WHERE id = (SELECT device_id FROM admin_requests WHERE id = ?)",
+                    (request_id,))
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
 
 # --- Cast: quyền điều khiển và công tắc của TV ---
 # Hàng đợi SSE, hiện diện, liên kết và trạng thái nằm trong bộ nhớ (cast.py), chỉ đúng với một worker.
@@ -1104,6 +1185,34 @@ async def admin_revoke_others_api(request: Request):
     cur = await asyncio.to_thread(
         db_execute, "UPDATE devices SET is_admin = 0 WHERE is_admin = 1 AND id != ?", (request.state.device_id,))
     return {"revoked": cur.rowcount}
+
+@app.post("/api/admin/requests", dependencies=[Depends(require_admin_enabled)])
+async def admin_request_create_api(request: Request):
+    req = await asyncio.to_thread(_db_create_admin_request, request.state.device_id, _now())
+    if req is None:
+        raise HTTPException(status_code=429, detail="too many pending requests")
+    return {"code": req["code"], "expires_at": req["expires_at"]}
+
+@app.get("/api/admin/requests/mine", dependencies=[Depends(require_admin_enabled)])
+async def admin_request_mine_api(request: Request):
+    return await asyncio.to_thread(_db_my_admin_request, request.state.device_id, _now())
+
+@app.get("/api/admin/requests", dependencies=[Depends(require_admin)])
+async def admin_requests_list_api():
+    return await asyncio.to_thread(_db_pending_admin_requests, _now())
+
+async def _admin_decide(request_id: str, approve: bool):
+    if not await asyncio.to_thread(_db_decide_admin_request, request_id, approve, _now()):
+        raise HTTPException(status_code=409, detail="request not pending")
+    return Response(status_code=204)
+
+@app.post("/api/admin/requests/{request_id}/approve", dependencies=[Depends(require_admin)])
+async def admin_request_approve_api(request_id: str):
+    return await _admin_decide(request_id, True)
+
+@app.post("/api/admin/requests/{request_id}/deny", dependencies=[Depends(require_admin)])
+async def admin_request_deny_api(request_id: str):
+    return await _admin_decide(request_id, False)
 
 @app.get("/api/device")
 async def get_device_api(request: Request):
