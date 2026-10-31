@@ -253,3 +253,36 @@ def test_manual_refresh_bypasses_drop_check(db, public_dns):
     sources.request_refresh(src["id"], 20.0)
     assert refresh(client(small), src["id"], now=20.0) == "ok"
     assert count("streams WHERE active=1") == 4
+
+
+def test_cancel_run_due_closes_jobs_first(db, public_dns, monkeypatch):
+    # hủy run_due giữa lúc đang tải: khi nó trả về, job phải đã đóng (không còn running)
+    import time
+    sources.create("A", "https://a.example/a.m3u", 1.0)
+    sources.create("B", "https://b.example/b.m3u", 1.0)
+    real = scheduler.finish_job
+    calls = []
+
+    def slow(*a, **k):
+        calls.append(1)
+        if len(calls) == 1:  # job đầu đóng chậm, job sau đóng ngay
+            time.sleep(0.3)
+        real(*a, **k)
+    monkeypatch.setattr(scheduler, "finish_job", slow)
+
+    async def handler(req):
+        await asyncio.sleep(30)
+
+    async def main():
+        c = client(handler=handler)
+        t = asyncio.create_task(scheduler.run_due(c, 2.0))
+        await asyncio.sleep(0.3)
+        t.cancel()
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+        n = count("jobs WHERE status='running'")
+        await c.aclose()
+        return n
+    assert run(main()) == 0

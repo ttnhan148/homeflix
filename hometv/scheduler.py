@@ -133,7 +133,8 @@ async def run_due(client, now: float) -> list[str]:
                 except Exception:
                     logger.exception("HomeTV: lượt tải %s hỏng", src["id"])
                     return "error"
-    return list(await asyncio.gather(*(one(s) for s in due)))
+    # return_exceptions: đợi mọi lượt đóng job xong rồi mới trả (kể cả khi bị hủy)
+    return list(await asyncio.gather(*(one(s) for s in due), return_exceptions=True))
 
 
 def cleanup(now: float) -> None:
