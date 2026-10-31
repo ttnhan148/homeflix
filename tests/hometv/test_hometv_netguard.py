@@ -120,3 +120,52 @@ def test_resolve_uses_getaddrinfo(monkeypatch):
         (2, 1, 6, "", ("8.8.8.8", 0)), (10, 1, 6, "", ("2606:4700::1", 0, 0, 0)),
         (2, 1, 6, "", ("8.8.8.8", 0))])
     assert netguard.resolve("x.example") == ["8.8.8.8", "2606:4700::1"]
+
+
+# --- vòng sửa 1: host kiểm tra phải trùng host httpx sẽ kết nối ---
+
+def test_ipv4_with_percent_is_not_an_ip_literal():
+    assert netguard.is_blocked_ip("8.8.8.8%foo")
+
+
+@pytest.mark.parametrize("url", ["http://8.8.8.8%25.evil.com/", "http://8.8.8.8%2e.evil.com/"])
+def test_ipv4_percent_host_never_skips_dns(monkeypatch, url):
+    calls = []
+    monkeypatch.setattr(netguard, "resolve", lambda h: calls.append(h) or ["8.8.8.8"])
+    try:
+        netguard.check(url)
+    except netguard.BlockedURL:
+        pass  # từ chối cũng được; không được bỏ qua DNS mà cho qua
+    else:
+        assert calls, "host đi qua mà không phân giải"
+
+
+@pytest.mark.parametrize("url,ascii_host", [
+    ("http://faß.evil.com/", "xn--fa-hia.evil.com"),
+    ("http://straße.evil.com/", "xn--strae-oqa.evil.com"),
+    ("http://ς.evil.com/", "xn--3xa.evil.com"),
+])
+def test_idn_resolved_as_httpx_name(monkeypatch, url, ascii_host):
+    calls = []
+    monkeypatch.setattr(netguard, "resolve", lambda h: calls.append(h) or ["185.199.108.153"])
+    assert netguard.check_url(url) == ascii_host
+    netguard.check(url)
+    assert calls == [ascii_host]
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1\t.evil.com/", " http://x.com/", "http://127.0.0.1 .evil.com/",
+    "http://１２７．０．０．１/", "http://x_y.com/", "http://-a.com/", "http://a..com/",
+])
+def test_odd_hosts_rejected(url):
+    with pytest.raises(netguard.BlockedURL) as e:
+        netguard.check_url(url)
+    assert e.value.reason == "URL không hợp lệ"
+
+
+def test_ideographic_dots_never_resolved_as_other_name(monkeypatch):
+    calls = []
+    monkeypatch.setattr(netguard, "resolve", lambda h: calls.append(h) or ["8.8.8.8"])
+    with pytest.raises(netguard.BlockedURL):
+        netguard.check("http://127。0。0。1/")
+    assert calls == []

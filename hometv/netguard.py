@@ -4,6 +4,8 @@ import re
 import socket
 from urllib.parse import urlsplit
 
+import httpx
+
 MAX_URL_LEN = 2048
 INVALID = "URL không hợp lệ"
 BLOCKED = "Địa chỉ bị chặn"
@@ -11,6 +13,7 @@ BLOCKED = "Địa chỉ bị chặn"
 CGNAT = ipaddress.ip_network("100.64.0.0/10")
 NAT64 = ipaddress.ip_network("64:ff9b::/96")
 # Dạng số kiểu IPv4 (thập phân/bát phân/hex/rút gọn): inet_aton hiểu nhưng ipaddress thì không
+_HOSTNAME = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.?$")
 _NUMERIC_HOST = re.compile(r"^(0x[0-9a-f]*|\d+)(\.(0x[0-9a-f]*|\d+))*$")
 
 
@@ -49,7 +52,7 @@ def _blocked(ip) -> bool:
 def is_blocked_ip(ip: str) -> bool:
     """True nếu IP không được phép kết nối; không parse được cũng coi là chặn."""
     try:
-        addr = ipaddress.ip_address(str(ip).split("%", 1)[0])  # bỏ zone id
+        addr = ipaddress.ip_address(str(ip))  # zone id chỉ hợp lệ với IPv6
     except ValueError:
         return True
     return _blocked(addr)
@@ -61,15 +64,23 @@ def check_url(url: str) -> str:
         raise BlockedURL(INVALID)
     try:
         parts = urlsplit(url)
-        host = parts.hostname
         parts.port  # noqa: B018 - cổng sai thì ném ValueError
+        # Host đúng như httpx sẽ kết nối (IDNA2008, dạng ASCII)
+        parsed = httpx.URL(url)
+        host = parsed.raw_host.decode("ascii")
+    except (ValueError, UnicodeError, httpx.InvalidURL):
+        raise BlockedURL(INVALID)
+    if parsed.scheme not in ("http", "https") or not host:
+        raise BlockedURL(INVALID)
+    host = host.lower()
+    try:
+        ipaddress.ip_address(host)
+        return host.rstrip(".")
     except ValueError:
+        pass
+    if not _HOSTNAME.match(host):
         raise BlockedURL(INVALID)
-    if parts.scheme.lower() not in ("http", "https") or not host:
-        raise BlockedURL(INVALID)
-    host = host.lower().rstrip(".")
-    if not host:
-        raise BlockedURL(INVALID)
+    host = host.rstrip(".")
     if _NUMERIC_HOST.match(host):
         # Chỉ nhận dotted-quad thập phân chuẩn; 2130706433, 0x7f000001, 127.1... bị từ chối
         try:
@@ -86,7 +97,7 @@ def resolve(host: str) -> list[str]:
 
 def check_host(host: str) -> None:
     try:
-        ipaddress.ip_address(host.split("%", 1)[0])
+        ipaddress.ip_address(host)
         ips = [host]  # IP literal: không phân giải
     except ValueError:
         try:
