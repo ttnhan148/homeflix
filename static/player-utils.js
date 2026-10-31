@@ -64,7 +64,17 @@
     try { storage.setItem(DIRECT_KEY, String(now + DIRECT_TTL_MS)); } catch (e) { /* storage bị chặn */ }
   }
 
-  const api = { DEFAULT_PREFS, loadPrefs, savePrefs, showSkipIntro, introTarget, hasNextEpisode, countdownLabel,
+  // Cấu hình hls.js dùng chung cho phim và HomeTV
+  function hlsConfig(isTV, proxied) {
+    return {
+      maxBufferLength: isTV ? 20 : 30,
+      maxMaxBufferLength: isTV ? 120 : 600,
+      manifestLoadingMaxRetry: proxied ? 1 : 5,
+      lowLatencyMode: !isTV,
+    };
+  }
+
+  const api = { hlsConfig, DEFAULT_PREFS, loadPrefs, savePrefs, showSkipIntro, introTarget, hasNextEpisode, countdownLabel,
     DIRECT_TTL_MS, proxyUrl, isProxied, streamSource, rememberDirect };
   root.HFPlayerUtils = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

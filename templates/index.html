@@ -23,6 +23,7 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="{{ asset('home-utils.js') }}"></script>
     <script src="{{ asset('settings-utils.js') }}"></script>
+    <script src="{{ asset('hometv-utils.js') }}"></script>
     <script src="{{ asset('cast-utils.js') }}"></script>
     <script src="{{ asset('player-utils.js') }}"></script>
     <script src="{{ asset('player-auto.js') }}"></script>
@@ -3660,12 +3661,7 @@ document.addEventListener('visibilitychange', () => {
                 }
                 console.log("[Play] Sử dụng Hls.js:", src);
                 const isTVMode = document.body.classList.contains('device-tv');
-                hlsObj = new Hls({
-                    maxBufferLength: isTVMode ? 20 : 30,
-                    maxMaxBufferLength: isTVMode ? 120 : 600,
-                    manifestLoadingMaxRetry: HFPlayerUtils.isProxied(src) ? 1 : 5,
-                    lowLatencyMode: !isTVMode
-                });
+                hlsObj = new Hls(HFPlayerUtils.hlsConfig(isTVMode, HFPlayerUtils.isProxied(src)));
                 hlsObj.loadSource(src);
                 hlsObj.attachMedia(video);
                 hlsObj.on(Hls.Events.MANIFEST_PARSED, () => {
