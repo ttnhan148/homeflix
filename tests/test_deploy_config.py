@@ -12,3 +12,8 @@ def test_deploy_copies_env_into_build_tree():
     sh = (ROOT / "deploy/deploy.sh").read_text()
     assert 'cp "$REPO/deploy/.env" "$SRC/deploy/.env"' in sh
     assert sh.index('git -C "$REPO" archive') < sh.index('cp "$REPO/deploy/.env"') < sh.index("docker compose build")
+
+
+def test_dockerignore_excludes_env_files():
+    lines = {line.strip() for line in (ROOT / ".dockerignore").read_text().splitlines()}
+    assert ".env" in lines and "**/.env" in lines
