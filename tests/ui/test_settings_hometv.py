@@ -57,17 +57,10 @@ def server_source(page, sid):
     return next(s for s in server_json(page, PATH) if s["id"] == sid)
 
 
-def start_job(sid):
-    """Vòng lặp nền nhận lượt tải (TestClient không chạy lifespan nên chèn job thẳng vào DB)."""
-    with hometv.db.tx() as c:
-        c.execute("INSERT INTO jobs(job_type, source_id, status, started_at) VALUES ('refresh', ?, 'running', ?)",
-                  (sid, time.time()))
-
-
-def finish_job(sid, channels):
+def finish_fetch(sid, channels):
+    """Vòng lặp nền tải xong một nguồn (TestClient không chạy lifespan nên ghi thẳng vào DB)."""
     now = time.time()
     with hometv.db.tx() as c:
-        c.execute("UPDATE jobs SET status='ok', completed_at=? WHERE source_id=? AND status='running'", (now, sid))
         c.execute("UPDATE sources SET last_fetch_at=?, last_success_at=?, channel_count=? WHERE id=?",
                   (now, now, channels, sid))
 
@@ -176,16 +169,17 @@ def test_refresh_polls_until_done(pw, open_app):
     page.wait_for_timeout(300)
     assert page.requests.count(entry) == n   # không có nguồn đang tải: không tự tải lại
     open_source(page, sid)
-    start_job(sid)
+    # bấm Làm mới ngay: server chỉ xếp lượt (vòng lặp nền nhận trong ≤ 60 giây), chưa có job nào chạy
     do(page, sid, "refresh")
     wait_request(page, f"POST {PATH}/{sid}/refresh")
     wait_meta(page, sid, "Đang tải…")
     assert meta(page, sid) == "Chờ duyệt · 0 kênh · Đang tải…"
+    wait_request(page, entry, count=n + 1)   # tải lại sau khi bấm
     n = page.requests.count(entry)
     page.clock.fast_forward(3100)
-    wait_request(page, entry, count=n + 1)   # vẫn đang tải: 3 giây tải lại một lần
-    wait_meta(page, sid, "Đang tải…")
-    finish_job(sid, channels=12)
+    wait_request(page, entry, count=n + 1)   # chưa tải xong: 3 giây tải lại một lần
+    assert meta(page, sid) == "Chờ duyệt · 0 kênh · Đang tải…"
+    finish_fetch(sid, channels=12)
     page.clock.fast_forward(3100)
     wait_meta(page, sid, "Đang tải…", present=False)
     assert meta(page, sid) == "Chờ duyệt · 12 kênh · vừa xong"
@@ -195,6 +189,15 @@ def test_refresh_polls_until_done(pw, open_app):
     page.clock.fast_forward(10000)
     page.wait_for_timeout(300)
     assert page.requests.count(entry) == n   # hết nguồn đang tải: thôi tải lại
+    # vòng lặp nền không nhận lượt: sau 90 giây thôi chờ, về dòng phụ thường và thôi tải lại
+    do(page, sid, "refresh")
+    wait_meta(page, sid, "Đang tải…")
+    page.clock.fast_forward(91000)
+    wait_meta(page, sid, "Đang tải…", present=False)
+    n = page.requests.count(entry)
+    page.clock.fast_forward(10000)
+    page.wait_for_timeout(300)
+    assert page.requests.count(entry) == n
     assert page.console_errors == []
 
 

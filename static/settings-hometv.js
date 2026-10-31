@@ -4,6 +4,7 @@
 (function (root) {
   const PATH = '/api/admin/hometv/sources';
   const POLL_MS = 3000;   // có nguồn đang tải: tải lại danh sách
+  const QUEUED_MAX_MS = 90000;   // vòng lặp nền nhận lượt trong ≤ 60 giây; quá hạn này thì thôi chờ
   const RIGHTS = { pending_review: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
   const PRIORITY = { key: 'hometv.priority', label: 'Ưu tiên', min: 1, max: 100, step: 1 };
   const HOURS = { key: 'hometv.refresh_hours', label: 'Chu kỳ tải', min: 1, max: 168, step: 1, unit: 'giờ' };
@@ -11,6 +12,23 @@
   // Giữ qua các lượt dựng lại (như máy đang mở ở "Thiết bị trong nhà")
   let openId = null;   // nguồn đang mở thao tác
   let editId = null;   // nguồn đang mở khối Sửa
+  // Nguồn vừa bấm "Làm mới ngay" hoặc vừa đổi URL: server chỉ đặt next_fetch_at = now, vòng lặp nền
+  // nhận lượt sau (fetching chưa bật ngay). id -> { lastFetch: last_fetch_at lúc bấm, at: Date.now() }
+  const queued = new Map();
+
+  function queue(d) {
+    queued.set(d.id, { lastFetch: d.last_fetch_at, at: Date.now() });
+  }
+
+  // Bỏ lượt chờ khi nguồn đã tải xong (không còn fetching, last_fetch_at đổi), đã bị xoá, hoặc quá QUEUED_MAX_MS
+  function pruneQueued(items) {
+    const byId = new Map(items.map((d) => [d.id, d]));
+    const now = Date.now();
+    queued.forEach((q, id) => {
+      const d = byId.get(id);
+      if (!d || now - q.at > QUEUED_MAX_MS || (!d.fetching && d.last_fetch_at !== q.lastFetch)) queued.delete(id);
+    });
+  }
 
   const sourcePath = (id) => PATH + '/' + encodeURIComponent(id);
 
@@ -35,7 +53,7 @@
 
     function metaText(d) {
       const parts = [RIGHTS[d.rights_status] || RIGHTS.pending_review, (d.channel_count || 0) + ' kênh'];
-      if (d.fetching) parts.push('Đang tải…');
+      if (d.fetching || queued.has(d.id)) parts.push('Đang tải…');
       else if (d.last_success_at) parts.push(ui.lastSeenText(d.last_success_at));   // chưa tải được lần nào: không ghi giờ
       return parts.join(' · ');
     }
@@ -64,7 +82,7 @@
       fill(Array.isArray(items) ? items : []);
     }
 
-    // Có nguồn đang tải thì tải lại mỗi POLL_MS; chỉ khi trang đang mở. close() dừng mọi bộ đếm
+    // Có nguồn đang tải hoặc đang chờ tải thì tải lại mỗi POLL_MS; chỉ khi trang đang mở. close() dừng mọi bộ đếm
     function schedule(fetching) {
       if (fetching && poll === null && ui.isOpen()) {
         poll = ui.every(POLL_MS, () => { if (!loading) reload(); });
@@ -87,6 +105,7 @@
       const ids = items.map((d) => d.id);
       if (!ids.includes(openId)) openId = null;
       if (!ids.includes(editId)) editId = null;
+      pruneQueued(items);
       const active = document.activeElement;
       let lostAt = -1;
       [...list.querySelectorAll(':scope > .set-source')].forEach((r, i) => {
@@ -109,7 +128,7 @@
         const target = next && next.querySelector('button');
         if (target) target.focus({ preventScroll: true });
       }
-      schedule(items.some((d) => d.fetching));
+      schedule(queued.size > 0 || items.some((d) => d.fetching));
     }
 
     function repaintAll() {
@@ -230,7 +249,13 @@
         else if (act === 'reject') patch({ rights_status: 'rejected' });
         else if (act === 'enable') patch({ enabled: true });
         else if (act === 'disable') patch({ enabled: false });
-        else if (act === 'refresh') write(() => ui.api('POST', sourcePath(cur.id) + '/refresh', {}));
+        else if (act === 'refresh') {
+          write(async () => {
+            await ui.api('POST', sourcePath(cur.id) + '/refresh', {});
+            queue(cur);   // hiện "Đang tải…" ngay, tải lại cho tới khi vòng lặp nền tải xong
+            paint();
+          });
+        }
         else if (act === 'edit') { editId = editId === cur.id ? null : cur.id; paint(); }
         else if (act === 'delete') {
           if (!root.confirm('Xoá nguồn ' + cur.name + '? Các kênh chỉ có ở nguồn này sẽ mất.')) return;
@@ -243,6 +268,7 @@
         const box = el('div', 'hometv-edit');
         // lưu một trường; lỗi do hàm dựng dòng tự báo dưới đúng dòng
         const save = async (body) => {
+          const prevUrl = cur.url;
           let next;
           try {
             next = await ui.api('PATCH', sourcePath(cur.id), body);
@@ -250,6 +276,8 @@
             if (err && err.status === 404) { await reload(); return; }
             throw err;
           }
+          // đổi URL: server đặt next_fetch_at = now; nguồn tắt thì vòng lặp nền không tải
+          if (next && next.url !== prevUrl && next.enabled) queue(next);
           apply(next);
           await reload();
         };
