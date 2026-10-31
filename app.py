@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
 import json
+import ipaddress
 import admin
 from cast import CastHub, format_sse, validate_command, validate_state
 from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
@@ -1023,17 +1024,31 @@ def require_admin(request: Request):
     if not _db_is_admin(request.state.device_id):
         raise HTTPException(status_code=403, detail="admin required")
 
+def _lockout_ip_key(ip: str) -> str:
+    """Khóa theo IP: IPv6 gộp về /64 để không xoay địa chỉ trong cùng dải."""
+    try:
+        addr = ipaddress.ip_address((ip or "").strip())
+    except ValueError:
+        return f"ip:{ip}"
+    if addr.version == 6:
+        if addr.ipv4_mapped is not None:
+            return f"ip:{addr.ipv4_mapped}"
+        return f"ip:{ipaddress.ip_network(f'{addr}/64', strict=False).network_address}/64"
+    return f"ip:{addr}"
+
 @app.post("/api/admin/login", dependencies=[Depends(require_admin_enabled)])
 async def admin_login_api(request: Request):
-    keys = [f"d:{request.state.device_id}", f"ip:{request.state.ip}"]
-    wait = admin_login_limiter.retry_after(keys)  # kiểm khóa trước khi so mật khẩu
-    if wait > 0:
-        return JSONResponse({"retry_after": wait}, status_code=429, headers={"Retry-After": str(wait)})
+    # Đọc thân TRƯỚC khi kiểm khóa; từ retry_after đến record_failure không có await,
+    # nên nhiều kết nối thân chậm không lọt qua cùng lúc
     try:
         body = await request.json()
     except ValueError:
         body = None
     candidate = body.get("password") if isinstance(body, dict) else None
+    keys = [f"d:{request.state.device_id}", _lockout_ip_key(request.state.ip)]
+    wait = admin_login_limiter.retry_after(keys)  # kiểm khóa trước khi so mật khẩu
+    if wait > 0:
+        return JSONResponse({"retry_after": wait}, status_code=429, headers={"Retry-After": str(wait)})
     if not admin.password_ok(candidate):
         admin_login_limiter.record_failure(keys)
         raise HTTPException(status_code=401, detail="wrong password")
@@ -1041,7 +1056,7 @@ async def admin_login_api(request: Request):
     await asyncio.to_thread(_db_set_admin, request.state.device_id, True)
     return Response(status_code=204)
 
-@app.post("/api/admin/logout", dependencies=[Depends(require_admin_enabled)])
+@app.post("/api/admin/logout", dependencies=[Depends(require_admin)])
 async def admin_logout_api(request: Request):
     await asyncio.to_thread(_db_set_admin, request.state.device_id, False)
     return Response(status_code=204)

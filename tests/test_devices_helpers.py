@@ -44,3 +44,28 @@ def test_device_kind_and_default_name():
     assert device_kind(tv) == "tv" and default_device_name("tv", tv) == "TV"
     assert device_kind(desktop) == "desktop" and default_device_name("desktop", desktop) == "Máy tính"
     assert default_device_name("phone", "Mozilla/5.0 (Linux; Android 14)") == "Điện thoại"
+
+
+def test_client_ip_ignores_spoofed_leading_hop():
+    trusted = frozenset({"10.0.0.2"})
+    assert client_ip("10.0.0.2", "1.2.3.4, 203.0.113.9", trusted) == "203.0.113.9"
+
+
+def test_client_ip_multi_proxy_chain_skips_trusted_hops():
+    trusted = frozenset({"10.0.0.2", "10.0.0.3"})
+    assert client_ip("10.0.0.2", "1.2.3.4, 203.0.113.9, 10.0.0.3", trusted) == "203.0.113.9"
+
+
+def test_client_ip_all_hops_trusted_uses_leftmost():
+    trusted = frozenset({"10.0.0.2", "10.0.0.3"})
+    assert client_ip("10.0.0.2", "10.0.0.3, 10.0.0.2", trusted) == "10.0.0.3"
+
+
+def test_client_ip_untrusted_peer_ignores_xff():
+    assert client_ip("198.51.100.4", "1.2.3.4, 5.6.7.8", frozenset({"10.0.0.2"})) == "198.51.100.4"
+
+
+def test_client_ip_empty_xff_returns_peer():
+    trusted = frozenset({"10.0.0.2"})
+    assert client_ip("10.0.0.2", "", trusted) == "10.0.0.2"
+    assert client_ip("10.0.0.2", " , ", trusted) == "10.0.0.2"

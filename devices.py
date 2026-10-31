@@ -44,13 +44,17 @@ def parse_trusted_proxies(value: str | None) -> frozenset[str]:
 
 
 def client_ip(peer: str | None, forwarded_for: str | None, trusted: frozenset[str]) -> str:
-    """IP client thật. Chỉ tin X-Forwarded-For khi peer nằm trong danh sách proxy tin cậy."""
+    """IP client thật. Chỉ tin X-Forwarded-For khi peer nằm trong danh sách proxy tin cậy; lấy hop ngoài cùng bên phải không phải proxy tin cậy."""
     if not peer:
         return "unknown"
     if peer in trusted and forwarded_for:
-        first = forwarded_for.split(",")[0].strip()
-        if first:
-            return first
+        hops = [h.strip() for h in forwarded_for.split(",") if h.strip()]
+        # Đi từ phải sang trái, bỏ proxy tin cậy; hop đầu do client tự khai nên không tin
+        for hop in reversed(hops):
+            if hop not in trusted:
+                return hop
+        if hops:
+            return hops[0]
     return peer
 
 

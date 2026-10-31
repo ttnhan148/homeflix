@@ -106,3 +106,59 @@ def test_is_admin_column_added_to_existing_db(app_module):
     app_module.init_db()
     cols = [r[1] for r in app_module.get_db().execute("PRAGMA table_info(devices)")]
     assert "is_admin" in cols
+
+
+def test_logout_requires_admin(pw, make_client):
+    assert post(make_client(), "/api/admin/logout").status_code == 403
+
+
+def test_ipv6_same_64_shares_lockout(pw, make_client):
+    for i in range(5):
+        post(make_client(ip=f"2001:db8:1:2::{i + 1}"), "/api/admin/login", {"password": "sai"})
+    assert post(make_client(ip="2001:db8:1:2:aaaa::9"), "/api/admin/login", {"password": "mk-test"}).status_code == 429
+    assert post(make_client(ip="2001:db8:1:3::1"), "/api/admin/login", {"password": "mk-test"}).status_code == 204
+
+
+def test_lockout_ip_key(app_module):
+    k = app_module._lockout_ip_key
+    assert k("203.0.113.7") == "ip:203.0.113.7"
+    assert k("2001:db8:1:2::1") == k("2001:db8:1:2:ffff::2") != k("2001:db8:1:3::1")
+    assert k("not-an-ip") == "ip:not-an-ip"
+
+
+def test_concurrent_delayed_body_logins_still_lock(pw, app_module):
+    import asyncio
+
+    async def one(gate):
+        scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST",
+                 "path": "/api/admin/login", "raw_path": b"/api/admin/login", "query_string": b"",
+                 "root_path": "", "scheme": "http",
+                 "headers": [(b"host", b"homeflix.test"), (b"user-agent", b"pytest"),
+                             (b"content-type", b"application/json")],
+                 "client": ("203.0.113.50", 50000), "server": ("homeflix.test", 80)}
+        sent, info = False, {}
+
+        async def receive():
+            nonlocal sent
+            if not sent:
+                await gate.wait()
+                sent = True
+                return {"type": "http.request", "body": b'{"password":"sai"}', "more_body": False}
+            await asyncio.sleep(3600)
+
+        async def send(msg):
+            if msg["type"] == "http.response.start":
+                info["status"] = msg["status"]
+
+        await app_module.app(scope, receive, send)
+        return info["status"]
+
+    async def run():
+        gate = asyncio.Event()
+        tasks = [asyncio.create_task(one(gate)) for _ in range(30)]
+        await asyncio.sleep(0.5)
+        gate.set()
+        return await asyncio.gather(*tasks)
+
+    codes = asyncio.run(run())
+    assert sorted(codes) == [401] * 5 + [429] * 25
