@@ -25,6 +25,7 @@ fi
 SRC="$STATE/src"
 rm -rf "$SRC"; mkdir -p "$SRC"
 git -C "$REPO" archive "$SHA" | tar -x -C "$SRC"
+if [ -f "$REPO/deploy/.env" ]; then cp "$REPO/deploy/.env" "$SRC/deploy/.env"; fi
 
 log "deploy $BRANCH@${SHA:0:7} (was ${DEPLOYED:0:7})"
 cd "$SRC/deploy"
