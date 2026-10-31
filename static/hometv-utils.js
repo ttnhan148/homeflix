@@ -36,8 +36,28 @@
     if (chip === 'favorites') list = list.filter((c) => c.favorite);
     else if (chip === 'recent') list = list.filter((c) => c.recent_at != null).sort((a, b) => b.recent_at - a.recent_at);
     else if (chip && chip !== 'all') list = list.filter((c) => groupOf(c) === chip);
+    if (opts && opts.alive) list = list.filter((c) => c.status === 'alive');
+    if (opts && opts.group) list = list.filter((c) => groupOf(c) === opts.group);
     if (q) list = list.filter((c) => fold(c.name).includes(q));
     return list;
+  }
+
+  function groupOptions(channels) {
+    const present = new Set(channels.map(groupOf));
+    return CATEGORY_ORDER.filter((key) => present.has(key)).map((key) => ({ value: key, label: CATEGORY_LABELS[key] }));
+  }
+
+  function recentChannels(channels, max) {
+    return channels.filter((c) => c.recent_at != null).sort((a, b) => b.recent_at - a.recent_at).slice(0, max);
+  }
+
+  function favoriteChannels(channels) {
+    return channels.filter((c) => c.favorite);
+  }
+
+  const STATUS_LABELS = { alive: 'Đang sống', dead: 'Đã chết', unchecked: 'Chưa kiểm' };
+  function statusLabel(status) {
+    return STATUS_LABELS[status] || '';
   }
 
   // Kênh kế/trước trong danh sách, quay vòng; null nếu id không có trong danh sách
@@ -52,7 +72,8 @@
     return t ? t.charAt(0).toLocaleUpperCase('vi') : '?';
   }
 
-  const api = { CATEGORY_ORDER, CATEGORY_LABELS, fold, buildChips, filterChannels, stepChannel, initial };
+  const api = { CATEGORY_ORDER, CATEGORY_LABELS, fold, buildChips, filterChannels, groupOptions, recentChannels,
+    favoriteChannels, statusLabel, stepChannel, initial };
   root.HFHomeTV = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

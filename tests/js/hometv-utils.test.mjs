@@ -46,3 +46,33 @@ test('initial: first letter upper-cased, ? when empty', () => {
   assert.equal(U.initial('  vtv'), 'V');
   assert.equal(U.initial(''), '?');
 });
+
+const mk = (id, category, status, extra) => Object.assign({ id, name: 'K' + id, category, status, favorite: false, recent_at: null }, extra);
+
+test('filterChannels: alive giữ kênh sống, ghép với group và query', () => {
+  const list = [mk(1, 'News', 'alive'), mk(2, 'News', 'dead'), mk(3, 'Sports', 'alive'), mk(4, 'News', 'unchecked')];
+  assert.deepEqual(U.filterChannels(list, { alive: true }).map((c) => c.id), [1, 3]);
+  assert.deepEqual(U.filterChannels(list, { alive: true, group: 'News' }).map((c) => c.id), [1]);
+  assert.deepEqual(U.filterChannels(list, { group: 'News', query: 'k4' }).map((c) => c.id), [4]);
+  assert.equal(U.filterChannels(list, { group: '' }).length, 4);
+});
+
+test('groupOptions: chỉ nhóm có mặt, theo thứ tự, nhóm lạ thành Khác', () => {
+  const list = [mk(1, 'Sports'), mk(2, 'News'), mk(3, 'Weird'), mk(4, 'News')];
+  assert.deepEqual(U.groupOptions(list), [
+    { value: 'News', label: 'Tin tức' }, { value: 'Sports', label: 'Thể thao' }, { value: 'Unknown', label: 'Khác' }]);
+});
+
+test('recentChannels mới nhất trước và cắt max; favoriteChannels', () => {
+  const list = [mk(1, 'News', null, { recent_at: 10, favorite: true }), mk(2, 'News', null, { recent_at: 30 }),
+    mk(3, 'News', null, { recent_at: 20 }), mk(4, 'News', null, { recent_at: 5 }), mk(5, 'News')];
+  assert.deepEqual(U.recentChannels(list, 3).map((c) => c.id), [2, 3, 1]);
+  assert.deepEqual(U.favoriteChannels(list).map((c) => c.id), [1]);
+});
+
+test('statusLabel', () => {
+  assert.equal(U.statusLabel('alive'), 'Đang sống');
+  assert.equal(U.statusLabel('dead'), 'Đã chết');
+  assert.equal(U.statusLabel('unchecked'), 'Chưa kiểm');
+  assert.equal(U.statusLabel(null), '');
+});
