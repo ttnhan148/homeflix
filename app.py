@@ -1030,6 +1030,7 @@ async def lifespan(app: FastAPI):
     _bg_tasks.append(asyncio.create_task(home_cache_warmer()))
     if hometv_ok:  # HomeTV chỉ chạy khi hometv.db mở được
         _bg_tasks.append(asyncio.create_task(hometv.scheduler.hometv_refresher()))
+        _bg_tasks.append(asyncio.create_task(hometv.health_scheduler.hometv_health_checker()))
     _warn_if_admin_disabled()
     logger.info("[Startup] HomeFlix ready — DB, workers, httpx client initialized")
     yield

@@ -1,7 +1,8 @@
 """HomeTV: thu thập nguồn IPTV vào hometv.db."""
 import time
 
-from hometv import api, catalog, db, fetcher, play, public_api, scheduler, sources
+from hometv import (api, catalog, db, fetcher, geo, health, health_scheduler, health_store, play, public_api,
+                    scheduler, scoring, sources)
 
 
 def init(path: str) -> None:
@@ -10,4 +11,5 @@ def init(path: str) -> None:
     sources.seed_defaults(time.time())
 
 
-__all__ = ["api", "catalog", "db", "fetcher", "init", "play", "public_api", "scheduler"]
+__all__ = ["api", "catalog", "db", "fetcher", "geo", "health", "health_scheduler", "health_store", "init", "play",
+           "public_api", "scheduler", "scoring"]
