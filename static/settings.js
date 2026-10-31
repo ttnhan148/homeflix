@@ -128,8 +128,8 @@
         setSaving(row, false);
       }
     });
-    // chạm vào chữ của dòng cũng bật/tắt
-    row.addEventListener('click', (e) => { if (!e.target.closest('button, input')) sw.click(); });
+    // chạm vào chữ của dòng cũng bật/tắt (trừ dòng lỗi)
+    row.addEventListener('click', (e) => { if (!e.target.closest('button, input, .set-error')) sw.click(); });
     row.hfSet = (v) => { if (!busy) { current = !!v; paint(); } };
     row.appendChild(sw);
     return row;

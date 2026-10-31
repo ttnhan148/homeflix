@@ -117,13 +117,31 @@ def test_remote_control_switch_persists(open_app):
 
 def test_switch_save_error_reverts(open_app):
     page = open_app()
-    page.route("**/api/cast/settings", lambda r: r.fulfill(status=500, body="x") if r.request.method == "PATCH" else r.fallback())
+    patches = []
+
+    def fail_patch(route):
+        if route.request.method != "PATCH":
+            return route.fallback()
+        patches.append(route.request.post_data)
+        route.fulfill(status=500, body="x")
+    page.route("**/api/cast/settings", fail_patch)
     page.goto(URL)
     tap(page, "#settingsBtn")
     page.wait_for_selector(DEVICE)
     tap(page, '[data-key="cast.allow_control"] .set-switch')
     page.wait_for_selector('[data-key="cast.allow_control"] .set-error')
     assert checked(page, "cast.allow_control") == "true"
+    tap(page, '[data-key="cast.allow_control"] .set-error')   # chạm dòng lỗi: không bật/tắt
+    page.wait_for_timeout(200)
+    assert checked(page, "cast.allow_control") == "true"
+    assert len(patches) == 1
+
+
+def test_tapping_row_label_toggles_switch(open_app):
+    page = _settings(open_app)
+    tap(page, '[data-key="player.autoIntro"] .set-label')
+    assert checked(page, "player.autoIntro") == "true"
+    assert page.evaluate("HFPlayerAuto.getPrefs().autoIntro") is True
 
 
 def test_player_prefs_shared_with_player_panel(open_app):
