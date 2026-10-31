@@ -21,6 +21,7 @@ def app_module(tmp_path, monkeypatch):
     m.init_db()
     hometv.init(str(tmp_path / "hometv.db"))
     yield m
+    m.hometv_play_client = None  # test có thể gán client giả; không để rò sang test khác
     hometv.db.close()
     if m._db_conn is not None:
         m._db_conn.close()

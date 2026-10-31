@@ -11,7 +11,7 @@ def test_open_creates_schema_wal_fk(tmp_path):
     c = hometv.db.conn()
     assert c.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert c.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 2
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 3
     tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"sources", "source_versions", "channels", "streams", "jobs", "schema_version"} <= tables
     idx = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='index'")}
@@ -126,7 +126,42 @@ def test_open_upgrades_v1_db(tmp_path):
     old.close()
     hometv.db.open(p)
     c = hometv.db.conn()
-    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 2
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 3
     tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"favorites", "recents"} <= tables
+    hometv.db.close()
+
+
+def test_stream_health_cascades_with_stream(db):
+    db.execute("INSERT INTO sources(id, name, url) VALUES ('a', 'a', 'https://x/a')")
+    db.execute("INSERT INTO channels(id, display_name) VALUES (1, 'k')")
+    db.execute("INSERT INTO streams(id, channel_id, source_id, url, url_hash) VALUES (1, 1, 'a', 'https://x', 'h')")
+    db.execute("INSERT INTO stream_health(stream_id, checked_at, ok) VALUES (1, 1.0, 1)")
+    db.execute("DELETE FROM streams WHERE id = 1")
+    assert db.execute("SELECT COUNT(*) FROM stream_health").fetchone()[0] == 0
+
+
+def test_open_upgrades_v2_db_adds_columns(tmp_path):
+    import sqlite3
+    p = str(tmp_path / "v2.db")
+    old = sqlite3.connect(p)
+    old.executescript(
+        "CREATE TABLE schema_version (version INTEGER NOT NULL); INSERT INTO schema_version VALUES (2);"
+        "CREATE TABLE sources (id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL,"
+        " priority INTEGER NOT NULL DEFAULT 50, enabled INTEGER NOT NULL DEFAULT 1,"
+        " rights_status TEXT NOT NULL DEFAULT 'pending_review', refresh_interval INTEGER NOT NULL DEFAULT 21600,"
+        " timeout INTEGER NOT NULL DEFAULT 30, max_size_mb INTEGER NOT NULL DEFAULT 20, last_fetch_at REAL,"
+        " last_success_at REAL, last_error TEXT, content_hash TEXT, channel_count INTEGER NOT NULL DEFAULT 0,"
+        " stream_count INTEGER NOT NULL DEFAULT 0, retry_count INTEGER NOT NULL DEFAULT 0, next_fetch_at REAL,"
+        " created_at REAL, updated_at REAL);"
+        "INSERT INTO sources(id, name, url) VALUES ('keep', 'Giữ', 'https://x/k');")
+    old.commit()
+    old.close()
+    hometv.db.open(p)
+    c = hometv.db.conn()
+    cols = {r[1] for r in c.execute("PRAGMA table_info(sources)")}
+    assert {"next_check_at", "last_check_at"} <= cols
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+    assert "stream_health" in {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert c.execute("SELECT name FROM sources WHERE id='keep'").fetchone()[0] == "Giữ"
     hometv.db.close()

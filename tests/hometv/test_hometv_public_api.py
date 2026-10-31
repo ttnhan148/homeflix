@@ -59,3 +59,22 @@ def test_unknown_or_hidden_channel_404(app_module, make_client):
     assert c.put("/api/hometv/favorites/2").status_code == 404
     assert c.put("/api/hometv/favorites/999").status_code == 404
     assert c.post("/api/hometv/recent/2").status_code == 404
+
+
+def test_public_api_uses_geo_enabled_for_hiding_but_play_still_works(app_module, make_client, monkeypatch):
+    import httpx
+
+    from hometv import geo, health_store
+    from hometv.geo import HealthMode
+    from hometv.health import HealthResult
+    seed(app_module)
+    for n in range(3):
+        health_store.record(1, HealthResult(ok=False, error="x"), True, float(n))
+    c = make_client()
+    monkeypatch.setattr(geo, "current", lambda now=None: HealthMode("auto", True, "VN", 1.0))
+    assert c.get("/api/hometv/channels").json() == []
+    app_module.hometv_play_client = hometv.fetcher.make_client(
+        httpx.MockTransport(lambda r: httpx.Response(200, content=b"#EXTM3U\n#EXTINF:4,\ns.ts\n")))
+    assert c.get("/api/hometv/play/1/index.m3u8").status_code == 200   # đường phát không lọc theo sức khỏe
+    monkeypatch.setattr(geo, "current", lambda now=None: HealthMode("auto", False, "MY", 1.0))
+    assert len(c.get("/api/hometv/channels").json()) == 1

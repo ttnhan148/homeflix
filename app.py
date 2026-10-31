@@ -1030,6 +1030,7 @@ async def lifespan(app: FastAPI):
     _bg_tasks.append(asyncio.create_task(home_cache_warmer()))
     if hometv_ok:  # HomeTV chỉ chạy khi hometv.db mở được
         _bg_tasks.append(asyncio.create_task(hometv.scheduler.hometv_refresher()))
+        _bg_tasks.append(asyncio.create_task(hometv.health_scheduler.hometv_health_checker()))
     _warn_if_admin_disabled()
     logger.info("[Startup] HomeFlix ready — DB, workers, httpx client initialized")
     yield
@@ -1161,6 +1162,7 @@ def require_admin(request: Request):
 
 # Route admin HomeTV (router tự gắn require_admin cho mọi route)
 app.include_router(hometv.api.make_router(require_admin))
+app.include_router(hometv.health_api.make_health_router(require_admin))
 # Route công khai HomeTV: kênh, yêu thích, đường phát
 app.include_router(hometv.public_api.make_public_router(lambda: get_hometv_play_client()))
 

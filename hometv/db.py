@@ -3,7 +3,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Khóa ghi: mọi transaction giữ khóa này
 lock = threading.Lock()
@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS sources (
     retry_count INTEGER NOT NULL DEFAULT 0,
     next_fetch_at REAL,
     created_at REAL,
-    updated_at REAL
+    updated_at REAL,
+    next_check_at REAL,
+    last_check_at REAL
 );
 CREATE TABLE IF NOT EXISTS source_versions (
     id INTEGER PRIMARY KEY,
@@ -82,6 +84,20 @@ CREATE TABLE IF NOT EXISTS jobs (
     skipped_lines INTEGER,
     error_message TEXT
 );
+CREATE TABLE IF NOT EXISTS stream_health (
+    stream_id INTEGER PRIMARY KEY REFERENCES streams(id) ON DELETE CASCADE,
+    checked_at REAL,
+    ok INTEGER NOT NULL,
+    error TEXT,
+    latency_ms INTEGER,
+    throughput_kbps INTEGER,
+    width INTEGER,
+    height INTEGER,
+    vcodec TEXT,
+    bitrate_kbps INTEGER,
+    fail_streak INTEGER NOT NULL DEFAULT 0,
+    score INTEGER NOT NULL DEFAULT 50
+);
 CREATE TABLE IF NOT EXISTS favorites (
     channel_id INTEGER PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
     created_at REAL NOT NULL
@@ -109,6 +125,11 @@ def open(path: str) -> None:
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA foreign_keys=ON")
         c.executescript(_SCHEMA)
+        # Bảng sources có từ trước: CREATE TABLE IF NOT EXISTS không thêm cột mới
+        have = {r[1] for r in c.execute("PRAGMA table_info(sources)")}
+        for col in ("next_check_at", "last_check_at"):
+            if col not in have:
+                c.execute(f"ALTER TABLE sources ADD COLUMN {col} REAL")
         if c.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 0:
             c.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
         else:

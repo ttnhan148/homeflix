@@ -176,6 +176,8 @@ def update(source_id: str, changes: dict, now: float) -> dict:
     if errors:
         raise ValidationError(errors)
     sets = dict(ok, updated_at=now)
+    if ok.get("rights_status") == "approved" and cur_row["rights_status"] != "approved":
+        sets["next_check_at"] = now  # vừa duyệt: chấm điểm stream sớm
     url_changed = "url" in ok and ok["url"] != cur_row["url"]
     if url_changed:  # đổi URL: tải lại từ đầu, bỏ bản tốt của URL cũ
         sets.update(content_hash=None, next_fetch_at=now, retry_count=0, last_error=None)
@@ -248,7 +250,8 @@ def record_success(source_id: str, *, now: float, content_hash: str, body: bytes
                       (source_id,)).fetchone()
         if r is None:
             return
-        if r["content_hash"] != content_hash:  # hash đổi mới lưu bản
+        changed = r["content_hash"] != content_hash
+        if changed:  # hash đổi mới lưu bản
             c.execute("INSERT INTO source_versions(source_id, content_hash, fetched_at, entry_count, body) "
                       "VALUES (?,?,?,?,?)", (source_id, content_hash, now, entry_count, gzip.compress(body)))
             c.execute("DELETE FROM source_versions WHERE source_id=? AND id NOT IN (SELECT id FROM "
@@ -258,6 +261,8 @@ def record_success(source_id: str, *, now: float, content_hash: str, body: bytes
                   "stream_count=?, retry_count=0, last_error=NULL, next_fetch_at=? WHERE id=?",
                   (content_hash, now, now, stats.channels, stats.streams,
                    now + r["refresh_interval"], source_id))
+        if changed:  # playlist mới: stream mới cần được chấm điểm sớm
+            c.execute("UPDATE sources SET next_check_at=? WHERE id=?", (now, source_id))
 
 
 def record_unchanged(source_id: str, *, now: float) -> None:

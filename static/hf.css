@@ -3478,3 +3478,16 @@ body.device-mobile #tvGrid {
 body.device-tv .tv-player-title {
     font-size: 24px;
 }
+
+/* HomeTV (Cài đặt): trạng thái bộ kiểm stream và danh sách stream chết */
+.hometv-health-status {
+    padding: 8px var(--edge);
+}
+
+.hometv-dead {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px var(--edge);
+    font-size: 13px;
+}

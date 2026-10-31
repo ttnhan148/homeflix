@@ -3,6 +3,7 @@
 // Chữ từ server (tên, URL, lỗi) chỉ đi qua textContent.
 (function (root) {
   const PATH = '/api/admin/hometv/sources';
+  const STATUS_PATH = '/api/admin/hometv/health/status';
   const POLL_MS = 3000;   // có nguồn đang tải: tải lại danh sách
   const QUEUED_MAX_MS = 90000;   // vòng lặp nền nhận lượt trong ≤ 60 giây; quá hạn này thì thôi chờ
   const RIGHTS = { pending_review: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
@@ -15,6 +16,20 @@
   // Nguồn vừa bấm "Làm mới ngay" hoặc vừa đổi URL: server chỉ đặt next_fetch_at = now, vòng lặp nền
   // nhận lượt sau (fetching chưa bật ngay). id -> { lastFetch: last_fetch_at lúc bấm, at: Date.now() }
   const queued = new Map();
+  // Nguồn vừa bấm "Kiểm tra ngay": server chỉ đặt next_check_at = now, vòng lặp nền nhận lượt sau (≤ 60 giây).
+  // id -> { at, seen }: seen = đã thấy health.checking bật; thôi chờ khi bật rồi tắt, hoặc quá QUEUED_MAX_MS
+  const queuedChecks = new Map();
+
+  function pruneChecks(items) {
+    const byId = new Map(items.map((d) => [d.id, d]));
+    const now = Date.now();
+    queuedChecks.forEach((q, id) => {
+      const d = byId.get(id);
+      const checking = !!(d && d.health && d.health.checking);
+      if (checking) q.seen = true;
+      if (!d || (q.seen && !checking) || (!q.seen && now - q.at > QUEUED_MAX_MS)) queuedChecks.delete(id);
+    });
+  }
 
   function queue(d) {
     queued.set(d.id, { lastFetch: d.last_fetch_at, at: Date.now() });
@@ -35,6 +50,7 @@
   // 422 {"errors": {field: lý do}} -> lý do đầu tiên; 503 -> HomeTV chưa sẵn sàng
   function errorText(err) {
     if (err && err.status === 503) return 'HomeTV chưa sẵn sàng';
+    if (err && err.status === 409 && err.data && typeof err.data.detail === 'string') return err.data.detail;
     const errors = err && err.data && err.data.errors;
     const first = errors && Object.values(errors).find((v) => typeof v === 'string');
     return first || 'Không lưu được';
@@ -46,6 +62,16 @@
     const list = el('div', 'set-list');
     section.appendChild(list);
     const addRow = addSourceRow();
+    let health = { enabled: false, country: null };   // trạng thái bộ kiểm stream của máy chủ
+    const statusRow = el('div', 'set-note hometv-health-status');
+    statusRow.tabIndex = 0;   // chỉ-đọc nhưng điều khiển từ xa phải tới được
+    section.insertBefore(statusRow, list);
+
+    function paintStatus() {
+      statusRow.textContent = 'Kiểm tra stream: ' + (health.enabled ? 'bật (máy chủ ở VN)'
+        : health.country ? 'tắt (máy chủ ngoài Việt Nam)' : 'tắt (chưa xác định vị trí máy chủ)');
+    }
+    paintStatus();
     let loaded = false;
     let loadSeq = 0;
     let loading = 0;
@@ -53,8 +79,11 @@
 
     function metaText(d) {
       const parts = [RIGHTS[d.rights_status] || RIGHTS.pending_review, (d.channel_count || 0) + ' kênh'];
+      const h = d.health;
+      if (d.rights_status === 'approved' && h && h.checked > 0) parts.push(h.alive + '/' + h.checked + ' sống');
       if (d.fetching || queued.has(d.id)) parts.push('Đang tải…');
       else if (d.last_success_at) parts.push(ui.lastSeenText(d.last_success_at));   // chưa tải được lần nào: không ghi giờ
+      if ((h && h.checking) || queuedChecks.has(d.id)) parts.push('Đang kiểm tra…');
       return parts.join(' · ');
     }
 
@@ -64,6 +93,7 @@
       loading++;
       let items = null;
       let failure = null;
+      const statusReq = ui.api('GET', STATUS_PATH).catch(() => null);   // lỗi trạng thái không làm hỏng danh sách
       try {
         items = await ui.api('GET', PATH);
       } catch (err) {
@@ -79,6 +109,9 @@
         return;   // lỗi mạng lúc đang có danh sách: giữ nguyên, lượt sau thử lại
       }
       loaded = true;
+      const st = await statusReq;
+      if (seq !== loadSeq || !section.isConnected) return;
+      if (st && typeof st.enabled === 'boolean') { health = st; paintStatus(); }
       fill(Array.isArray(items) ? items : []);
     }
 
@@ -106,6 +139,7 @@
       if (!ids.includes(openId)) openId = null;
       if (!ids.includes(editId)) editId = null;
       pruneQueued(items);
+      pruneChecks(items);
       const active = document.activeElement;
       let lostAt = -1;
       [...list.querySelectorAll(':scope > .set-source')].forEach((r, i) => {
@@ -128,7 +162,7 @@
         const target = next && next.querySelector('button');
         if (target) target.focus({ preventScroll: true });
       }
-      schedule(queued.size > 0 || items.some((d) => d.fetching));
+      schedule(queued.size > 0 || queuedChecks.size > 0 || items.some((d) => d.fetching || (d.health && d.health.checking)));
     }
 
     function repaintAll() {
@@ -154,6 +188,7 @@
       let panel = null;    // .set-source-actions
       let items = null;    // .set-subactions trong panel
       let editor = null;   // khối Sửa
+      let deadBox = null;  // danh sách stream chết
       const slots = {};    // nút theo chỗ: Duyệt/Bỏ duyệt cùng một nút để focus trên TV không rơi
 
       function paint() {
@@ -189,7 +224,7 @@
       function paintActions() {
         if (openId !== cur.id) {
           if (panel) panel.remove();
-          panel = items = editor = null;
+          panel = items = editor = deadBox = null;
           return;
         }
         if (!panel) {
@@ -208,6 +243,9 @@
           cur.rights_status !== 'rejected' && slot('reject', 'reject', 'Từ chối'),
           cur.enabled ? slot('power', 'disable', 'Tắt') : slot('power', 'enable', 'Bật'),
           cur.enabled && slot('refresh', 'refresh', 'Làm mới ngay'),   // nguồn tắt không được tải
+          approved && cur.enabled && health.enabled && slot('check', 'check', 'Kiểm tra ngay'),
+          approved && slot('dead', 'dead', 'Xem stream chết'),
+          deadBox,
           slot('edit', 'edit', 'Sửa'),
           editor,
           slot('delete', 'delete', 'Xoá', true),
@@ -243,6 +281,27 @@
 
       const patch = (body) => write(async () => apply(await ui.api('PATCH', sourcePath(cur.id), body)));
 
+      // Danh sách stream chết ngay trong dòng (tối đa 50); chữ chỉ đi qua textContent
+      async function toggleDead() {
+        if (deadBox) { deadBox.remove(); deadBox = null; paintActions(); return; }
+        deadBox = el('div', 'set-note hometv-dead');
+        deadBox.appendChild(el('div', 'hometv-dead-loading', 'Đang tải…'));
+        paintActions();
+        const mine = deadBox;
+        let list = null;
+        try {
+          list = await ui.api('GET', sourcePath(cur.id) + '/health?status=dead&limit=50');
+        } catch (err) {
+          list = null;
+        }
+        if (deadBox !== mine) return;   // đã đóng hoặc dựng lại trong lúc chờ
+        mine.replaceChildren();
+        if (!Array.isArray(list)) mine.appendChild(el('div', 'hometv-dead-empty', 'Không tải được'));
+        else if (list.length === 0) mine.appendChild(el('div', 'hometv-dead-empty', 'Không có stream chết'));
+        else list.forEach((d) => mine.appendChild(el('div', 'hometv-dead-item',
+          d.channel_name + ' · ' + (d.error || 'Lỗi') + ' · chết ' + d.fail_streak + ' lần')));
+      }
+
       function run(act) {
         if (act === 'approve') patch({ rights_status: 'approved' });
         else if (act === 'unapprove') patch({ rights_status: 'pending_review' });
@@ -256,6 +315,14 @@
             paint();
           });
         }
+        else if (act === 'check') {
+          write(async () => {
+            await ui.api('POST', sourcePath(cur.id) + '/check', {});
+            queuedChecks.set(cur.id, { at: Date.now(), seen: false });   // hiện "Đang kiểm tra…" ngay
+            paint();
+          });
+        }
+        else if (act === 'dead') toggleDead();
         else if (act === 'edit') { editId = editId === cur.id ? null : cur.id; paint(); }
         else if (act === 'delete') {
           if (!root.confirm('Xoá nguồn ' + cur.name + '? Các kênh chỉ có ở nguồn này sẽ mất.')) return;
