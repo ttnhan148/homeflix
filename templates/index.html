@@ -2119,6 +2119,10 @@
         </div>
     </div>
     <div id="castToast" class="cast-toast glass" role="status" hidden></div>
+    <div id="undoToast" class="undo-toast glass" role="status" aria-live="polite">
+        <span class="undo-text">Đã bỏ khỏi Xem tiếp</span>
+        <button type="button" class="undo-btn" onclick="undoContinueRemoval()" tabindex="-1">Hoàn tác</button>
+    </div>
     <button type="button" id="castMiniBar" class="cast-mini glass" aria-label="Mở điều khiển TV" hidden>
         <span class="cast-mini-info">
             <span id="castMiniTitle" class="cast-mini-title"></span>
@@ -2760,8 +2764,53 @@ document.addEventListener('visibilitychange', () => {
 
         // --- HERO (phim hot chiếu rạp) ---
         const HERO_IMAGE_FIELD = 'thumb_url'; // đổi sang 'poster_url' nếu hướng ảnh không hợp
-        const HERO_COUNT = 5;
+        const HERO_COUNT = 10;
+        const HERO_AUTO_MS = 4500;
         const heroState = { items: [], details: {}, pending: {}, index: 0, loaded: false };
+        // Tự trượt: chỉ khi hàng đang hiện trên màn hình và không ai chạm, trỏ chuột hay focus vào nó
+        const heroAuto = { timer: 0, running: false, onScreen: false, holds: new Set() };
+        const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+        // Đếm lại từ đầu sau mỗi lần dừng: thẻ không nhảy ngay lúc vừa buông tay
+        function heroAutoRestart() {
+            clearTimeout(heroAuto.timer);
+            heroAuto.running = heroState.items.length > 1 && heroAuto.onScreen && !heroAuto.holds.size
+                && !document.hidden && !reducedMotion.matches;
+            if (!heroAuto.running) return;
+            heroAuto.timer = setTimeout(() => {
+                // Đang mở trình phát (phủ lên trang chủ): giữ nguyên thẻ, chờ lượt sau
+                if (!document.body.classList.contains('player-active')) {
+                    const track = document.getElementById('heroTrack');
+                    const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+                    showHeroSlide(HFUtils.heroNext(heroState.index, heroState.items.length, atEnd), { scroll: true });
+                }
+                heroAutoRestart();
+            }, HERO_AUTO_MS);
+        }
+
+        function heroHold(reason, on) {
+            heroAuto.holds[on ? 'add' : 'delete'](reason);
+            heroAutoRestart();
+        }
+
+        function setupHeroAuto() {
+            const hero = document.getElementById('hero');
+            const track = document.getElementById('heroTrack');
+            track.addEventListener('touchstart', () => heroHold('touch', true), { passive: true });
+            track.addEventListener('touchend', () => heroHold('touch', false));
+            track.addEventListener('touchcancel', () => heroHold('touch', false));
+            track.addEventListener('wheel', heroAutoRestart, { passive: true });
+            hero.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') heroHold('hover', true); });
+            hero.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') heroHold('hover', false); });
+            hero.addEventListener('focusin', () => heroHold('focus', true));
+            hero.addEventListener('focusout', e => { if (!hero.contains(e.relatedTarget)) heroHold('focus', false); });
+            new IntersectionObserver(([e]) => {
+                heroAuto.onScreen = e.isIntersecting;
+                heroAutoRestart();
+            }, { threshold: 0.5 }).observe(hero);
+            document.addEventListener('visibilitychange', heroAutoRestart);
+            reducedMotion.addEventListener('change', heroAutoRestart);
+        }
 
         async function loadHeroItems() {
             for (const path of ['/api/home/phim-chieu-rap', '/api/home/phim-le']) {
@@ -2936,6 +2985,7 @@ document.addEventListener('visibilitychange', () => {
             updateHeroSaveLabels();
             if (window.refreshPlayLabels) refreshPlayLabels();
             showHeroSlide(0);
+            heroAutoRestart();
         }
 
         const POSTER_PLACEHOLDER = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>';
@@ -3677,6 +3727,7 @@ document.addEventListener('visibilitychange', () => {
         const SVG_BACK = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>';
         const SVG_BOOKMARK = '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>';
         const SVG_PLAY = '<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+        const SVG_TRASH = '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>';
 
         function iconButton(className, svg, label, onClick) {
             const btn = el('button', className);
@@ -3944,8 +3995,136 @@ document.addEventListener('visibilitychange', () => {
             play.innerHTML = SVG_PLAY;
             card.appendChild(play);
             card.setAttribute('aria-label', `Phát tiếp ${m.name}`);
-            card.addEventListener('click', () => playResumeSavedMovie(m.slug));
-            return card;
+            card.addEventListener('click', () => { if (!card.dataset.swiped) playResumeSavedMovie(m.slug); });
+            const row = el('div', 'swipe-row' + (className.includes('is-lead') ? ' swipe-lead' : ''));
+            const act = (cls, svg, label) => {
+                const a = el('span', `swipe-act ${cls}`);
+                a.setAttribute('aria-hidden', 'true');
+                a.innerHTML = svg;
+                a.appendChild(el('span', '', label));
+                return a;
+            };
+            row.append(act('swipe-act-play', SVG_PLAY, 'Xem tiếp'), act('swipe-act-remove', SVG_TRASH, 'Bỏ'), card);
+            attachContinueSwipe(row, card, m.slug);
+            return row;
+        }
+
+        // Vuốt ngang thẻ "Xem tiếp" (điện thoại): sang phải phát tiếp, sang trái bỏ khỏi danh sách (có hoàn tác).
+        // Hướng chốt ở 8px đầu: dọc thì để trang cuộn, ngang thì thẻ chạy theo ngón tay.
+        function attachContinueSwipe(row, card, slug) {
+            let x0 = 0, y0 = 0, dx = 0, axis = null, lastX = 0, lastT = 0, v = 0;
+            const settle = () => {
+                row.classList.remove('is-dragging', 'is-armed');
+                delete row.dataset.dir;
+                card.style.transform = '';
+            };
+            card.addEventListener('touchstart', (e) => {
+                axis = document.body.classList.contains('device-mobile') && e.touches.length === 1 ? null : 'none';
+                if (axis) return;
+                const t = e.touches[0];
+                x0 = lastX = t.clientX; y0 = t.clientY; lastT = e.timeStamp; dx = 0; v = 0;
+            }, { passive: true });
+            card.addEventListener('touchmove', (e) => {
+                if (axis === 'none' || axis === 'y') return;
+                const t = e.touches[0];
+                const mx = t.clientX - x0, my = t.clientY - y0;
+                if (!axis) {
+                    if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+                    axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+                    if (axis === 'y') return;
+                    row.classList.add('is-dragging');
+                }
+                if (e.cancelable) e.preventDefault();
+                if (e.timeStamp > lastT) v = (t.clientX - lastX) / (e.timeStamp - lastT);
+                lastX = t.clientX; lastT = e.timeStamp;
+                dx = mx;
+                row.dataset.dir = dx > 0 ? 'play' : 'remove';
+                row.classList.toggle('is-armed', HFUtils.swipeAction(dx, card.offsetWidth) !== null);
+                card.style.transform = `translateX(${dx}px)`;
+            }, { passive: false });
+            const end = (e) => {
+                if (axis !== 'x') return;
+                axis = null;
+                if (e.timeStamp - lastT > 100) v = 0; // dừng tay rồi mới nhấc: không tính là hất
+                const action = e.type === 'touchend' ? HFUtils.swipeAction(dx, card.offsetWidth, v) : null;
+                card.dataset.swiped = '1'; // nuốt click trình duyệt có thể bắn ngay sau cú vuốt
+                setTimeout(() => { delete card.dataset.swiped; }, 400);
+                if (action === 'remove') return removeFromContinue(slug, row);
+                settle();
+                // Phát ngay trong touchend (cử chỉ người dùng): iOS mới cho video có tiếng chạy
+                if (action === 'play') playResumeSavedMovie(slug);
+            };
+            card.addEventListener('touchend', end);
+            card.addEventListener('touchcancel', end);
+        }
+
+        // Bỏ khỏi Xem tiếp: ẩn ngay, chờ CONTINUE_UNDO_MS mới gọi server để còn kịp hoàn tác.
+        // Chỉ thẻ bỏ gần nhất hoàn tác được; bỏ thẻ khác thì thẻ trước được gửi đi luôn.
+        const CONTINUE_UNDO_MS = 5000;
+        const continueHidden = new Set();
+        let continueRemoval = null;
+
+        function removeFromContinue(slug, row) {
+            commitContinueRemoval();
+            continueHidden.add(slug);
+            continueRemoval = { slug, timer: setTimeout(commitContinueRemoval, CONTINUE_UNDO_MS) };
+            document.getElementById('undoToast').classList.add('is-open');
+            document.querySelector('#undoToast .undo-btn').tabIndex = 0;
+            // Thẻ trượt hẳn sang trái, hàng thu lại, rồi vẽ lại danh sách (thẻ thứ tư lên thay)
+            row.style.height = row.offsetHeight + 'px';
+            row.classList.remove('is-dragging');
+            row.classList.add('is-leaving');
+            row.offsetHeight;
+            row.classList.add('is-collapsing');
+            setTimeout(renderContinueLists, 280);
+        }
+
+        function closeUndoToast() {
+            document.getElementById('undoToast').classList.remove('is-open');
+            document.querySelector('#undoToast .undo-btn').tabIndex = -1;
+        }
+
+        async function commitContinueRemoval() {
+            const r = continueRemoval;
+            if (!r) return;
+            continueRemoval = null;
+            clearTimeout(r.timer);
+            closeUndoToast();
+            try {
+                const res = await fetch(`/api/saved/${encodeURIComponent(r.slug)}/progress`, { method: 'DELETE', keepalive: true });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    savedMoviesList = data.movie
+                        ? savedMoviesList.map(i => i.slug === r.slug ? data.movie : i)
+                        : savedMoviesList.filter(i => i.slug !== r.slug);
+                }
+            } catch (e) { console.warn('Không bỏ được khỏi Xem tiếp', r.slug, e); }
+            continueHidden.delete(r.slug);
+            renderContinueLists();
+        }
+
+        function undoContinueRemoval() {
+            const r = continueRemoval;
+            if (!r) return;
+            continueRemoval = null;
+            clearTimeout(r.timer);
+            closeUndoToast();
+            continueHidden.delete(r.slug);
+            renderContinueLists();
+        }
+
+        // Rời trang khi đang chờ hoàn tác: gửi luôn (keepalive giữ request sống qua lúc đóng)
+        window.addEventListener('pagehide', commitContinueRemoval);
+
+        function libraryParts() {
+            const parts = HFUtils.splitLibrary(savedMoviesList);
+            parts.continueWatching = parts.continueWatching.filter(m => !continueHidden.has(m.slug));
+            return parts;
+        }
+
+        function renderContinueLists() {
+            renderHomeContinue();
+            renderLibraryContinue();
         }
 
         function renderContinueRow(rows) {
@@ -3960,21 +4139,26 @@ document.addEventListener('visibilitychange', () => {
             const section = document.getElementById('homeContinue');
             const list = document.getElementById('homeContinueList');
             if (!section || !list) return;
-            const rows = HFUtils.splitLibrary(savedMoviesList).continueWatching.slice(0, HOME_CONTINUE_MAX);
+            const rows = libraryParts().continueWatching.slice(0, HOME_CONTINUE_MAX);
             list.innerHTML = '';
             rows.forEach((m, i) => list.appendChild(buildContinueCard(m, 'home-cont' + (i === 0 ? ' is-lead' : ''))));
             section.hidden = rows.length === 0;
+        }
+
+        function renderLibraryContinue() {
+            const { continueWatching, saved } = libraryParts();
+            document.getElementById('continueSection').hidden = continueWatching.length === 0;
+            document.getElementById('savedSection').hidden = saved.length === 0;
+            document.getElementById('libraryEmpty').hidden = continueWatching.length + saved.length > 0;
+            renderContinueRow(continueWatching);
+            return saved;
         }
 
         async function renderSavedMovies() {
             const grid = document.getElementById('savedMoviesGrid');
             await fetchSavedMovies();
 
-            const { continueWatching, saved } = HFUtils.splitLibrary(savedMoviesList);
-            document.getElementById('continueSection').hidden = continueWatching.length === 0;
-            document.getElementById('savedSection').hidden = saved.length === 0;
-            document.getElementById('libraryEmpty').hidden = continueWatching.length + saved.length > 0;
-            renderContinueRow(continueWatching);
+            const saved = renderLibraryContinue();
             grid.innerHTML = '';
             if (saved.length === 0) return;
 
@@ -4075,6 +4259,7 @@ document.addEventListener('visibilitychange', () => {
         // Initialize Smart Homepage
         (async function initHomepage() {
             loadFilterData();
+            setupHeroAuto();
             loadHeroItems();
             await fetchHomeSection('all', 1);
             renderGridCards(false);

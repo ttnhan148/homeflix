@@ -93,3 +93,35 @@ test('progressPct clamps and handles missing', () => {
   assert.equal(U.progressPct({ position: 999, duration: 200 }), 100);
   assert.equal(U.progressPct({}), 0);
 });
+
+test('swipeAction: kéo đủ xa sang phải là phát, sang trái là bỏ', () => {
+  assert.equal(U.swipeAction(130, 400), 'play');
+  assert.equal(U.swipeAction(-130, 400), 'remove');
+  assert.equal(U.swipeAction(60, 400), null);
+  assert.equal(U.swipeAction(-60, 400), null);
+  assert.equal(U.swipeAction(0, 400), null);
+});
+
+test('swipeAction: ngưỡng theo bề rộng, giữ trong 72..120px', () => {
+  assert.equal(U.swipeAction(100, 300), 'play');   // 30% của 300 = 90
+  assert.equal(U.swipeAction(85, 300), null);
+  assert.equal(U.swipeAction(75, 200), 'play');    // 30% = 60, nâng lên 72
+  assert.equal(U.swipeAction(-115, 1000), null);   // 30% = 300, hạ xuống 120
+  assert.equal(U.swipeAction(-121, 1000), 'remove');
+});
+
+test('swipeAction: vuốt nhanh ngắn vẫn tính, vuốt chậm ngắn thì không', () => {
+  assert.equal(U.swipeAction(50, 400, 0.8), 'play');
+  assert.equal(U.swipeAction(-50, 400, -0.8), 'remove');
+  assert.equal(U.swipeAction(50, 400, 0.2), null);
+  assert.equal(U.swipeAction(20, 400, 1.5), null);   // quá ngắn: là chạm lệch tay
+  assert.equal(U.swipeAction(50, 400, -0.8), null);  // hất ngược chiều kéo
+});
+
+test('heroNext đi tới thẻ kế, hết hàng thì quay về đầu', () => {
+  assert.equal(U.heroNext(0, 10), 1);
+  assert.equal(U.heroNext(8, 10), 9);
+  assert.equal(U.heroNext(9, 10), 0);
+  assert.equal(U.heroNext(4, 10, true), 0);  // đã cuộn tới cuối (nhiều thẻ hiện cùng lúc)
+  assert.equal(U.heroNext(0, 1), 0);
+});

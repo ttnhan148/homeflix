@@ -21,10 +21,10 @@ def _details_ready(page, n=1):
     page.wait_for_function(f"Object.keys(heroState.details).length >= {n}")
 
 
-def test_hero_shows_five_chieu_rap_cards_under_one_heading(open_app):
+def test_hero_shows_ten_chieu_rap_cards_under_one_heading(open_app):
     page = _open(open_app)
     page.wait_for_selector(".hero-slide")
-    assert page.locator(".hero-slide").count() == 5
+    assert page.locator(".hero-slide").count() == 10
     assert page.locator("#heroHeading").inner_text() == "Đang chiếu rạp"
     assert page.locator(".hero-badge").count() == 0
     assert "/proxy/image" in page.locator(".hero-slide img.hero-bg").first.get_attribute("src")
@@ -49,7 +49,7 @@ def test_hero_prefetches_current_and_next_detail_only(open_app):
     _details_ready(page, 2)
     movie = lambda n: f"GET /api/movie/phim-chieu-rap-{n}"
     assert movie(1) in page.requests and movie(2) in page.requests
-    assert movie(5) not in page.requests
+    assert movie(5) not in page.requests and movie(10) not in page.requests
     page.evaluate("(() => { const t = document.getElementById('heroTrack'); const s = t.querySelectorAll('.hero-slide');"
                   " t.scrollTo({left: s[3].offsetLeft - s[0].offsetLeft, behavior: 'instant'}); })()")
     page.wait_for_function("heroState.index === 3")
@@ -118,3 +118,76 @@ def test_tv_hero_arrow_keys_change_slide_and_buttons_focusable(open_app):
     page.wait_for_function("heroState.index === 1")
     page.focus(".hero-btn-save")
     assert page.evaluate("document.activeElement.classList.contains('hero-btn-save')")
+
+
+AUTO_MS = 4500
+LEFT = "document.getElementById('heroTrack').scrollLeft"
+
+
+def _clocked(open_app, **kw):
+    page = open_app(**kw)
+    page.clock.install()
+    page.goto(URL)
+    page.wait_for_selector(".hero-slide")
+    _details_ready(page)
+    return page
+
+
+def _slide_left(page, i):
+    return page.evaluate(f"(() => {{ const s = document.querySelectorAll('.hero-slide'); return s[{i}].offsetLeft - s[0].offsetLeft; }})()")
+
+
+def test_hero_auto_slides_to_next_card_smoothly(open_app):
+    page = _clocked(open_app)
+    assert page.evaluate("heroState.index") == 0 and page.evaluate(LEFT) == 0
+    page.clock.fast_forward(AUTO_MS + 50)
+    page.wait_for_function("heroState.index === 1")
+    page.wait_for_function(f"Math.abs({LEFT} - {_slide_left(page, 1)}) < 2")
+    page.clock.fast_forward(AUTO_MS + 50)
+    page.wait_for_function("heroState.index === 2")
+
+
+def test_hero_auto_slide_wraps_to_first_after_last(open_app):
+    page = _clocked(open_app)
+    page.evaluate("(() => { const t = document.getElementById('heroTrack'); t.scrollTo({left: t.scrollWidth, behavior: 'instant'}); })()")
+    page.wait_for_function("heroState.index === 9")
+    page.clock.fast_forward(AUTO_MS + 50)
+    page.wait_for_function(f"heroState.index === 0 && {LEFT} < 2")
+
+
+def test_hero_auto_slide_waits_while_finger_is_on_it(open_app):
+    page = _clocked(open_app)
+    page.dispatch_event("#heroTrack", "touchstart")
+    page.clock.fast_forward(AUTO_MS * 2)
+    page.wait_for_timeout(300)
+    assert page.evaluate("heroState.index") == 0
+    page.dispatch_event("#heroTrack", "touchend")
+    page.clock.fast_forward(AUTO_MS + 50)
+    page.wait_for_function("heroState.index === 1")
+
+
+def test_hero_auto_slide_waits_while_focused_on_tv(open_app):
+    page = _clocked(open_app, tv=True)
+    page.focus(".hero-btn-play")
+    page.clock.fast_forward(AUTO_MS * 2)
+    page.wait_for_timeout(300)
+    assert page.evaluate("heroState.index") == 0
+
+
+def test_hero_does_not_auto_slide_with_reduced_motion(open_app):
+    page = open_app()
+    page.emulate_media(reduced_motion="reduce")
+    page.clock.install()
+    page.goto(URL)
+    page.wait_for_selector(".hero-slide")
+    page.clock.fast_forward(AUTO_MS * 2)
+    page.wait_for_timeout(300)
+    assert page.evaluate("heroState.index") == 0
+
+
+def test_hero_does_not_auto_slide_when_off_screen(open_app):
+    page = _clocked(open_app)
+    page.evaluate("switchTab('saved-tab')")
+    page.clock.fast_forward(AUTO_MS * 2)
+    page.wait_for_timeout(300)
+    assert page.evaluate("heroState.index") == 0

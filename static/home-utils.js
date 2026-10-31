@@ -102,7 +102,21 @@
     return Math.max(0, Math.min(100, Math.round((row.position / row.duration) * 100)));
   }
 
-  const api = { stripHtml, heroMeta, shortEpisode, cardMeta, epShort, continueMeta, mergeTypePages, resumeTarget, splitLibrary, progressPct };
+  // Vuốt ngang thẻ "Xem tiếp": phải là phát, trái là bỏ. Kéo quá ngưỡng (30% bề rộng, 72..120px)
+  // hoặc hất nhanh (px/ms) cùng chiều kéo khi đã kéo được 40px.
+  function swipeAction(dx, width, velocity) {
+    const threshold = Math.min(120, Math.max(72, (width || 0) * 0.3));
+    const flick = Math.abs(dx) >= 40 && Math.abs(velocity || 0) >= 0.5 && Math.sign(velocity) === Math.sign(dx);
+    if (Math.abs(dx) < threshold && !flick) return null;
+    return dx > 0 ? 'play' : 'remove';
+  }
+
+  // Thẻ chiếu rạp tự trượt: tới thẻ kế, hết hàng (hoặc đã cuộn chạm cuối) thì về đầu
+  function heroNext(index, n, atEnd) {
+    return atEnd || index + 1 >= n ? 0 : index + 1;
+  }
+
+  const api = { stripHtml, heroMeta, shortEpisode, cardMeta, epShort, continueMeta, mergeTypePages, resumeTarget, splitLibrary, progressPct, swipeAction, heroNext };
   root.HFUtils = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

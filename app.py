@@ -1730,6 +1730,41 @@ async def save_movie_progress_api(request: Request, progress: dict):
     await save_device_movie(device_id, movie)
     return {"status": "success", "movie": movie}
 
+async def _forget_device_movie(device_id: str, movie: dict) -> None:
+    slug = movie["slug"]
+    await delete_device_movie(device_id, slug)
+    # File tải xuống, cache và record tải xuống là dùng chung: chỉ dọn khi
+    # không còn thiết bị nào khác giữ phim này.
+    if await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
+        return
+
+    # 1. Xóa các record tải xuống của phim trong DB
+    await asyncio.to_thread(
+        lambda ms=slug: db_execute("DELETE FROM episode_downloads WHERE movie_slug = ?", (ms,))
+    )
+    
+    # 2. Xóa các thư mục cache phân đoạn liên quan đến từng tập phim
+    for ep in movie.get("episodes", []):
+        ep_url = ep.get("link_m3u8")
+        if ep_url:
+            sid = hashlib.md5(ep_url.encode()).hexdigest()
+            session_dir = os.path.join(CACHE_DIR, sid)
+            if os.path.exists(session_dir):
+                try:
+                    shutil.rmtree(session_dir)
+                    logger.info(f"Đã xóa thư mục cache tập phim: {session_dir}")
+                except Exception as e:
+                    logger.warning(f"Lỗi khi xóa cache {session_dir}: {e}")
+                    
+    # 3. Xóa thư mục tải xuống của phim
+    movie_dir = os.path.join(DOWNLOAD_DIR, slug)
+    if os.path.exists(movie_dir):
+        try:
+            if _safe_rmtree_under(DOWNLOAD_DIR, movie_dir):
+                logger.info(f"Đã xóa thư mục tải xuống: {movie_dir}")
+        except Exception as e:
+            logger.warning(f"Lỗi khi xóa thư mục {movie_dir}: {e}")
+
 @app.delete("/api/saved/{slug}")
 async def delete_saved_movie_api(request: Request, slug: str):
     if not _valid_slug(slug):
@@ -1737,40 +1772,32 @@ async def delete_saved_movie_api(request: Request, slug: str):
     device_id = request.state.device_id
     movie = await get_device_movie(device_id, slug)
     if movie:
-        await delete_device_movie(device_id, slug)
-        # File tải xuống, cache và record tải xuống là dùng chung: chỉ dọn khi
-        # không còn thiết bị nào khác giữ phim này.
-        if await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
-            return {"status": "success"}
-
-        # 1. Xóa các record tải xuống của phim trong DB
-        await asyncio.to_thread(
-            lambda ms=slug: db_execute("DELETE FROM episode_downloads WHERE movie_slug = ?", (ms,))
-        )
-        
-        # 2. Xóa các thư mục cache phân đoạn liên quan đến từng tập phim
-        for ep in movie.get("episodes", []):
-            ep_url = ep.get("link_m3u8")
-            if ep_url:
-                sid = hashlib.md5(ep_url.encode()).hexdigest()
-                session_dir = os.path.join(CACHE_DIR, sid)
-                if os.path.exists(session_dir):
-                    try:
-                        shutil.rmtree(session_dir)
-                        logger.info(f"Đã xóa thư mục cache tập phim: {session_dir}")
-                    except Exception as e:
-                        logger.warning(f"Lỗi khi xóa cache {session_dir}: {e}")
-                        
-        # 3. Xóa thư mục tải xuống của phim
-        movie_dir = os.path.join(DOWNLOAD_DIR, slug)
-        if os.path.exists(movie_dir):
-            try:
-                if _safe_rmtree_under(DOWNLOAD_DIR, movie_dir):
-                    logger.info(f"Đã xóa thư mục tải xuống: {movie_dir}")
-            except Exception as e:
-                logger.warning(f"Lỗi khi xóa thư mục {movie_dir}: {e}")
+        await _forget_device_movie(device_id, movie)
         return {"status": "success"}
     return {"status": "error", "message": "Movie not found"}
+
+def _db_clear_device_progress(device_id: str, slug: str, episode_states: dict) -> None:
+    # Ghi thẳng NULL: upsert giữ vị trí cũ khi position là None (COALESCE)
+    db_execute("UPDATE device_movies SET last_watched_episode = '', last_watched_url = '', position_sec = NULL, "
+               "duration_sec = NULL, episode_states = ?, updated_at = ? WHERE device_id = ? AND slug = ?",
+               (json.dumps(episode_states, ensure_ascii=False), datetime.now().isoformat(), device_id, slug))
+
+@app.delete("/api/saved/{slug}/progress")
+async def remove_from_continue_api(request: Request, slug: str):
+    """Bỏ phim khỏi "Xem tiếp". Phim đã lưu chỉ mất tiến độ; phim chỉ có lịch sử thì xóa hẳn."""
+    if not _valid_slug(slug):
+        return {"status": "error", "message": "Invalid slug"}
+    device_id = request.state.device_id
+    movie = await get_device_movie(device_id, slug)
+    if not movie:
+        return {"status": "error", "message": "Movie not found"}
+    if not movie["saved"]:
+        await _forget_device_movie(device_id, movie)
+        return {"status": "success", "movie": None}
+    # Tập đang dở bỏ trạng thái "watching": xem lại sau đó không bị coi là tập vừa xem xong rồi lên lịch xóa file
+    states = {u: s for u, s in movie.get("episode_states", {}).items() if s != "watching"}
+    await asyncio.to_thread(_db_clear_device_progress, device_id, slug, states)
+    return {"status": "success", "movie": await get_device_movie(device_id, slug)}
 
 @app.post("/api/download")
 async def download_episode_api(payload: dict):

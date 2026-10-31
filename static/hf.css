@@ -453,7 +453,7 @@ body.device-tv .sec-link {
     width: 100%;
     padding: 10px 0;
     border: 0;
-    background: none;
+    background: var(--ground); /* nền đặc: khi vuốt, thẻ che lớp hành động bên dưới */
     color: inherit;
     text-align: left;
     cursor: pointer;
@@ -562,12 +562,159 @@ body.device-tv .sec-link {
     height: 4px;
 }
 
+/* Vuốt ngang (điện thoại): thẻ chạy theo ngón tay, lộ lớp "Xem tiếp" bên trái hoặc "Bỏ" bên phải */
+.swipe-row {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    touch-action: pan-y;
+}
+
+.swipe-row.swipe-lead {
+    margin-bottom: 6px;
+    border-radius: 20px;
+}
+
+.swipe-row.swipe-lead > .home-cont {
+    margin-bottom: 0;
+}
+
+.swipe-row > .home-cont,
+.swipe-row > .continue-card {
+    position: relative;
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    will-change: transform;
+}
+
+.swipe-row.is-dragging > .home-cont,
+.swipe-row.is-dragging > .continue-card {
+    transition: none;
+}
+
+.swipe-act {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 22px;
+    background: var(--raised);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    opacity: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.swipe-act svg {
+    width: 20px;
+    height: 20px;
+    transition: transform 0.15s ease;
+}
+
+.swipe-act-remove {
+    justify-content: flex-end;
+}
+
+.swipe-row[data-dir="play"] .swipe-act-play,
+.swipe-row[data-dir="remove"] .swipe-act-remove,
+.swipe-row.is-leaving .swipe-act-remove {
+    opacity: 1;
+}
+
+/* Quá ngưỡng: buông tay là chạy */
+.swipe-row.is-armed .swipe-act-play {
+    background: #fff;
+    color: #000;
+}
+
+.swipe-row.is-armed .swipe-act-remove,
+.swipe-row.is-leaving .swipe-act-remove {
+    background: var(--accent);
+    color: #fff;
+}
+
+.swipe-row.is-armed .swipe-act svg {
+    transform: scale(1.15);
+}
+
+.swipe-row.is-leaving > .home-cont,
+.swipe-row.is-leaving > .continue-card {
+    transform: translateX(-100%) !important;
+    transition-duration: 0.2s;
+}
+
+.swipe-row.is-collapsing {
+    height: 0 !important;
+    margin-bottom: 0;
+    transition: height 0.22s ease 0.06s, margin-bottom 0.22s ease 0.06s;
+}
+
+.undo-toast {
+    position: fixed;
+    left: max(12px, var(--safe-left));
+    right: max(12px, var(--safe-right));
+    bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px);
+    z-index: 995;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4px 6px 4px 18px;
+    border: 1px solid var(--glass-line);
+    border-radius: var(--pill);
+    font-size: 15px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(12px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+}
+
+.undo-toast.is-open {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition-delay: 0s;
+}
+
+.undo-btn {
+    min-height: var(--tap);
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--pill);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .swipe-row > .home-cont,
+    .swipe-row > .continue-card,
+    .swipe-row.is-collapsing,
+    .undo-toast {
+        transition: none;
+    }
+}
+
 /* Máy tính, TV: Xem tiếp là hàng thẻ */
 body:not(.device-mobile) .home-continue,
 body:not(.device-mobile) .continue-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
+}
+
+/* Không vuốt: hàng bọc biến mất khỏi bố cục, thẻ là ô lưới như cũ */
+body:not(.device-mobile) .swipe-row {
+    display: contents;
+}
+
+body:not(.device-mobile) .swipe-act {
+    display: none;
 }
 
 body:not(.device-mobile) .home-cont,
