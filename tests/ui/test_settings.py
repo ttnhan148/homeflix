@@ -229,3 +229,24 @@ def test_no_horizontal_scroll(pw, open_app, tv):
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     width = page.evaluate("document.querySelector('#settings-tab .settings-page').getBoundingClientRect().width")
     assert width <= 640
+
+
+def test_tv_arrows_move_between_rows_and_controls(open_app):
+    page = _settings(open_app, tv=True)
+    page.focus('[data-key="device.name"] button')
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.closest('.set-row').dataset.key") == "cast.allow_control"
+    for _ in range(3):
+        page.keyboard.press("ArrowDown")
+    page.keyboard.press("ArrowRight")
+    assert page.evaluate("document.activeElement.dataset.dir") == "1"
+
+
+def test_arrows_ignored_on_phone(open_app):
+    page = _settings(open_app, tv=False)
+    page.focus('[data-key="device.name"] button')
+    prevented = page.evaluate(
+        "(() => { const e = new KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true, cancelable: true});"
+        " document.activeElement.dispatchEvent(e); return e.defaultPrevented; })()")
+    assert prevented is False
+    assert page.evaluate("document.activeElement.closest('.set-row').dataset.key") == "device.name"

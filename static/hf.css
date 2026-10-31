@@ -3232,3 +3232,13 @@ body.device-tv .set-subaction:focus {
 body.device-tv .set-meter {
     height: 8px;
 }
+
+/* Dòng chỉ-đọc nhận focus để điều khiển từ xa tới được */
+.set-row[tabindex="0"]:focus {
+    outline: none;
+}
+
+body.device-tv .set-row[tabindex="0"]:focus-visible {
+    outline: 4px solid #fff !important;
+    outline-offset: -4px;
+}

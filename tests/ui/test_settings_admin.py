@@ -432,3 +432,78 @@ def test_revoke_others_asks_and_revokes(pw, open_app):
     assert page.locator('[data-key="admin.revoke_others"] .set-note').inner_text() == "Đã thu quyền 1 máy"
     page.wait_for_function("document.querySelectorAll('.set-device .set-tag').length === 1")
     assert server_json(other, "/api/settings")["is_admin"] is False
+
+
+def active_desc(page):
+    return page.evaluate("(() => { const a = document.activeElement; const r = a.closest('.set-row');"
+                         " return [r && (r.dataset.key || r.dataset.id), a.dataset.act || a.dataset.dir || a.tagName]; })()")
+
+
+def test_tv_every_row_reachable_by_arrows(pw, open_app):
+    page = admin_page(open_app, tv=True)
+    page.focus('[data-key="device.name"] button')
+    seen = ["device.name"]
+    for _ in range(40):
+        page.keyboard.press("ArrowDown")
+        seen.append(active_desc(page)[0])
+    expected = page.evaluate("[...document.querySelectorAll('#settingsBody .set-row')].map(r => r.dataset.key || r.dataset.id)")
+    assert set(expected) <= set(seen), set(expected) - set(seen)
+    assert page.evaluate("document.activeElement.closest('.set-row').dataset.key") == "hometv.iptv"
+    # và ngược lên
+    for _ in range(40):
+        page.keyboard.press("ArrowUp")
+    assert page.evaluate("document.activeElement.closest('.set-row').dataset.key") == "device.name"
+    # dòng chỉ-đọc có vòng focus nhìn thấy
+    page.focus('[data-key="cache.usage"]')
+    assert page.evaluate("getComputedStyle(document.activeElement).outlineStyle") != "none"
+
+
+def test_tv_open_device_actions_walk_down_one_by_one(pw, open_app):
+    page = open_app(tv=True)
+    page.goto(URL)
+    other = open_app(width=1280, height=800)
+    other.goto(URL)
+    page.reload()
+    tap(page, "#settingsBtn")
+    page.wait_for_selector(DEVICE)
+    login(page, "mk-test")
+    page.wait_for_selector(SYSTEM)
+    other_row = page.locator(".set-device").filter(has_not=page.locator(".set-device-meta", has_text="máy này")).first
+    other_row.locator(".set-action").focus()
+    page.keyboard.press("Enter")
+    page.wait_for_selector('.set-device [data-act="delete"]')
+    # mỗi thao tác xếp dọc là một dòng riêng: Xuống đi qua từng cái
+    for act in ("rename", "admin", "delete"):
+        page.keyboard.press("ArrowDown")
+        assert page.evaluate("document.activeElement.dataset.act") == act
+    page.keyboard.press("ArrowUp")
+    assert page.evaluate("document.activeElement.dataset.act") == "admin"
+
+
+def test_admin_empty_password_sends_nothing(pw, open_app):
+    page = open_app(tv=True)
+    page.goto(URL)
+    tap(page, "#settingsBtn")
+    page.wait_for_selector(DEVICE)
+    tap(page, '[data-key="admin.login"]')
+    page.wait_for_selector("#adminPassword")
+    page.evaluate("document.querySelector('.set-form').requestSubmit()")
+    page.press("#adminPassword", "Enter")
+    page.wait_for_timeout(400)
+    assert not [r for r in page.requests if "admin/login" in r], page.requests
+    assert page.locator(".set-error").count() == 0
+    page.fill("#adminPassword", "mk-test")
+    page.press("#adminPassword", "Enter")
+    page.wait_for_selector(SYSTEM)
+
+
+def test_tv_arrows_inside_password_keep_caret(pw, open_app):
+    page = open_app(tv=True)
+    page.goto(URL)
+    tap(page, "#settingsBtn")
+    page.wait_for_selector(DEVICE)
+    tap(page, '[data-key="admin.login"]')
+    page.fill("#adminPassword", "abc")
+    page.keyboard.press("ArrowLeft")
+    assert page.evaluate("document.activeElement.id") == "adminPassword"
+    assert page.evaluate("document.activeElement.selectionStart") == 2

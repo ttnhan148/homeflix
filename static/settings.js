@@ -415,7 +415,7 @@
       };
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (busy) return;
+        if (busy || !input.value) return;   // TV: OK nhầm lúc ô trống không được tốn một lượt trong 5 lượt khoá
         busy = true;
         clearError(row);
         setSaving(row, true);
@@ -716,6 +716,7 @@
   function fillDevices(box, devices) {
     if (!Array.isArray(devices)) {
       const row = baseRow('devices.error', 'Không tải được danh sách');
+      row.tabIndex = 0;   // dòng chỉ-đọc vẫn phải với tới được bằng điều khiển từ xa
       box.replaceChildren(listOf([row]));
       return;
     }
@@ -759,6 +760,7 @@
   // --- Hệ thống: dựng từ groups của GET /api/settings ---
   function cacheRow(cache) {
     const row = baseRow('cache.usage', 'Cache đang dùng');
+    row.tabIndex = 0;   // chỉ-đọc nhưng điều khiển từ xa phải tới được
     const text = el('span', 'set-meter-text');
     const bar = el('div', 'set-meter');
     const fill = el('div', 'set-meter-fill');
@@ -819,6 +821,7 @@
   // --- HomeTV: khung, nội dung thật ở gói sau ---
   function hometvGroup() {
     const row = baseRow('hometv.iptv');
+    row.tabIndex = 0;   // chỉ-đọc nhưng điều khiển từ xa phải tới được
     const label = el('span', 'set-label', 'Nguồn IPTV');
     label.appendChild(el('span', 'set-muted', ' · có ở bản sau'));
     row.appendChild(label);
@@ -913,6 +916,49 @@
     const row = document.querySelector('#settingsBody .set-row[data-key="' + key + '"]');
     if (row && row.hfSet) row.hfSet(v);
   }
+
+  // --- Điều khiển từ xa (TV): phím mũi tên đi trong lưới dòng x phần tử ---
+  const NAV_FOCUSABLE = 'button, input, [tabindex="0"]';
+  const visible = (n) => !n.disabled && n.getClientRects().length > 0;
+
+  // Lưới: mỗi .set-row có phần tử focus được là một dòng (chính dòng đó tính nếu có tabindex),
+  // cột là các phần tử ấy theo thứ tự DOM. Quy tắc cho máy đang mở: mọi phần tử nằm trong
+  // .set-device-actions (xếp dọc) tự thành một dòng riêng, nên Xuống đi qua từng thao tác
+  function navGrid() {
+    const grid = [];
+    $('settingsBody').querySelectorAll('.set-row').forEach((row) => {
+      const own = [];
+      if (row.matches('[tabindex="0"]') && visible(row)) own.push(row);
+      const cells = [...row.querySelectorAll(NAV_FOCUSABLE)].filter(visible);
+      cells.forEach((n) => { if (!n.closest('.set-device-actions')) own.push(n); });
+      if (own.length) grid.push(own);
+      cells.forEach((n) => { if (n.closest('.set-device-actions')) grid.push([n]); });
+    });
+    return grid;
+  }
+
+  function onNavKey(e) {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (!document.body.classList.contains('device-tv')) return;
+    const tab = $('settings-tab');
+    const target = e.target;
+    if (!tab || !target || !tab.contains(target) || !tab.classList.contains('active')) return;
+    // trong ô nhập chữ, trái/phải thuộc về con trỏ; chỉ Lên/Xuống mới rời ô
+    if (target.tagName === 'INPUT' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
+    const grid = navGrid();
+    let row = -1;
+    let col = -1;
+    grid.forEach((cells, r) => { const c = cells.indexOf(target); if (c >= 0) { row = r; col = c; } });
+    if (row < 0) return;
+    const [r, c] = U.gridMove(grid.map((cells) => cells.length), row, col, e.key);
+    const next = grid[r] && grid[r][c];
+    if (!next || next === target) return;
+    e.preventDefault();
+    next.focus({ preventScroll: true });
+    next.scrollIntoView({ block: 'nearest' });
+  }
+  document.addEventListener('keydown', onNavKey);
 
   // Panel #playerPrefs hoặc lệnh cast đổi cài đặt phát: trang Cài đặt hiện đúng
   document.addEventListener('hf-prefs', (e) => {

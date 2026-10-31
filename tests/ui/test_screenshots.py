@@ -50,3 +50,24 @@ def test_iphone_logo_stays_below_dynamic_island(open_app):
     page.goto("http://homeflix.test/")
     page.wait_for_selector("#homeGridContent .movie-card")
     assert page.evaluate("document.querySelector('#appHeader h1').getBoundingClientRect().top") >= 59
+
+
+@pytest.mark.parametrize("w,h,tv", SIZES)
+def test_settings_screenshot(pw, open_app, tmp_path, w, h, tv):
+    page = open_app(width=w, height=h, tv=tv, safe=(0 if tv else 59, 0, 0 if tv else 34, 0))
+    page.goto("http://homeflix.test/")
+    page.wait_for_selector("#homeGridContent .movie-card")
+    page.click("#settingsBtn")
+    page.wait_for_selector('.set-group[data-group="device"]')
+    page.click('[data-key="admin.login"]')
+    page.fill("#adminPassword", "mk-test")
+    page.press("#adminPassword", "Enter")
+    page.wait_for_selector('.set-group[data-group="hometv"]')
+    if tv:
+        page.focus('[data-key="cache.clear"] button')
+    out = Path(os.environ.get("SCREENSHOT_DIR", tmp_path))
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"settings-{w}x{h}.png"
+    page.screenshot(path=str(path), full_page=True)
+    assert path.stat().st_size > 20_000
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
