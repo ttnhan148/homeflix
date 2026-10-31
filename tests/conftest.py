@@ -1,6 +1,7 @@
 import pytest
 
 import admin
+import hometv
 from cast import CastHub
 from fastapi.testclient import TestClient
 
@@ -18,10 +19,20 @@ def app_module(tmp_path, monkeypatch):
     monkeypatch.setattr(m, "cast_hub", CastHub())
     monkeypatch.setattr(m, "admin_login_limiter", admin.LoginLimiter(), raising=False)
     m.init_db()
+    hometv.init(str(tmp_path / "hometv.db"))
     yield m
+    hometv.db.close()
     if m._db_conn is not None:
         m._db_conn.close()
         m._db_conn = None
+
+@pytest.fixture
+def db(tmp_path):
+    # Chỉ schema, không có nguồn mặc định
+    hometv.db.open(str(tmp_path / "h.db"))
+    yield hometv.db.conn()
+    hometv.db.close()
+
 
 @pytest.fixture
 def make_client(app_module):

@@ -30,6 +30,7 @@ import json
 import ipaddress
 import admin
 import settings
+import hometv
 from cast import CastHub, format_sse, validate_command, validate_state
 from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
                      household_id, parse_trusted_proxies)
@@ -985,6 +986,16 @@ def _warn_if_admin_disabled() -> None:
         logger.warning("HOMEFLIX_ADMIN_PASSWORD chưa đặt: tính năng admin đang tắt")
 
 
+def _init_hometv() -> bool:
+    # HomeTV hỏng không được làm HomeFlix dừng: chỉ log lỗi
+    try:
+        hometv.init(os.path.join(DATA_DIR, "hometv.db"))
+        return True
+    except Exception:
+        logger.exception("HomeTV: không mở được hometv.db, tắt HomeTV")
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: init DB, workers. Shutdown: close httpx client, cancel tasks."""
@@ -993,6 +1004,7 @@ async def lifespan(app: FastAPI):
     init_db()
     # Chạy di chuyển dữ liệu downloads.json nếu có
     migrate_downloads_json_to_db()
+    _init_hometv()
     # Reset các download bị treo do server restart
     await asyncio.to_thread(_db_reset_stuck_downloads)
     # Khởi tạo HTTP client (chuyển vào lifespan để đóng sạch khi shutdown)
