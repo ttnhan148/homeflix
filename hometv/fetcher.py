@@ -68,13 +68,14 @@ def _decoder(encoding: str):
 
 
 async def _get(client: httpx.AsyncClient, url: str, timeout: float, max_bytes: int,
-               max_redirects: int) -> bytes:
+               max_redirects: int, headers: dict[str, str] | None = None) -> tuple[bytes, str]:
     limit = FetchError(f"Quá {max_bytes // (1024 * 1024)} MB")
     current = url
     for hop in range(max_redirects + 1):
         await _guard(current)
         async with client.stream(
-                "GET", current, headers={"accept-encoding": "identity"},
+                "GET", current, headers={**{k: v for k, v in (headers or {}).items() if k.lower() != "accept-encoding"},
+                         "accept-encoding": "identity"},
                 follow_redirects=False, timeout=httpx.Timeout(timeout)) as resp:
             code = resp.status_code
             if code in REDIRECT_CODES:
@@ -108,18 +109,27 @@ async def _get(client: httpx.AsyncClient, url: str, timeout: float, max_bytes: i
                     raise limit
             if decode is not None and not decode.done():
                 raise FetchError(BROKEN)
-            return bytes(body)
+            return bytes(body), current
     raise FetchError("Quá nhiều lần chuyển hướng")  # không tới được
 
 
-async def fetch_playlist(client: httpx.AsyncClient, url: str, *, timeout: float,
-                         max_bytes: int, max_redirects: int = 5) -> bytes:
+async def fetch_playlist_url(client: httpx.AsyncClient, url: str, *, timeout: float, max_bytes: int,
+                             max_redirects: int = 5,
+                             headers: dict[str, str] | None = None) -> tuple[bytes, str]:
+    """Như fetch_playlist, thêm header tuỳ chọn và trả URL cuối sau chuyển hướng."""
     try:
         async with asyncio.timeout(timeout):  # tổng thời gian cả lượt (mọi bước + body)
-            return await _get(client, url, timeout, max_bytes, max_redirects)
+            return await _get(client, url, timeout, max_bytes, max_redirects, headers)
     except (TimeoutError, httpx.TimeoutException):
         raise FetchError("Hết thời gian chờ")
     except (httpx.InvalidURL, UnicodeError):  # Location hỏng do httpx parse trong stream()
         raise FetchError(netguard.INVALID, retryable=False)
     except httpx.RequestError:
         raise FetchError("Không kết nối được")
+
+
+async def fetch_playlist(client: httpx.AsyncClient, url: str, *, timeout: float,
+                         max_bytes: int, max_redirects: int = 5) -> bytes:
+    body, _ = await fetch_playlist_url(client, url, timeout=timeout, max_bytes=max_bytes,
+                                       max_redirects=max_redirects)
+    return body
