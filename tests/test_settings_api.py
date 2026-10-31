@@ -70,3 +70,24 @@ def test_home_warmer_reads_refresh_minutes(app_module, monkeypatch):
     except asyncio.CancelledError:
         pass
     assert slept == [900]
+
+
+def test_startup_warns_when_admin_disabled(app_module, monkeypatch, caplog):
+    import logging
+    monkeypatch.delenv("HOMEFLIX_ADMIN_PASSWORD", raising=False)
+    with caplog.at_level(logging.WARNING, logger=app_module.logger.name):
+        app_module._warn_if_admin_disabled()
+    assert "HOMEFLIX_ADMIN_PASSWORD" in caplog.text
+
+
+def test_startup_no_warning_when_admin_configured(app_module, monkeypatch, caplog):
+    import logging
+    monkeypatch.setenv("HOMEFLIX_ADMIN_PASSWORD", "s3cret-pass-xyz")
+    with caplog.at_level(logging.WARNING, logger=app_module.logger.name):
+        app_module._warn_if_admin_disabled()
+    assert caplog.text == ""
+
+
+def test_lifespan_calls_admin_warning(app_module):
+    import inspect
+    assert "_warn_if_admin_disabled()" in inspect.getsource(app_module.lifespan)

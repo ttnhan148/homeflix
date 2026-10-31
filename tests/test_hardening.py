@@ -1,3 +1,4 @@
+from tests.cast_helpers import real_id
 import os
 
 U1, U2 = "http://x/1.m3u8", "http://x/2.m3u8"
@@ -26,7 +27,7 @@ def test_dot_slugs_rejected_and_never_delete_parent_dirs(app_module, tmp_path, m
 
 def test_delete_never_removes_outside_download_dir(app_module, tmp_path, make_client):
     # slug hợp lệ về chữ nhưng bị chèn thẳng vào DB: realpath phải chặn rmtree ra ngoài DOWNLOAD_DIR
-    c = make_client(); dev = c.get("/api/device").json()["id"]
+    c = make_client(); dev = real_id(c)
     app_module._db_upsert_device_movie(dev, {"slug": "a/../..", "name": "x", "episodes": [], "episode_states": {}})
     outside = tmp_path / "keep.txt"; outside.write_text("x")
     r = app_module._safe_rmtree_under(app_module.DOWNLOAD_DIR, os.path.join(app_module.DOWNLOAD_DIR, "a/../.."))

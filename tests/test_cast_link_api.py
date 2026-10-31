@@ -1,3 +1,4 @@
+from tests.cast_helpers import real_id
 OTHER_IP = "198.51.100.9"
 
 
@@ -7,8 +8,8 @@ class Rig:
     def __init__(self, m, make_client, tv_ip="203.0.113.7", tv_sse=True):
         self.m = m
         self.phone, self.tv = make_client(), make_client(ip=tv_ip)
-        self.phone_id = self.phone.get("/api/device").json()["id"]
-        self.tv_id = self.tv.get("/api/device").json()["id"]
+        self.phone_id = real_id(self.phone)
+        self.tv_id = real_id(self.tv)
         self.tv_pid = m._cast_public_id(self.tv_id)          # id công khai: thứ duy nhất xuất hiện trên đường truyền
         self.phone_pid = m._cast_public_id(self.phone_id)
         self.tv.post("/api/devices/heartbeat", json={"kind": "tv"})
@@ -76,7 +77,7 @@ def test_connect_unknown_or_non_tv_target_or_self_is_403(app_module, make_client
     r = Rig(app_module, make_client)
     assert r.phone.post("/api/cast/not-a-device/connect").status_code == 403
     other_phone = make_client()
-    other_id = other_phone.get("/api/device").json()["id"]
+    other_id = real_id(other_phone)
     assert r.phone.post(f"/api/cast/{app_module._cast_public_id(other_id)}/connect").status_code == 403
     assert r.tv.post(f"/api/cast/{r.tv_pid}/connect").status_code == 403
 

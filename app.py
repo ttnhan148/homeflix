@@ -379,7 +379,8 @@ def _register_request_device(device_id: str, ip: str, user_agent: str, adopt_leg
                             adopt_legacy=adopt_legacy)
 
 def _public_device(row: dict) -> dict:
-    return {k: row[k] for k in ("id", "name", "kind", "created_at", "last_seen")}
+    # Không trả "id": đó chính là giá trị cookie xác thực hf_device.
+    return {k: row[k] for k in ("name", "kind", "created_at", "last_seen")}
 
 def _valid_device_cookie(value: str | None) -> str | None:
     """Chỉ nhận UUIDv4 dạng chuẩn có gạch nối; mọi thứ khác bị coi là không có cookie."""
@@ -979,6 +980,11 @@ client: httpx.AsyncClient | None = None
 # Background tasks được track để cancel sạch khi shutdown.
 _bg_tasks: list[asyncio.Task] = []
 
+def _warn_if_admin_disabled() -> None:
+    if not admin.configured():
+        logger.warning("HOMEFLIX_ADMIN_PASSWORD chưa đặt: tính năng admin đang tắt")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: init DB, workers. Shutdown: close httpx client, cancel tasks."""
@@ -1000,6 +1006,7 @@ async def lifespan(app: FastAPI):
     _bg_tasks.append(asyncio.create_task(download_worker()))
     _bg_tasks.append(asyncio.create_task(delayed_cleanup_worker()))
     _bg_tasks.append(asyncio.create_task(home_cache_warmer()))
+    _warn_if_admin_disabled()
     logger.info("[Startup] HomeFlix ready — DB, workers, httpx client initialized")
     yield
     # Shutdown: hủy background tasks + đóng httpx client
@@ -1052,7 +1059,9 @@ templates.env.globals["asset"] = lambda name: asset_url(name)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # Không credentials: nếu bật, Starlette phản chiếu mọi Origin kèm credentials=true,
+    # làm vô hiệu lớp chống CSRF của các route ghi (JSON-only) với subdomain cùng site.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

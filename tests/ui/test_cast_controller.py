@@ -15,7 +15,8 @@ class Tv:
     def __init__(self, m, make_client, name=None):
         self.m = m
         self.client = make_client(ip="testclient")
-        self.real_id = self.client.get("/api/device").json()["id"]
+        self.client.get("/api/device")
+        self.real_id = self.client.cookies["hf_device"]
         self.id = m._cast_public_id(self.real_id)        # id công khai: cái iPhone nhìn thấy và dùng trong route
         self.client.post("/api/devices/heartbeat", json={"kind": "tv"})
         if name:
@@ -39,7 +40,7 @@ def open_phone(open_app, init=None, **kw):
     page.goto(URL)
     page.wait_for_function("window.HFCast && HFCast.started === true")
     page.wait_for_selector(".hero-slide")
-    page.phone_id = page.evaluate("fetch('/api/device').then(r => r.json()).then(d => d.id)")
+    page.phone_id = next(c["value"] for c in page.context.cookies() if c["name"] == "hf_device")
     return page
 
 

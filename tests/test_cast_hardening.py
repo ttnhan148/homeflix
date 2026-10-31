@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from cast import CastHub
-from tests.cast_helpers import asgi_stream
+from tests.cast_helpers import real_id, asgi_stream
 from tests.test_cast_link_api import OTHER_IP, Rig
 
 EPS = [{"name": "Tập 1", "link_m3u8": "http://x/1.m3u8"}]
@@ -27,7 +27,8 @@ def test_stranger_cannot_impersonate_tv_with_nearby_id(app_module, make_client):
     (item,) = stranger.get("/api/devices/nearby").json()
     stranger.cookies.set("hf_device", item["id"])           # thử dùng id lấy từ danh sách làm cookie
     assert stranger.get("/api/saved").json() == []
-    assert stranger.get("/api/device").json()["id"] != r.tv_id
+    stranger.get("/api/device")
+    assert r.tv_id not in [c.value for c in stranger.cookies.jar]   # server không gán id của TV cho stranger
     # đồng thời id thật của TV không lọt vào bất kỳ thứ gì stranger nhìn thấy
     assert r.tv_id not in json.dumps(stranger.get("/api/devices/nearby").json())
 
@@ -54,7 +55,7 @@ def test_public_id_does_not_resolve_in_another_household(app_module, make_client
 def test_switch_off_notifies_controllers_and_clears_pending(app_module, make_client):
     r = Rig(app_module, make_client)
     other = make_client(ip="203.0.113.7")
-    other_id = other.get("/api/device").json()["id"]
+    other_id = real_id(other)
     other.post("/api/devices/heartbeat", json={"kind": "phone"})
     r.connect(); r.answer(True); r.tv_events(); r.phone_events()
     other.post(f"/api/cast/{r.tv_pid}/connect")             # một yêu cầu khác đang chờ

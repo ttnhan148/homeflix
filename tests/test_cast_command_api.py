@@ -1,3 +1,4 @@
+from tests.cast_helpers import real_id
 import json
 
 import pytest
@@ -24,7 +25,7 @@ def raw_command(r, raw):
 def test_command_reaches_only_the_target_tv(app_module, make_client):
     r = approved(app_module, make_client)
     tv2 = make_client()
-    tv2_id = tv2.get("/api/device").json()["id"]
+    tv2_id = real_id(tv2)
     tv2.post("/api/devices/heartbeat", json={"kind": "tv"})
     sub2 = app_module.cast_hub.subscribe(tv2_id)
     r.phone.post(f"/api/cast/{app_module._cast_public_id(tv2_id)}/connect"); tv2.post(f"/api/cast/requests/{r.phone_pid}", json={"allow": True})
@@ -111,7 +112,7 @@ STATE = {"slug": "phim-a", "title": "Phim A", "episode": "Tập 1", "position": 
 def test_state_fans_out_to_linked_controllers_only(app_module, make_client):
     r = approved(app_module, make_client)
     other = make_client()
-    other_id = other.get("/api/device").json()["id"]
+    other_id = real_id(other)
     other_sub = app_module.cast_hub.subscribe(other_id)          # cùng nhà nhưng chưa liên kết
     assert r.tv.post("/api/cast/state", json=STATE).json() == {"status": "ok"}
     assert r.phone_events() == [("state", {**STATE, "position": 10.0, "duration": 100.0, "target_id": r.tv_pid})]

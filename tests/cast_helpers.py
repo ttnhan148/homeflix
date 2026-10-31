@@ -47,3 +47,9 @@ async def asgi_stream(app, path, *, headers=None, cookies=None, until=lambda chu
             finished = False
             task.cancel()
     return info.get("status"), info.get("headers", {}), chunks, finished
+
+
+def real_id(client):
+    """Id thật của thiết bị = cookie hf_device (API không còn trả về)."""
+    client.get("/api/device")
+    return client.cookies["hf_device"]

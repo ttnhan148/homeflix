@@ -101,7 +101,7 @@ def test_device_name_rejects_empty_and_never_shows_raw_id(open_app):
     page.wait_for_selector('[data-key="device.name"] .set-error')
     assert page.locator('[data-key="device.name"] button').inner_text() == "iPhone"
     assert "PATCH /api/device" not in page.requests
-    raw_id = page.evaluate("fetch('/api/device').then(r => r.json()).then(d => d.id)")
+    raw_id = next(c["value"] for c in page.context.cookies() if c["name"] == "hf_device")
     assert raw_id not in page.content()
 
 

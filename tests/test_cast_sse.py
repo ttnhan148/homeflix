@@ -2,13 +2,14 @@ import asyncio
 import threading
 import time
 
-from tests.cast_helpers import asgi_stream
+from tests.cast_helpers import asgi_stream, real_id
 
 
 def setup_device(make_client):
     c = make_client()
-    info = c.get("/api/device").json()
-    return info["id"], {"hf_device": c.cookies.get("hf_device")}
+    c.get("/api/device")
+    cookie = c.cookies.get("hf_device")
+    return cookie, {"hf_device": cookie}
 
 
 def run(coro):
@@ -34,7 +35,7 @@ def test_stream_headers_and_hello_first(app_module, make_client):
 def test_hello_lists_current_controllers_with_names(app_module, make_client):
     tv_id, tv_cookies = setup_device(make_client)
     phone = make_client()
-    phone_id = phone.get("/api/device").json()["id"]
+    phone_id = real_id(phone)
     app_module.cast_hub.link(phone_id, tv_id)
     _, _, chunks, _ = run(asgi_stream(app_module.app, "/api/cast/events", cookies=tv_cookies, until=lambda c: True))
     body = text(chunks)

@@ -1,3 +1,4 @@
+from tests.cast_helpers import real_id
 A, B = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 def movie(slug="phim-a", **kw):
@@ -56,11 +57,11 @@ def test_first_device_adopts_legacy_movies_once(app_module, make_client):
     m = app_module
     _legacy(m, "cu-1"); _legacy(m, "cu-2")
     first = make_client(ip="203.0.113.7"); first.get("/api/device")
-    got = {x["slug"]: x for x in m._db_list_device_movies(first.get("/api/device").json()["id"])}
+    got = {x["slug"]: x for x in m._db_list_device_movies(real_id(first))}
     assert set(got) == {"cu-1", "cu-2"} and got["cu-1"]["saved"] is True
     assert got["cu-1"]["episode_states"] == {"u": "watching"} and got["cu-1"]["position"] is None
     second = make_client(ip="198.51.100.9")
-    assert m._db_list_device_movies(second.get("/api/device").json()["id"]) == []
+    assert m._db_list_device_movies(real_id(second)) == []
     assert m.db_query_one("SELECT COUNT(*) FROM saved_movies")[0] == 2
 
 def test_no_adoption_when_no_legacy_rows(app_module, make_client):

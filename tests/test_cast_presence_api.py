@@ -1,10 +1,11 @@
+from tests.cast_helpers import real_id
 from cast import CastHub
 
 PHONE_IP, OTHER_IP = "203.0.113.7", "198.51.100.9"
 
 
 def device_id(client):
-    return client.get("/api/device").json()["id"]
+    return real_id(client)
 
 
 def make_tv(make_client, hub_clock=None, ip=PHONE_IP, kind="tv"):
