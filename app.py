@@ -17,7 +17,7 @@ import secrets
 from datetime import datetime, date
 from contextlib import asynccontextmanager
 from functools import lru_cache
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import Depends, FastAPI, Request, Response, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
 import json
+import admin
 from cast import CastHub, format_sse, validate_command, validate_state
 from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
                      household_id, parse_trusted_proxies)
@@ -51,7 +52,7 @@ DOWNLOADS_STATUS_FILE = os.path.join(DATA_DIR, "downloads.json")
 DEVICE_COOKIE = "hf_device"
 DEVICE_COOKIE_MAX_AGE = 63072000  # 2 năm
 # Chỉ cấp cookie ở "/" và các route này; không cấp ở /proxy, /media, /static
-DEVICE_COOKIE_PATHS = ("/api/saved", "/api/device", "/api/cast")
+DEVICE_COOKIE_PATHS = ("/api/saved", "/api/device", "/api/cast", "/api/settings", "/api/admin")
 # IP của reverse proxy tin cậy (cách nhau bằng dấu phẩy) mới được đọc X-Forwarded-For
 TRUSTED_PROXIES = parse_trusted_proxies(os.environ.get("TRUSTED_PROXIES"))
 
@@ -212,6 +213,9 @@ def init_db():
                 PRIMARY KEY (target_id, controller_id)
             )
         """)
+        # Cột quyền admin cho DB cũ
+        if "is_admin" not in [r[1] for r in cursor.execute("PRAGMA table_info(devices)")]:
+            cursor.execute("ALTER TABLE devices ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_household ON devices(household)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_updated ON device_movies(device_id, updated_at DESC)")
@@ -379,6 +383,19 @@ def _db_prune_inactive_devices(now: float, max_age_days: int = DEVICE_MAX_INACTI
             conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
         conn.commit()
     return len(old_ids)
+
+# --- Quyền admin theo thiết bị ---
+admin_login_limiter = admin.LoginLimiter()
+
+def _db_is_admin(device_id: str) -> bool:
+    row = db_query_one("SELECT is_admin FROM devices WHERE id = ?", (device_id,))
+    return row is not None and bool(row[0])
+
+def _db_set_admin(device_id: str, on: bool) -> None:
+    db_execute("UPDATE devices SET is_admin = ? WHERE id = ?", (1 if on else 0, device_id))
+
+def _db_admin_count() -> int:
+    return db_query_one("SELECT COUNT(*) FROM devices WHERE is_admin = 1")[0]
 
 # --- Cast: quyền điều khiển và công tắc của TV ---
 # Hàng đợi SSE, hiện diện, liên kết và trạng thái nằm trong bộ nhớ (cast.py), chỉ đúng với một worker.
@@ -959,6 +976,17 @@ async def api_cache_headers(request: Request, call_next):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
 
+# Ghi vào /api/admin và /api/settings bắt buộc application/json (chặn form CSRF)
+@app.middleware("http")
+async def json_only_middleware(request: Request, call_next):
+    path = request.url.path
+    if (request.method in ("POST", "PATCH", "DELETE")
+            and path.startswith(("/api/admin", "/api/settings"))):
+        media = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        if media != "application/json":
+            return JSONResponse({"detail": "application/json required"}, status_code=415)
+    return await call_next(request)
+
 # Cấp và đọc cookie hf_device cho "/" và các route theo thiết bị.
 @app.middleware("http")
 async def device_middleware(request: Request, call_next):
@@ -975,6 +1003,7 @@ async def device_middleware(request: Request, call_next):
                                   request.headers.get("user-agent", ""), path != "/")
     request.state.device_id = device_id
     request.state.household = row["household"]
+    request.state.ip = ip
     response = await call_next(request)
     if issue_cookie:
         response.set_cookie(DEVICE_COOKIE, device_id, max_age=DEVICE_COOKIE_MAX_AGE, path="/",
@@ -983,6 +1012,45 @@ async def device_middleware(request: Request, call_next):
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["Vary"] = "Cookie"
     return response
+
+# --- Admin: đăng nhập bằng mật khẩu, đăng xuất, thu hồi máy khác ---
+def require_admin_enabled():
+    if not admin.configured():
+        raise HTTPException(status_code=404)
+
+def require_admin(request: Request):
+    require_admin_enabled()
+    if not _db_is_admin(request.state.device_id):
+        raise HTTPException(status_code=403, detail="admin required")
+
+@app.post("/api/admin/login", dependencies=[Depends(require_admin_enabled)])
+async def admin_login_api(request: Request):
+    keys = [f"d:{request.state.device_id}", f"ip:{request.state.ip}"]
+    wait = admin_login_limiter.retry_after(keys)  # kiểm khóa trước khi so mật khẩu
+    if wait > 0:
+        return JSONResponse({"retry_after": wait}, status_code=429, headers={"Retry-After": str(wait)})
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    candidate = body.get("password") if isinstance(body, dict) else None
+    if not admin.password_ok(candidate):
+        admin_login_limiter.record_failure(keys)
+        raise HTTPException(status_code=401, detail="wrong password")
+    admin_login_limiter.reset(keys)
+    await asyncio.to_thread(_db_set_admin, request.state.device_id, True)
+    return Response(status_code=204)
+
+@app.post("/api/admin/logout", dependencies=[Depends(require_admin_enabled)])
+async def admin_logout_api(request: Request):
+    await asyncio.to_thread(_db_set_admin, request.state.device_id, False)
+    return Response(status_code=204)
+
+@app.post("/api/admin/revoke-others", dependencies=[Depends(require_admin)])
+async def admin_revoke_others_api(request: Request):
+    cur = await asyncio.to_thread(
+        db_execute, "UPDATE devices SET is_admin = 0 WHERE is_admin = 1 AND id != ?", (request.state.device_id,))
+    return {"revoked": cur.rowcount}
 
 @app.get("/api/device")
 async def get_device_api(request: Request):

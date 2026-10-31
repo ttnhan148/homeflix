@@ -1,5 +1,6 @@
 import pytest
 
+import admin
 from cast import CastHub
 from fastapi.testclient import TestClient
 
@@ -15,6 +16,7 @@ def app_module(tmp_path, monkeypatch):
     (tmp_path / "downloads").mkdir()
     (tmp_path / "cache").mkdir()
     monkeypatch.setattr(m, "cast_hub", CastHub())
+    monkeypatch.setattr(m, "admin_login_limiter", admin.LoginLimiter(), raising=False)
     m.init_db()
     yield m
     if m._db_conn is not None:
@@ -26,3 +28,8 @@ def make_client(app_module):
     def _make(ip="203.0.113.7", ua=IPHONE):
         return TestClient(app_module.app, client=(ip, 50000), headers={"user-agent": ua})
     return _make
+
+
+@pytest.fixture
+def pw(monkeypatch):
+    monkeypatch.setenv("HOMEFLIX_ADMIN_PASSWORD", "mk-test")

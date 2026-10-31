@@ -23,12 +23,15 @@ def configured() -> bool:
 
 
 def password_ok(candidate) -> bool:
-    """Chưa cấu hình hoặc candidate không phải str thì luôn False."""
+    """Chưa cấu hình, candidate không phải str hoặc không mã hóa được UTF-8 thì luôn False."""
     pw = _password()
     if not pw or not isinstance(candidate, str):
         return False
-    a = hashlib.sha256(pw.encode("utf-8")).digest()
-    b = hashlib.sha256(candidate.encode("utf-8")).digest()
+    try:
+        a = hashlib.sha256(pw.encode("utf-8")).digest()
+        b = hashlib.sha256(candidate.encode("utf-8")).digest()
+    except UnicodeEncodeError:
+        return False  # surrogate lẻ (JSON "\ud800") không mã hóa được UTF-8
     return hmac.compare_digest(a, b)
 
 
