@@ -21,6 +21,10 @@ def is_direct_url(url: str) -> bool:
     return urlsplit(url).path.lower().endswith(DIRECT_EXT)
 
 
+def is_playlist_url(url: str) -> bool:
+    return urlsplit(url).path.lower().endswith((".m3u8", ".m3u"))
+
+
 def index_url(stream_id: int) -> str:
     return f"{BASE}/{stream_id}/index.m3u8"
 
@@ -64,6 +68,7 @@ async def open_upstream(client: httpx.AsyncClient, url: str, headers: dict[str, 
                         max_redirects: int = 5) -> tuple[httpx.Response, str]:
     """Mở stream từ upstream, tự theo chuyển hướng; trả (response đang mở, URL cuối). Caller đóng response."""
     current = url
+    headers = {**headers, "Accept-Encoding": "identity"}  # đoạn video không được nén; aiter_raw giữ nguyên byte
     try:
         for hop in range(max_redirects + 1):
             resp = await client.send(client.build_request("GET", current, headers=headers), stream=True)
