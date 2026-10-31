@@ -2,7 +2,8 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = ("home-utils.js", "cast-utils.js", "player-utils.js", "player-auto.js", "cast.js", "hf.css")
+ASSETS = ("home-utils.js", "cast-utils.js", "player-utils.js", "player-auto.js", "cast.js", "hf.css",
+          "settings-utils.js", "settings.js")
 
 
 def _page(make_client):

@@ -508,20 +508,7 @@
         });
         HFCast.on('controller_joined', (d) => { controllers.set(d.controller_id, d.name); updateLabel(); reportState(); });
         HFCast.on('controller_left', (d) => { controllers.delete(d.controller_id); updateLabel(); });
-
-        // --- cài đặt: công tắc "Cho phép điều khiển từ thiết bị khác" ---
-        const panel = $('castSettings');
-        const toggle = $('castAllowControl');
-        $('castSettingsBtn').addEventListener('click', async () => {
-            show(panel, panel.hidden);
-            if (!panel.hidden) {
-                const res = await HFCast.api('GET', '/api/cast/settings').catch(() => null);
-                if (res && res.data) toggle.checked = !!res.data.allow_control;
-                toggle.focus();
-            }
-        });
-        toggle.addEventListener('change', () => HFCast.api('PATCH', '/api/cast/settings', { allow_control: toggle.checked }).catch(() => null));
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) show(panel, false); });
+        // công tắc "Cho phép điều khiển từ xa" nằm ở trang Cài đặt (static/settings.js)
     }
 
     HFCast.start();

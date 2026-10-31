@@ -198,15 +198,18 @@ def test_progress_goes_to_tv_device_not_phone(open_app):
     assert next(r for r in api(page, "GET", "/api/saved") if r["slug"] == "phim-le-1")["saved"] is False
 
 
+ALLOW_SWITCH = '[data-key="cast.allow_control"] .set-switch'
+
+
 def test_settings_toggle_roundtrip_and_tv_focus_ring(open_app):
     page = open_tv(open_app)
-    tap(page, "#castSettingsBtn")
-    page.wait_for_selector("#castSettings:not([hidden])")
-    page.wait_for_function("document.getElementById('castAllowControl').checked === true")
-    tap(page, "#castAllowControl")
+    tap(page, "#settingsBtn")
+    page.wait_for_selector("#settings-tab.active " + ALLOW_SWITCH)
+    page.wait_for_function(f"document.querySelector('{ALLOW_SWITCH}').getAttribute('aria-checked') === 'true'")
+    tap(page, ALLOW_SWITCH)
     assert wait_posts(page, "/api/cast/settings") == [{"allow_control": False}]
     assert api(page, "GET", "/api/cast/settings") == {"allow_control": False}
-    page.focus("#castAllowControl")
+    page.focus(ALLOW_SWITCH)
     page.wait_for_timeout(400)
     assert page.evaluate("getComputedStyle(document.activeElement).outlineWidth") == "4px"
 
@@ -216,4 +219,4 @@ def test_receiver_inactive_on_iphone(open_app):
     page.evaluate("HFCast.emit('command', {type: 'play', slug: 'phim-le-1', episode_url: null, position: null})")
     page.wait_for_timeout(300)
     assert not page.evaluate(PLAYER_ACTIVE)
-    assert page.locator("#castSettingsBtn").is_hidden()
+    assert page.locator("#castBtn").is_visible()   # iPhone là bên điều khiển: có nút "Phát lên TV"
