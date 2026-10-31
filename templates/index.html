@@ -3039,26 +3039,36 @@ document.addEventListener('visibilitychange', () => {
             else node.textContent = Number.isFinite(state.total) ? `${state.total.toLocaleString('vi-VN')} phim` : `${state.items.length}+ phim`;
         }
 
-        function buildMovieCard(movie) {
+        // Thẻ poster dùng chung: lưới phim (buildMovieCard) và lưới kênh HomeTV
+        function buildPosterCard({ title, meta, imgSrc, onClick, focusable }) {
             const card = el('div', 'movie-card');
-            card.dataset.slug = movie.slug;
-            if (!document.body.classList.contains('device-mobile')) card.setAttribute('tabindex', '0');
+            if (focusable !== false) card.setAttribute('tabindex', '0');
 
             const wrap = el('div', 'poster-wrap');
             const img = el('img', 'movie-poster');
-            img.alt = movie.name || '';
+            img.alt = title || '';
             img.loading = 'lazy';
-            img.src = movie.poster_url || '';
+            img.src = imgSrc || '';
             img.onerror = () => { img.onerror = null; img.src = POSTER_PLACEHOLDER; };
             wrap.appendChild(img);
             card.appendChild(wrap);
 
             const info = el('div', 'movie-info');
-            info.appendChild(el('div', 'movie-title', movie.name));
-            info.appendChild(el('div', 'movie-meta', HFUtils.cardMeta(movie)));
+            info.appendChild(el('div', 'movie-title', title));
+            info.appendChild(el('div', 'movie-meta', meta));
             card.appendChild(info);
 
-            card.addEventListener('click', () => showMovieDetailBySlug(movie.slug));
+            if (onClick) card.addEventListener('click', onClick);
+            return card;
+        }
+
+        function buildMovieCard(movie) {
+            const card = buildPosterCard({
+                title: movie.name, meta: HFUtils.cardMeta(movie), imgSrc: movie.poster_url,
+                onClick: () => showMovieDetailBySlug(movie.slug),
+                focusable: !document.body.classList.contains('device-mobile'),
+            });
+            card.dataset.slug = movie.slug;
             return card;
         }
 
@@ -4015,29 +4025,45 @@ document.addEventListener('visibilitychange', () => {
         }
 
         // Một dòng "đang xem": poster, tên, tập và thời gian còn lại, thanh tiến độ. Chạm là phát tiếp.
-        function buildContinueCard(m, className) {
+        // h (tuỳ chọn) đổi nguồn dữ liệu và hành động của thẻ; thiếu thì là thẻ phim đang xem dở
+        const MOVIE_CONTINUE = {
+            poster: (m) => m.poster_url,
+            meta: (m) => HFUtils.continueMeta(m),
+            pct: (m) => HFUtils.progressPct(m),
+            label: (m) => `Phát tiếp ${m.name}`,
+            onPlay: (m) => playResumeSavedMovie(m.slug),
+            swipe: true,
+        };
+
+        function buildContinueCard(m, className, h) {
+            const isMovie = !h;
+            h = Object.assign({}, MOVIE_CONTINUE, h);
             const card = el('button', className);
             card.type = 'button';
             card.dataset.slug = m.slug;
             const img = el('img', 'continue-poster');
             img.alt = '';
-            img.src = m.poster_url || '';
+            img.src = h.poster(m) || '';
             img.onerror = () => { img.onerror = null; img.src = POSTER_PLACEHOLDER; };
             card.appendChild(img);
             const body = el('span', 'continue-body');
             body.appendChild(el('span', 'continue-title', m.name));
-            body.appendChild(el('span', 'continue-ep', HFUtils.continueMeta(m)));
-            const bar = el('span', 'continue-progress');
-            const fill = el('span', 'continue-progress-fill');
-            fill.style.width = HFUtils.progressPct(m) + '%';
-            bar.appendChild(fill);
-            body.appendChild(bar);
+            body.appendChild(el('span', 'continue-ep', h.meta(m)));
+            const pct = h.pct(m);
+            if (isMovie || pct > 0) { // thẻ phim luôn có thanh; thẻ kênh (không có tiến độ) thì ẩn
+                const bar = el('span', 'continue-progress');
+                const fill = el('span', 'continue-progress-fill');
+                fill.style.width = pct + '%';
+                bar.appendChild(fill);
+                body.appendChild(bar);
+            }
             card.appendChild(body);
             const play = el('span', 'continue-play');
             play.innerHTML = SVG_PLAY;
             card.appendChild(play);
-            card.setAttribute('aria-label', `Phát tiếp ${m.name}`);
-            card.addEventListener('click', () => { if (!card.dataset.swiped) playResumeSavedMovie(m.slug); });
+            card.setAttribute('aria-label', h.label(m));
+            card.addEventListener('click', () => { if (!card.dataset.swiped) h.onPlay(m); });
+            if (!h.swipe) return card;
             const row = el('div', 'swipe-row' + (className.includes('is-lead') ? ' swipe-lead' : ''));
             const act = (cls, svg, label) => {
                 const a = el('span', `swipe-act ${cls}`);
