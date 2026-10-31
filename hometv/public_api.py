@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 
-from hometv import catalog, play
+from hometv import catalog, geo, play
 from hometv.fetcher import FetchError
 
 PLAYLIST_TYPE = "application/vnd.apple.mpegurl"
@@ -28,11 +28,11 @@ def make_public_router(get_client: Callable[[], httpx.AsyncClient]) -> APIRouter
 
     @router.get("/channels")
     async def channels():
-        return await _db(catalog.list_channels, time.time())
+        return await _db(catalog.list_channels, time.time(), geo.current().enabled)
 
     @router.get("/channels/{channel_id}/streams")
     async def streams(channel_id: int):
-        rows = await _db(catalog.channel_streams, channel_id)
+        rows = await _db(catalog.channel_streams, channel_id, geo.current().enabled)
         if not rows:
             return _not_found("Kênh không còn khả dụng")
         return [{

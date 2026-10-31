@@ -113,3 +113,66 @@ def test_reingested_stream_has_no_health_row(db):
     seed_stream(db, 7, 1, "a", "https://s/new.m3u8")
     assert row(db, 7) is None
     assert health_store.source_health(2.0)["a"]["unknown"] == 1
+
+
+# --- catalog dùng sức khỏe (Task 6) ---
+from hometv import catalog  # noqa: E402
+
+
+def graded(db, scores):
+    """Một kênh, mỗi stream một nguồn khác nhau điểm: scores = {stream_id: HealthResult|None}."""
+    seed_source(db, "a", 10); seed_source(db, "b", 20)
+    seed_channel(db, 1, "VTV1")
+    for sid, res in scores.items():
+        seed_stream(db, sid, 1, "a" if sid % 2 else "b", "https://s/%d.m3u8" % sid)
+        if res is not None:
+            health_store.record(sid, res, True, 1.0)
+
+
+def test_streams_sorted_by_score_when_enabled(db):
+    low = HealthResult(ok=True, height=360)
+    high = HealthResult(ok=True, height=1080)
+    graded(db, {1: low, 2: high, 3: DEAD})
+    assert [s["id"] for s in catalog.channel_streams(1, use_health=True)] == [2, 1, 3]
+
+
+def test_unchecked_streams_rank_at_50(db):
+    graded(db, {1: HealthResult(ok=True, height=360), 2: None, 3: DEAD})  # 1 -> 64+? > 50 ; 2 -> 50 ; 3 -> 0
+    assert [s["id"] for s in catalog.channel_streams(1, use_health=True)] == [1, 2, 3]
+
+
+def test_streams_order_unchanged_when_disabled(db):
+    graded(db, {1: DEAD, 2: HealthResult(ok=True, height=1080)})
+    assert [s["id"] for s in catalog.channel_streams(1)] == [1, 2]  # priority a (10) trước b (20)
+
+
+def test_channel_hidden_when_all_streams_failed_3x(db):
+    graded(db, {1: None, 2: None})
+    for n in range(3):
+        for sid in (1, 2):
+            health_store.record(sid, DEAD, True, float(n))
+    assert catalog.list_channels(9.0, use_health=True) == []
+
+
+def test_channel_visible_with_one_unchecked_stream(db):
+    graded(db, {1: None, 2: None})
+    for n in range(3):
+        health_store.record(1, DEAD, True, float(n))
+    assert [c["id"] for c in catalog.list_channels(9.0, use_health=True)] == [1]
+
+
+def test_channel_visible_after_one_success(db):
+    graded(db, {1: None})
+    for n in range(3):
+        health_store.record(1, DEAD, True, float(n))
+    assert catalog.list_channels(9.0, use_health=True) == []
+    health_store.record(1, OK, True, 5.0)
+    assert len(catalog.list_channels(9.0, use_health=True)) == 1
+
+
+def test_stale_health_ignored_when_disabled(db):
+    graded(db, {1: None})
+    for n in range(9):
+        health_store.record(1, DEAD, True, float(n))
+    assert len(catalog.list_channels(9.0)) == 1
+    assert len(catalog.list_channels(9.0, use_health=False)) == 1

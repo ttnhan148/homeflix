@@ -2,14 +2,16 @@
 import json
 from urllib.parse import quote
 
-from hometv import db
+from hometv import db, scoring
 
 MAX_RECENT = 20
+FAIL_HIDE = 3  # số lần kiểm chết liên tiếp thì ẩn kênh
 NAME_MAX = 120
 
 # Stream xem được: còn hiện diện, không DRM, nguồn đã duyệt và đang bật, kênh đang bật
 _VALID = ("s.active = 1 AND s.drm_hint = 0 AND src.enabled = 1 "
           "AND src.rights_status = 'approved' AND ch.enabled = 1")
+_HEALTH = " LEFT JOIN stream_health h ON h.stream_id = s.id"
 _FROM = "streams s JOIN sources src ON src.id = s.source_id JOIN channels ch ON ch.id = s.channel_id"
 
 
@@ -19,7 +21,10 @@ def _is_valid_channel(c, channel_id: int) -> bool:
     return row is not None
 
 
-def list_channels(now: float) -> list[dict]:
+def list_channels(now: float, use_health: bool = False) -> list[dict]:
+    """use_health: ẩn kênh mà mọi stream hợp lệ đều chết liên tiếp từ FAIL_HIDE lần kiểm trở lên."""
+    alive = f" AND (h.stream_id IS NULL OR h.fail_streak < {FAIL_HIDE})" if use_health else ""
+    join = _HEALTH if use_health else ""
     rows = db.conn().execute(f"""
         SELECT oc.id, oc.category, oc.logo_url, oc.display_name, oc.normalized_name,
                (SELECT s.display_name FROM {_FROM} WHERE s.channel_id = oc.id AND {_VALID}
@@ -28,7 +33,7 @@ def list_channels(now: float) -> list[dict]:
         FROM channels oc
         LEFT JOIN favorites f ON f.channel_id = oc.id
         LEFT JOIN recents r ON r.channel_id = oc.id
-        WHERE oc.enabled = 1 AND EXISTS (SELECT 1 FROM {_FROM} WHERE s.channel_id = oc.id AND {_VALID})
+        WHERE oc.enabled = 1 AND EXISTS (SELECT 1 FROM {_FROM}{join} WHERE s.channel_id = oc.id AND {_VALID}{alive})
         ORDER BY oc.normalized_name, oc.id""").fetchall()
     return [{
         "id": r["id"],
@@ -40,11 +45,14 @@ def list_channels(now: float) -> list[dict]:
     } for r in rows]
 
 
-def channel_streams(channel_id: int) -> list[dict]:
+def channel_streams(channel_id: int, use_health: bool = False) -> list[dict]:
+    """Thứ tự thử; use_health: điểm sức khỏe giảm dần trước (chưa kiểm tính 50)."""
+    join = _HEALTH if use_health else ""
+    by_score = f"COALESCE(h.score, {scoring.UNKNOWN}) DESC, " if use_health else ""
     rows = db.conn().execute(f"""
-        SELECT s.id, s.url, s.quality_hint FROM {_FROM}
+        SELECT s.id, s.url, s.quality_hint FROM {_FROM}{join}
         WHERE s.channel_id = ? AND {_VALID}
-        ORDER BY src.priority, (s.url LIKE 'https:%') DESC, s.id""", (channel_id,)).fetchall()
+        ORDER BY {by_score}src.priority, (s.url LIKE 'https:%') DESC, s.id""", (channel_id,)).fetchall()
     return [{"id": r["id"], "url": r["url"], "quality_hint": r["quality_hint"]} for r in rows]
 
 

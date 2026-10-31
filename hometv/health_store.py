@@ -1,11 +1,11 @@
 """Lưu và truy vấn sức khỏe stream (bảng stream_health) cùng lịch kiểm của nguồn."""
 import json
 
-from hometv import db, scoring
+from hometv import catalog, db, scoring
 from hometv.health import HealthResult
 
 CHECK_EVERY = 6 * 3600
-FAIL_HIDE = 3
+FAIL_HIDE = catalog.FAIL_HIDE
 
 # Nguồn đang có lượt kiểm chạy (scheduler thêm/bớt; chỉ để hiển thị cờ "Đang kiểm tra…")
 checking: set[str] = set()
