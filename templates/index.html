@@ -2334,13 +2334,16 @@ function toggleEpisodesDrawer() {
         function renderEpisodeList(containerEl, opts) {
             if (!containerEl) return;
             const { episodes, movieSlug, watchStates, onPlay, autoFocusWatching, showTitle, showMeta, watchingPct } = opts;
+            const unit = opts.unit || 'tập';
+            const rows = opts.rows > 0 ? opts.rows : 0; // có rows: một cột cao đúng số dòng, cuộn bên trong, không phân trang
+            const nameOf = opts.nameOf || (ep => HFUtils.epShort(ep.name));
             if (!episodes || episodes.length === 0) {
                 containerEl.innerHTML = '';
                 return;
             }
             const ws = watchStates || {};
             const total = episodes.length;
-            const chunkCount = Math.max(1, Math.ceil(total / EP_CHUNK));
+            const chunkCount = rows ? 1 : Math.max(1, Math.ceil(total / EP_CHUNK));
 
             let chunk = containerEl._epChunk;
             if (typeof chunk !== 'number' || chunk < 0 || chunk >= chunkCount) {
@@ -2354,14 +2357,15 @@ function toggleEpisodesDrawer() {
 
             containerEl.innerHTML = '';
 
-            const list = el('div', 'ep-list');
+            const list = el('div', 'ep-list' + (rows ? ' ep-list-rows' : ''));
+            if (rows) list.style.setProperty('--ep-rows', rows);
 
             const start = chunk * EP_CHUNK;
-            const slice = episodes.slice(start, start + EP_CHUNK);
+            const slice = rows ? episodes : episodes.slice(start, start + EP_CHUNK);
 
             const header = el('div', 'ep-list-header');
             if (showTitle !== false) {
-                header.appendChild(el('span', 'ep-list-title', `${total} tập`));
+                header.appendChild(el('span', 'ep-list-title', `${total} ${unit}`));
             }
             if (showMeta !== false) {
                 const metaBits = [];
@@ -2434,7 +2438,7 @@ function toggleEpisodesDrawer() {
                     btn.appendChild(wsIcon);
                 }
 
-                btn.appendChild(el('span', 'ep-name', HFUtils.epShort(ep.name)));
+                btn.appendChild(el('span', 'ep-name', nameOf(ep)));
                 btn.setAttribute('aria-label', ep.name + (st === 'watched' ? ', đã xem' : st === 'watching' ? ', đang xem' : ''));
                 if (st === 'watching' && watchingPct > 0) {
                     const bar = el('span', 'ep-progress');
@@ -2457,6 +2461,7 @@ function toggleEpisodesDrawer() {
                     e.stopPropagation();
                     if (onPlay) onPlay(ep, realIdx);
                 };
+                if (opts.decorate) opts.decorate(btn, ep);
                 grid.appendChild(btn);
             });
             list.appendChild(grid);

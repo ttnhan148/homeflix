@@ -1766,6 +1766,27 @@ body.device-tv .ep-item {
     white-space: nowrap;
 }
 
+/* Danh sách một cột cao đúng `--ep-rows` dòng rồi cuộn bên trong (danh sách phát kênh HomeTV) */
+body .ep-list-rows .ep-list-grid {
+    --row-h: 52px;
+    --row-gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--row-gap);
+    max-height: calc(var(--ep-rows) * var(--row-h) + (var(--ep-rows) - 1) * var(--row-gap));
+    overflow-y: auto;
+}
+
+body.device-tv .ep-list-rows .ep-list-grid {
+    --row-h: 64px;
+    --row-gap: 12px;
+}
+
+body .ep-list-rows .ep-item {
+    height: var(--row-h);
+    justify-content: flex-start;
+    padding: 0 12px;
+}
+
 /* Trạng thái tập: thêm body để thắng các luật theo thiết bị ở trên */
 body .ep-list .ep-item.is-watched,
 body .ep-list .ep-item.is-watched:hover {
