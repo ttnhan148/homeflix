@@ -9,7 +9,7 @@ from tests.ui.test_settings_admin import admin_page, server_json
 
 GROUP = '.set-group[data-group="hometv"]'
 PATH = "/api/admin/hometv/sources"
-DEFAULT_IDS = ["doubo-vn", "iptv-org-vn", "dangdvd-iptv", "khanh71-iptv", "khanh71-http"]
+DEFAULT_IDS = ["doubo-vn", "iptv-org-vn", "dangdvd-iptv", "khanh71-http"]
 ACCENT = "rgb(229, 9, 20)"
 DANGER = "rgb(255, 107, 107)"
 
@@ -79,7 +79,7 @@ def patch_bodies(page):
 
 def test_hometv_lists_default_sources(pw, open_app):
     page = hometv_page(open_app)
-    assert page.locator(f"{GROUP} .set-source").count() == 5
+    assert page.locator(f"{GROUP} .set-source").count() == 4
     assert source_ids(page) == DEFAULT_IDS   # theo ưu tiên
     assert "Chờ duyệt" in page.locator(src("iptv-org-vn")).inner_text()
     assert page.locator(f"{src('iptv-org-vn')} .set-source-name").inner_text() == "IPTV Org Vietnam"
@@ -109,7 +109,7 @@ def test_add_source(pw, open_app, public_dns):
     assert page.locator(url_error).inner_text() == "URL không hợp lệ"
     assert page.locator('[data-key="hometv.add"] .hometv-field:has(#hometvName) .set-error').count() == 0
     assert page.eval_on_selector(url_error, "e => getComputedStyle(e).color") == DANGER
-    assert page.locator(f"{GROUP} .set-source").count() == 5
+    assert page.locator(f"{GROUP} .set-source").count() == 4
     # sửa URL rồi thêm lại
     page.fill("#hometvUrl", "https://iptv.example/list.m3u")
     tap(page, '[data-key="hometv.add"] button[type="submit"]')

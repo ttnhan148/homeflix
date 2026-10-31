@@ -21,8 +21,6 @@ DEFAULT_SOURCES = (
      "url": "https://iptv-org.github.io/iptv/countries/vn.m3u"},
     {"id": "dangdvd-iptv", "name": "dangdvd IPTV", "priority": 30,
      "url": "https://raw.githubusercontent.com/dangdvd/dangdvd.github.io/main/IPTV.m3u"},
-    {"id": "khanh71-iptv", "name": "khanh71 IPTV", "priority": 40,
-     "url": "https://raw.githubusercontent.com/khanh71/All-In-One-IPTV/main/iptv.m3u8"},
     {"id": "khanh71-http", "name": "khanh71 HTTP", "priority": 50,
      "url": "https://raw.githubusercontent.com/khanh71/All-In-One-IPTV/main/http-iptv.m3u"},
 )

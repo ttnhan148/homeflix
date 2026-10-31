@@ -32,8 +32,7 @@ def test_every_route_protected(app_module, pw, make_client):
 def test_list_has_seeded_defaults(admin_client):
     r = admin_client.get(BASE)
     assert r.status_code == 200
-    assert [s["id"] for s in r.json()] == ["doubo-vn", "iptv-org-vn", "dangdvd-iptv",
-                                           "khanh71-iptv", "khanh71-http"]
+    assert [s["id"] for s in r.json()] == ["doubo-vn", "iptv-org-vn", "dangdvd-iptv", "khanh71-http"]
     assert len(r.json()[0]) == 13
 
 

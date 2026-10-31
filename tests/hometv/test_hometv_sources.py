@@ -15,14 +15,14 @@ def row(sid):
 
 
 def test_seed_defaults_once(db):
-    assert sources.seed_defaults(1.0) == 5 and sources.seed_defaults(2.0) == 0
+    assert sources.seed_defaults(1.0) == 4 and sources.seed_defaults(2.0) == 0
     assert sources.delete("doubo-vn") is True
     assert sources.seed_defaults(3.0) == 0
     s = sources.internal("iptv-org-vn")
     assert s["rights_status"] == "pending_review" and s["enabled"] and s["priority"] == 20
     assert s["refresh_interval"] == 21600 and s["next_fetch_at"] == 1.0
     assert sources.get("iptv-org-vn")["enabled"] is True
-    assert [d["priority"] for d in sources.DEFAULT_SOURCES] == [10, 20, 30, 40, 50]
+    assert [d["priority"] for d in sources.DEFAULT_SOURCES] == [10, 20, 30, 50]
 
 
 def test_seed_defaults_no_dns(db, monkeypatch):
@@ -31,7 +31,7 @@ def test_seed_defaults_no_dns(db, monkeypatch):
     def boom(host):
         raise AssertionError("không được phân giải DNS")
     monkeypatch.setattr(hometv.netguard, "resolve", boom)
-    assert sources.seed_defaults(1.0) == 5
+    assert sources.seed_defaults(1.0) == 4
 
 
 def test_create_validates(db, public_dns):
@@ -218,7 +218,7 @@ def test_list_sources_fetching_flag(db, public_dns):
 
 
 def test_init_seeds(app_module):
-    assert len(sources.list_sources(1.0)) == 5
+    assert len(sources.list_sources(1.0)) == 4
 
 
 def test_get_create_update_list_same_shape(db, public_dns):

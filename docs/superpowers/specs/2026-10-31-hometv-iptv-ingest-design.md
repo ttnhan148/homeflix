@@ -56,10 +56,9 @@ Chỉ thêm khi bảng `sources` đang trống (lần khởi động đầu). Ad
 | `doubo-vn` | Doubo Vietnam | `https://cdn.jsdelivr.net/gh/streamline-iptv/iptv-playlists@dist/countries/vn.m3u` | 10 |
 | `iptv-org-vn` | IPTV Org Vietnam | `https://iptv-org.github.io/iptv/countries/vn.m3u` | 20 |
 | `dangdvd-iptv` | dangdvd IPTV | `https://raw.githubusercontent.com/dangdvd/dangdvd.github.io/main/IPTV.m3u` | 30 |
-| `khanh71-iptv` | khanh71 IPTV | `https://raw.githubusercontent.com/khanh71/All-In-One-IPTV/main/iptv.m3u8` | 40 |
 | `khanh71-http` | khanh71 HTTP | `https://raw.githubusercontent.com/khanh71/All-In-One-IPTV/main/http-iptv.m3u` | 50 |
 
-`vuquangngoc/iptv_vietnam` không có playlist nên không thêm.
+`vuquangngoc/iptv_vietnam` không có playlist nên không thêm. `khanh71-iptv` (`iptv.m3u8`, ưu tiên 40) bị bỏ: 78/78 kênh là `udp://` nên luôn báo "Playlist hỏng".
 
 ## Tải playlist
 
