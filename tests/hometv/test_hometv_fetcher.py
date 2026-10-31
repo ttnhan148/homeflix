@@ -1,4 +1,7 @@
 import asyncio
+import gzip
+import time
+import zlib
 
 import httpx
 import pytest
@@ -7,6 +10,15 @@ from hometv import fetcher
 
 MB = 1024 * 1024
 URL = "http://example.com/a.m3u"
+
+
+def _resp(status, content=None, headers=None, stream=None):
+    # Dựng response dạng stream như transport thật (content= thì httpx đã đọc sẵn, aiter_raw lỗi)
+    h = dict(headers or {})
+    if content is not None:
+        h.setdefault("content-length", str(len(content)))
+        stream = httpx.ByteStream(content)
+    return httpx.Response(status, headers=h, stream=stream)
 
 
 def fetch(handler, url=URL, timeout=5.0, max_bytes=2 * MB, **kw):
@@ -24,23 +36,23 @@ def fail(handler, **kw):
 
 
 def test_ok_body(public_dns):
-    assert fetch(lambda r: httpx.Response(200, content=b"#EXTM3U\n")) == b"#EXTM3U\n"
+    assert fetch(lambda r: _resp(200, content=b"#EXTM3U\n")) == b"#EXTM3U\n"
 
 
 def test_http_error_message(public_dns):
-    e = fail(lambda r: httpx.Response(404))
+    e = fail(lambda r: _resp(404))
     assert (e.message, e.retryable) == ("HTTP 404", True)
 
 
 def test_too_large(public_dns):
-    e = fail(lambda r: httpx.Response(200, content=b"x" * (3 * MB)))
+    e = fail(lambda r: _resp(200, content=b"x" * (3 * MB)))
     assert (e.message, e.retryable) == ("Quá 2 MB", True)
 
 
 def test_too_large_without_content_length(public_dns):
     # Không có Content-Length: phải dừng khi đếm vượt giới hạn
     def handler(r):
-        return httpx.Response(200, stream=httpx.ByteStream(b"x" * (3 * MB)),
+        return _resp(200, stream=httpx.ByteStream(b"x" * (3 * MB)),
                               headers={"transfer-encoding": "chunked"})
     assert fail(handler).message == "Quá 2 MB"
 
@@ -50,12 +62,12 @@ def test_content_length_rejected_early(public_dns):
         async def __aiter__(self):
             raise AssertionError("body không được đọc")
             yield b""
-    e = fail(lambda r: httpx.Response(200, stream=Boom(), headers={"content-length": str(3 * MB)}))
+    e = fail(lambda r: _resp(200, stream=Boom(), headers={"content-length": str(3 * MB)}))
     assert e.message == "Quá 2 MB"
 
 
 def test_exactly_max_bytes_ok(public_dns):
-    assert len(fetch(lambda r: httpx.Response(200, content=b"x" * (2 * MB)))) == 2 * MB
+    assert len(fetch(lambda r: _resp(200, content=b"x" * (2 * MB)))) == 2 * MB
 
 
 def test_timeout(public_dns):
@@ -68,7 +80,7 @@ def test_timeout(public_dns):
 def test_total_timeout(public_dns):
     async def handler(r):
         await asyncio.sleep(5)
-        return httpx.Response(200, content=b"x")
+        return _resp(200, content=b"x")
     assert fail(handler, timeout=0.05).message == "Hết thời gian chờ"
 
 
@@ -93,28 +105,28 @@ def test_redirect_followed_and_checked(monkeypatch):
 
     def handler(r):
         calls.append(str(r.url))
-        return httpx.Response(302, headers={"location": "http://internal.example/x"})
+        return _resp(302, headers={"location": "http://internal.example/x"})
     e = fail(handler)
     assert (e.message, e.retryable) == ("Địa chỉ bị chặn", False)
     assert calls == [URL]
 
 
 def test_redirect_to_ip_literal_blocked(public_dns):
-    e = fail(lambda r: httpx.Response(307, headers={"location": "http://169.254.169.254/"}))
+    e = fail(lambda r: _resp(307, headers={"location": "http://169.254.169.254/"}))
     assert (e.message, e.retryable) == ("Địa chỉ bị chặn", False)
 
 
 def test_redirect_bad_url_not_retryable(public_dns):
-    e = fail(lambda r: httpx.Response(302, headers={"location": "ftp://example.com/x"}))
+    e = fail(lambda r: _resp(302, headers={"location": "ftp://example.com/x"}))
     assert (e.message, e.retryable) == ("URL không hợp lệ", False)
 
 
 def test_relative_redirect(public_dns):
     def handler(r):
         if r.url.path == "/a.m3u":
-            return httpx.Response(302, headers={"location": "/b.m3u"})
+            return _resp(302, headers={"location": "/b.m3u"})
         assert r.url.path == "/b.m3u" and r.url.host == "example.com"
-        return httpx.Response(200, content=b"ok")
+        return _resp(200, content=b"ok")
     assert fetch(handler) == b"ok"
 
 
@@ -122,8 +134,8 @@ def test_relative_redirect(public_dns):
 def test_redirect_codes(public_dns, code):
     def handler(r):
         if r.url.path == "/a.m3u":
-            return httpx.Response(code, headers={"location": "/b.m3u"})
-        return httpx.Response(200, content=b"ok")
+            return _resp(code, headers={"location": "/b.m3u"})
+        return _resp(200, content=b"ok")
     assert fetch(handler) == b"ok"
 
 
@@ -131,8 +143,8 @@ def test_five_redirects_ok(public_dns):
     def handler(r):
         n = int(r.url.params.get("n", 0))
         if n < 5:
-            return httpx.Response(302, headers={"location": f"/a.m3u?n={n + 1}"})
-        return httpx.Response(200, content=b"ok")
+            return _resp(302, headers={"location": f"/a.m3u?n={n + 1}"})
+        return _resp(200, content=b"ok")
     assert fetch(handler) == b"ok"
 
 
@@ -141,7 +153,7 @@ def test_too_many_redirects(public_dns):
 
     def handler(r):
         n.append(1)
-        return httpx.Response(302, headers={"location": "/loop"})
+        return _resp(302, headers={"location": "/loop"})
     e = fail(handler)
     assert (e.message, e.retryable) == ("Quá nhiều lần chuyển hướng", True)
     assert len(n) == 6
@@ -149,37 +161,129 @@ def test_too_many_redirects(public_dns):
 
 @pytest.mark.parametrize("headers", [{}, {"location": ""}])
 def test_redirect_without_location(public_dns, headers):
-    assert fail(lambda r: httpx.Response(302, headers=headers)).message == "HTTP 302"
+    assert fail(lambda r: _resp(302, headers=headers)).message == "HTTP 302"
 
 
 def test_blocked_initial_url(monkeypatch):
     import hometv.netguard
     monkeypatch.setattr(hometv.netguard, "resolve", lambda h: ["127.0.0.1"])
     calls = []
-    e = fail(lambda r: calls.append(r) or httpx.Response(200, content=b"x"))
+    e = fail(lambda r: calls.append(r) or _resp(200, content=b"x"))
     assert (e.message, e.retryable) == ("Địa chỉ bị chặn", False)
     assert calls == []
 
 
 def test_invalid_initial_url_no_request(public_dns):
     calls = []
-    e = fail(lambda r: calls.append(r) or httpx.Response(200), url="file:///etc/passwd")
+    e = fail(lambda r: calls.append(r) or _resp(200), url="file:///etc/passwd")
     assert (e.message, e.retryable) == ("URL không hợp lệ", False)
     assert calls == []
 
 
-def test_client_ignores_proxy_env(monkeypatch, public_dns):
-    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
-    monkeypatch.setenv("HTTP_PROXY", "http://proxy.invalid:3128")
-    monkeypatch.setenv("ALL_PROXY", "http://proxy.invalid:3128")
-    seen = []
-
-    def handler(r):
-        seen.append(str(r.url))
-        return httpx.Response(200, content=b"ok")
-    client = fetcher.make_client(httpx.MockTransport(handler))
+def test_client_ignores_proxy_env(monkeypatch):
+    # Không truyền transport: nếu trust_env=True thì httpx dựng mount proxy từ biến môi trường
+    for k in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"):
+        monkeypatch.setenv(k, "http://proxy.invalid:3128")
+    client = fetcher.make_client()
     assert client._mounts == {}
     assert not client.follow_redirects
     assert client.headers["user-agent"] == "HomeTV/1.0"
-    assert fetch(handler, url="https://example.com/a.m3u") == b"ok"
-    assert seen == ["https://example.com/a.m3u"]
+
+
+def test_sends_identity_encoding(public_dns):
+    seen = []
+
+    def handler(r):
+        seen.append(r.headers["accept-encoding"])
+        return _resp(200, content=b"ok")
+    fetch(handler)
+    assert seen == ["identity"]
+
+
+def _gz(data: bytes) -> bytes:
+    return gzip.compress(data, 9)
+
+
+def test_gzip_playlist_decoded(public_dns):
+    body = b"#EXTM3U\n" * 100
+    assert fetch(lambda r: _resp(200, content=_gz(body),
+                                          headers={"content-encoding": "GZip"})) == body
+
+
+def test_deflate_playlist_decoded(public_dns):
+    body = b"#EXTM3U\n" * 100
+    assert fetch(lambda r: _resp(200, content=zlib.compress(body),
+                                          headers={"content-encoding": "deflate"})) == body
+    raw = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+    rawbody = raw.compress(body) + raw.flush()
+    assert fetch(lambda r: _resp(200, content=rawbody,
+                                          headers={"content-encoding": "deflate"})) == body
+
+
+def test_gzip_bomb_capped(public_dns):
+    bomb = _gz(b"\0" * (50 * MB))
+    assert len(bomb) < 100_000
+    t = time.monotonic()
+    e = fail(lambda r: _resp(200, content=bomb, headers={"content-encoding": "gzip"}),
+             max_bytes=1 * MB)
+    assert e.message == "Quá 1 MB" and e.retryable
+    assert time.monotonic() - t < 2
+
+
+def test_stacked_encoding_rejected(public_dns):
+    bomb = _gz(_gz(b"\0" * (50 * MB)))
+    e = fail(lambda r: _resp(200, content=bomb,
+                                      headers={"content-encoding": "gzip, gzip"}))
+    assert (e.message, e.retryable) == ("Playlist hỏng", True)
+
+
+def test_unknown_encoding_rejected(public_dns):
+    e = fail(lambda r: _resp(200, content=b"x", headers={"content-encoding": "br"}))
+    assert e.message == "Playlist hỏng"
+
+
+def test_identity_encoding_passthrough(public_dns):
+    assert fetch(lambda r: _resp(200, content=b"ok",
+                                          headers={"content-encoding": "identity"})) == b"ok"
+
+
+def test_bad_gzip_body(public_dns):
+    e = fail(lambda r: _resp(200, content=b"not gzip at all",
+                                      headers={"content-encoding": "gzip"}))
+    assert (e.message, e.retryable) == ("Playlist hỏng", True)
+
+
+@pytest.mark.parametrize("loc", ["http:x", "http://xn--/"])
+def test_malformed_location_is_fetch_error(public_dns, loc):
+    e = fail(lambda r: _resp(302, headers={"location": loc}))
+    assert (e.message, e.retryable) == ("URL không hợp lệ", False)
+
+
+def test_per_call_timeout_passed_to_request(public_dns):
+    seen = []
+
+    def handler(r):
+        seen.append(r.extensions["timeout"])
+        return _resp(200, content=b"ok")
+    fetch(handler, timeout=60)
+    assert seen[0] == {"connect": 60, "read": 60, "write": 60, "pool": 60}
+
+
+def test_caller_client_with_redirects_cannot_bypass(monkeypatch):
+    import hometv.netguard
+    monkeypatch.setattr(hometv.netguard, "resolve",
+                        lambda h: ["10.0.0.1"] if h == "internal.example" else ["185.199.108.153"])
+    urls = []
+
+    def handler(r):
+        urls.append(str(r.url))
+        return _resp(302, headers={"location": "http://internal.example/x"})
+
+    async def run():
+        async with httpx.AsyncClient(follow_redirects=True,
+                                     transport=httpx.MockTransport(handler)) as c:
+            return await fetcher.fetch_playlist(c, URL, timeout=5, max_bytes=MB)
+    with pytest.raises(fetcher.FetchError) as e:
+        asyncio.run(run())
+    assert e.value.message == "Địa chỉ bị chặn"
+    assert urls == [URL]
