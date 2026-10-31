@@ -208,7 +208,7 @@ Trạng thái download: `not_started` → `pending` → `downloading` → `compl
 | Method | Path | Mô tả |
 |---|---|---|
 | GET | `/api/cache/status` | `{size_gb, percent, max_gb}` của session cache. |
-| POST | `/api/cache/clear` | Xoá toàn bộ session cache. |
+| POST | `/api/admin/cache/clear` | Xoá toàn bộ session cache. |
 
 ---
 
@@ -342,7 +342,7 @@ Tên file được làm sạch bằng `clean_filename()` (bỏ dấu tiếng Vi�
 | `LỖI: TRÌNH DUYỆT KHÔNG HỖ TRỢ HLS` | Trình duyệt không có hls.js (CDN bị chặn) hoặc không hỗ trợ native HLS. Kiểm tra kết nối tới `cdn.jsdelivr.net`. |
 | `[HLS Error]: Network Error` | `/proxy/m3u8` không tải được origin. Xem log server, kiểm tra phim tồn tại. |
 | Download báo `failed` | Kiểm tra `ffmpeg -version`. Một số nguồn chặn UA Chrome 120 — sửa hằng số UA trong app.py. |
-| Cache không giảm | `prune_cache` chạy mỗi giờ; hoặc gọi `POST /api/cache/clear` thủ công. |
+| Cache không giảm | `prune_cache` chạy mỗi giờ; hoặc gọi `POST /api/admin/cache/clear` thủ công. |
 | Phim không tải từ phimapi | Dữ liệu được cache stale; xoá dòng `api_cache` tương ứng trong `homeflix.db` để thử lại. |
 
 ---

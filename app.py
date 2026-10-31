@@ -395,6 +395,14 @@ def _valid_device_cookie(value: str | None) -> str | None:
 
 DEVICE_MAX_INACTIVE_DAYS = 180
 
+def _db_delete_device(conn, device_id: str) -> None:
+    """Xóa một thiết bị cùng mọi dòng gắn với nó. Gọi khi đang giữ _db_lock; không commit."""
+    conn.execute("DELETE FROM device_movies WHERE device_id = ?", (device_id,))
+    conn.execute("DELETE FROM cast_allowed WHERE target_id = ? OR controller_id = ?", (device_id, device_id))
+    conn.execute("DELETE FROM app_settings WHERE key = ?", (_cast_allow_key(device_id),))
+    conn.execute("DELETE FROM admin_requests WHERE device_id = ?", (device_id,))
+    conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+
 def _db_prune_inactive_devices(now: float, max_age_days: int = DEVICE_MAX_INACTIVE_DAYS) -> int:
     """Xóa thiết bị không hoạt động quá max_age_days cùng phim của chúng. Trả số thiết bị đã xóa."""
     cutoff = now - max_age_days * 86400
@@ -402,10 +410,7 @@ def _db_prune_inactive_devices(now: float, max_age_days: int = DEVICE_MAX_INACTI
     with _db_lock:
         old_ids = [r[0] for r in conn.execute("SELECT id FROM devices WHERE last_seen < ?", (cutoff,))]
         for device_id in old_ids:
-            conn.execute("DELETE FROM device_movies WHERE device_id = ?", (device_id,))
-            conn.execute("DELETE FROM cast_allowed WHERE target_id = ? OR controller_id = ?", (device_id, device_id))
-            conn.execute("DELETE FROM app_settings WHERE key = ?", (_cast_allow_key(device_id),))
-            conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+            _db_delete_device(conn, device_id)
         conn.commit()
     return len(old_ids)
 
@@ -1143,6 +1148,86 @@ async def patch_settings_api(request: Request):
         return JSONResponse({"errors": e.errors}, status_code=422)
     return await asyncio.to_thread(_settings_payload, request)
 
+# --- Admin: quản lý thiết bị (chỉ dùng id công khai, không bao giờ lộ id thật) ---
+def _admin_device_view(row, salt: str, self_id: str) -> dict:
+    return {"id": _cast_public_id(row["id"], salt), "name": row["name"], "kind": row["kind"],
+            "household": row["household"][:8], "last_seen": row["last_seen"],
+            "is_admin": bool(row["is_admin"]), "is_self": row["id"] == self_id}
+
+def _resolve_public_device(public_id: str) -> dict | None:
+    """Quét mọi thiết bị, so id công khai bằng compare_digest. None nếu không có."""
+    salt = get_household_salt()
+    for row in db_query("SELECT * FROM devices"):
+        if hmac.compare_digest(_cast_public_id(row["id"], salt), str(public_id)):
+            return dict(row)
+    return None
+
+def _db_admin_devices(self_id: str) -> list[dict]:
+    salt = get_household_salt()
+    out = [_admin_device_view(r, salt, self_id) for r in db_query("SELECT * FROM devices")]
+    out.sort(key=lambda d: d["last_seen"], reverse=True)
+    out.sort(key=lambda d: d["household"])
+    return out
+
+def _db_admin_patch_device(public_id: str, name, is_admin, self_id: str) -> dict | None:
+    """Sửa tên / quyền admin. Đếm admin và ghi cùng một khóa nên không thể về 0 admin; thu admin cuối → 409."""
+    target = _resolve_public_device(public_id)  # lấy id thật trước khi giữ khóa (khóa không reentrant)
+    if target is None:
+        return None
+    salt = get_household_salt()
+    conn = get_db()
+    with _db_lock:
+        row = conn.execute("SELECT * FROM devices WHERE id = ?", (target["id"],)).fetchone()
+        if row is None:
+            return None
+        if is_admin is False and row["is_admin"]:
+            if conn.execute("SELECT COUNT(*) FROM devices WHERE is_admin = 1").fetchone()[0] <= 1:
+                raise HTTPException(status_code=409, detail="cannot revoke the last admin")
+        if name is not None:
+            conn.execute("UPDATE devices SET name = ? WHERE id = ?", (name, row["id"]))
+        if is_admin is not None:
+            conn.execute("UPDATE devices SET is_admin = ? WHERE id = ?", (1 if is_admin else 0, row["id"]))
+        conn.commit()
+        row = conn.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
+    return _admin_device_view(row, salt, self_id)
+
+def _db_admin_delete_device(public_id: str, self_id: str) -> bool:
+    target = _resolve_public_device(public_id)
+    if target is None:
+        return False
+    if target["id"] == self_id:
+        raise HTTPException(status_code=409, detail="cannot delete your own device")
+    conn = get_db()
+    with _db_lock:
+        _db_delete_device(conn, target["id"])
+        conn.commit()
+    return True
+
+@app.get("/api/admin/devices", dependencies=[Depends(require_admin)])
+async def admin_devices_api(request: Request):
+    return await asyncio.to_thread(_db_admin_devices, request.state.device_id)
+
+@app.patch("/api/admin/devices/{public_id}", dependencies=[Depends(require_admin)])
+async def admin_patch_device_api(request: Request, public_id: str, body: dict):
+    name = None
+    if "name" in body:
+        name = body["name"].strip() if isinstance(body["name"], str) else ""
+        if not 1 <= len(name) <= 40:
+            raise HTTPException(status_code=422, detail="name must be 1-40 characters")
+    is_admin = body.get("is_admin")
+    if "is_admin" in body and not isinstance(is_admin, bool):
+        raise HTTPException(status_code=422, detail="is_admin must be a boolean")
+    view = await asyncio.to_thread(_db_admin_patch_device, public_id, name, is_admin, request.state.device_id)
+    if view is None:
+        raise HTTPException(status_code=404)
+    return view
+
+@app.delete("/api/admin/devices/{public_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_device_api(request: Request, public_id: str):
+    if not await asyncio.to_thread(_db_admin_delete_device, public_id, request.state.device_id):
+        raise HTTPException(status_code=404)
+    return Response(status_code=204)
+
 def _lockout_ip_key(ip: str) -> str:
     """Khóa theo IP: IPv6 gộp về /64 để không xoay địa chỉ trong cùng dải."""
     try:
@@ -1708,7 +1793,7 @@ def _clear_all_cache():
             try: os.remove(item_path)
             except: pass
 
-@app.post("/api/cache/clear")
+@app.post("/api/admin/cache/clear", dependencies=[Depends(require_admin)])
 async def clear_cache_endpoint():
     """Xóa sạch bộ nhớ đêm ngay lập tức (chống nghẽn Event Loop)"""
     try:

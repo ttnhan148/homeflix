@@ -41,7 +41,7 @@ Sử dụng **FastAPI** không đồng bộ (asyncio) để xử lý các yêu c
   - Giới hạn tổng dung lượng cache tối đa 10GB (nếu vượt quá sẽ xóa các tệp cũ nhất trước).
 - **APIs**:
   - `/api/cache/status`: Trả về dung lượng cache hiện tại (GB, %).
-  - `/api/cache/clear`: Xóa sạch toàn bộ cache ngay lập tức.
+  - `/api/admin/cache/clear`: Xóa sạch toàn bộ cache ngay lập tức.
   - `/api/search`: Thực hiện tìm kiếm phim từ PhimAPI bằng từ khóa.
   - `/api/movie/{slug}`: Lấy thông tin chi tiết phim bao gồm danh sách tập phim và các link m3u8.
   - `/api/saved` (`GET`, `POST`): Quản lý danh sách tủ phim đã lưu trên server (lưu trữ tập tin `saved_movies.json`).
