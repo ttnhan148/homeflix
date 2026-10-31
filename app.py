@@ -1004,7 +1004,7 @@ async def lifespan(app: FastAPI):
     init_db()
     # Chạy di chuyển dữ liệu downloads.json nếu có
     migrate_downloads_json_to_db()
-    _init_hometv()
+    hometv_ok = _init_hometv()
     # Reset các download bị treo do server restart
     await asyncio.to_thread(_db_reset_stuck_downloads)
     # Khởi tạo HTTP client (chuyển vào lifespan để đóng sạch khi shutdown)
@@ -1018,6 +1018,8 @@ async def lifespan(app: FastAPI):
     _bg_tasks.append(asyncio.create_task(download_worker()))
     _bg_tasks.append(asyncio.create_task(delayed_cleanup_worker()))
     _bg_tasks.append(asyncio.create_task(home_cache_warmer()))
+    if hometv_ok:  # HomeTV chỉ chạy khi hometv.db mở được
+        _bg_tasks.append(asyncio.create_task(hometv.scheduler.hometv_refresher()))
     _warn_if_admin_disabled()
     logger.info("[Startup] HomeFlix ready — DB, workers, httpx client initialized")
     yield

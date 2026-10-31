@@ -1,7 +1,7 @@
 """HomeTV: thu thập nguồn IPTV vào hometv.db."""
 import time
 
-from hometv import db, sources
+from hometv import db, scheduler, sources
 
 
 def init(path: str) -> None:
@@ -10,4 +10,4 @@ def init(path: str) -> None:
     sources.seed_defaults(time.time())
 
 
-__all__ = ["db", "init"]
+__all__ = ["db", "init", "scheduler"]
