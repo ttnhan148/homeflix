@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sources (
     enabled INTEGER NOT NULL DEFAULT 1,
     rights_status TEXT NOT NULL DEFAULT 'pending_review'
         CHECK (rights_status IN ('pending_review', 'approved', 'rejected')),
-    refresh_interval INTEGER NOT NULL DEFAULT 86400,
+    refresh_interval INTEGER NOT NULL DEFAULT 21600,
     timeout INTEGER NOT NULL DEFAULT 30,
     max_size_mb INTEGER NOT NULL DEFAULT 20,
     last_fetch_at REAL,
@@ -124,7 +124,8 @@ def conn() -> sqlite3.Connection:
 
 @contextmanager
 def tx():
-    """Transaction ghi: giữ khóa, BEGIN IMMEDIATE, commit khi êm, rollback khi lỗi."""
+    """Transaction ghi: giữ khóa, BEGIN IMMEDIATE, commit khi êm, rollback khi lỗi.
+    Không reentrant: không lồng tx trong tx."""
     with lock:
         c = conn()
         c.execute("BEGIN IMMEDIATE")

@@ -100,3 +100,9 @@ def test_init_hometv_success_returns_true(app_module, monkeypatch, tmp_path):
 
 def test_lifespan_calls_init_hometv(app_module):
     assert "_init_hometv()" in inspect.getsource(app_module.lifespan)
+
+
+def test_source_refresh_interval_defaults_to_6h(db):
+    with hometv.db.tx() as c:
+        c.execute("INSERT INTO sources(id, name, url) VALUES ('s', 'S', 'http://x')")
+    assert db.execute("SELECT refresh_interval FROM sources").fetchone()[0] == 21600
