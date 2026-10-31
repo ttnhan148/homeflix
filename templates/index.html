@@ -1891,6 +1891,9 @@
                     <svg class="brand-mark" width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path d="M4.5 14.5 16 5l11.5 9.5V26a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 26Z" fill="none" stroke="#e50914" stroke-width="2.5" stroke-linejoin="round"/><path d="M13 13.2 21 18l-8 4.8Z" fill="#e50914"/></svg>
                     <h1>HomeFlix</h1>
                 </div>
+                <button type="button" id="hometvToggle" class="hometv-toggle" aria-label="Chuyển HomeFlix / HomeTV" aria-pressed="false">
+                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="m8 3 4 3 4-3M9 21h6"/></svg>
+                </button>
                 <!-- TV, máy tính: điều hướng nằm cùng hàng với logo -->
                 <nav class="tabs-nav" id="appTabsNav" aria-label="Điều hướng chính">
                     <button class="tab-btn active" id="tabBtnSearch" onclick="switchTab('search-tab')">Home</button>
@@ -1907,6 +1910,17 @@
                     </button>
                 </div>
             </header>
+        </div>
+
+        <!-- HOMETV: lưới kênh (hiện khi body có mode-hometv) -->
+        <div id="hometv-root" class="hometv-root" hidden>
+            <div class="tv-bar">
+                <input type="search" id="tvSearch" class="tv-search" placeholder="Tìm kênh" aria-label="Tìm kênh" autocomplete="off">
+                <div id="tvChips" class="tv-chips"></div>
+            </div>
+            <div id="tvEmpty" class="tv-empty" hidden></div>
+            <div id="tvGrid" class="movies-grid"></div>
+            <div id="tvMore" class="grid-load-more" hidden>Đang tải thêm</div>
         </div>
 
         <!-- TAB CONTENT 1: MANUAL LINK -->
@@ -4393,5 +4407,6 @@ document.addEventListener('visibilitychange', () => {
     <script src="{{ asset('cast.js') }}"></script>
     <script src="{{ asset('settings-hometv.js') }}"></script>
     <script src="{{ asset('settings.js') }}"></script>
+    <script src="{{ asset('hometv.js') }}"></script>
 </body>
 </html>
