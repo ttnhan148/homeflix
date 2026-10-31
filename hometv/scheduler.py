@@ -60,14 +60,18 @@ def _process(source_id: str, body: bytes, now: float, rand: float):
 
 
 async def refresh_source(client, source_id: str, *, now: float, rand: float) -> str:
-    """Một lượt tải: ok | unchanged | error | skipped | gone."""
-    job = acquire_job(source_id, now)
+    """Một lượt tải: ok | unchanged | error | skipped | gone.
+
+    Mọi chạm DB đi qua to_thread: db.lock có thể đang bị ingest của nguồn khác giữ,
+    gọi thẳng trên event loop sẽ làm đứng cả HomeFlix."""
+    job = await asyncio.to_thread(acquire_job, source_id, now)
     if job is None:
         return "skipped"
+    t0 = time.monotonic()
     status, error, records, skipped = "error", "Bị hủy", 0, 0
     result = "error"
     try:
-        src = sources.internal(source_id)
+        src = await asyncio.to_thread(sources.internal, source_id)
         if src is None:
             result, status, error = "gone", "error", "Nguồn đã bị xoá"
             return result
@@ -75,8 +79,7 @@ async def refresh_source(client, source_id: str, *, now: float, rand: float) -> 
             body = await fetcher.fetch_playlist(client, src["url"], timeout=src["timeout"],
                                                 max_bytes=src["max_size_mb"] * 1024 * 1024)
         except fetcher.FetchError as e:
-            sources.record_failure(source_id, now=now, message=e.message,
-                                   retryable=e.retryable, rand=rand)
+            await asyncio.to_thread(_fail, source_id, now, e.message, e.retryable, rand)
             result, status, error = "error", "error", e.message
             return result
         try:
@@ -86,24 +89,36 @@ async def refresh_source(client, source_id: str, *, now: float, rand: float) -> 
                 error = "Nguồn đã bị xoá"
         except Exception:
             logger.exception("HomeTV: lỗi nhập nguồn %s", source_id)
-            sources.record_failure(source_id, now=now, message=INGEST_ERROR, retryable=True, rand=rand)
+            await asyncio.to_thread(_fail, source_id, now, INGEST_ERROR, True, rand)
             result, status, error = "error", "error", INGEST_ERROR
         return result
     except Exception:
         logger.exception("HomeTV: lỗi không mong đợi khi tải nguồn %s", source_id)
         try:
-            sources.record_failure(source_id, now=now, message=INGEST_ERROR, retryable=True, rand=rand)
+            await asyncio.to_thread(_fail, source_id, now, INGEST_ERROR, True, rand)
         except Exception:
             logger.exception("HomeTV: không ghi được lỗi nguồn %s", source_id)
         result, status, error = "error", "error", INGEST_ERROR
         return result
     finally:
-        finish_job(job, status=status, now=now, records=records, skipped=skipped, error=error)
+        # đóng job dù bị hủy; thời điểm kết thúc = now + thời gian thực đã trôi
+        done = now + (time.monotonic() - t0)
+        fin = asyncio.ensure_future(asyncio.to_thread(
+            lambda: finish_job(job, status=status, now=done, records=records, skipped=skipped, error=error)))
+        try:
+            await asyncio.shield(fin)
+        except asyncio.CancelledError:
+            await fin  # job đã đóng xong rồi mới cho hủy lan tiếp
+            raise
+
+
+def _fail(source_id: str, now: float, message: str, retryable: bool, rand: float) -> None:
+    sources.record_failure(source_id, now=now, message=message, retryable=retryable, rand=rand)
 
 
 async def run_due(client, now: float) -> list[str]:
     """Chạy các nguồn đến hạn: tối đa MAX_PARALLEL lượt, mỗi host một lượt."""
-    due = sources.due(now)
+    due = await asyncio.to_thread(sources.due, now)
     sem = asyncio.Semaphore(MAX_PARALLEL)
     host_locks: dict[str, asyncio.Lock] = {}
 

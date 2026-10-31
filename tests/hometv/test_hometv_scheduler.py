@@ -183,3 +183,49 @@ def test_refresher_survives_errors(db, monkeypatch):
             pass
     run(main())
     assert len(calls) >= 2
+
+
+def test_event_loop_not_blocked_by_sibling_ingest(db, public_dns):
+    # ingest lớn giữ db.lock trong luồng; nguồn kia lỗi giữa chừng không được làm đứng event loop
+    import time
+    big = ("#EXTM3U\n" + "".join(
+        f'#EXTINF:-1 tvg-id="id{i}",Kênh {i}\nhttps://s.example/{i}.m3u8\n' for i in range(20000))).encode()
+    sources.create("A", "https://h1.example/a.m3u", 1.0)
+    sources.create("B", "https://h2.example/b.m3u", 1.0)
+
+    async def handler(req):
+        if req.url.host == "h1.example":
+            return _resp(200, big)
+        await asyncio.sleep(0.5)
+        return _resp(500)
+    gaps = []
+
+    async def main():
+        stop = False
+
+        async def beat():
+            last = time.monotonic()
+            while not stop:
+                await asyncio.sleep(0.01)
+                t = time.monotonic()
+                gaps.append(t - last)
+                last = t
+        hb = asyncio.create_task(beat())
+        res = await scheduler.run_due(fetcher.make_client(httpx.MockTransport(handler)), time.time())
+        stop = True
+        await hb
+        return res
+    assert sorted(run(main())) == ["error", "ok"]
+    assert max(gaps) < 0.3
+
+
+def test_job_duration_is_real(db, public_dns):
+    src = sources.create("A", "https://a.example/a.m3u", 1.0)
+
+    async def handler(req):
+        await asyncio.sleep(0.05)
+        return _resp(200, SAMPLE)
+    assert refresh(fetcher.make_client(httpx.MockTransport(handler)), src["id"], now=1000.0) == "ok"
+    with hdb.lock:
+        r = hdb.conn().execute("SELECT started_at, completed_at, duration_ms FROM jobs").fetchone()
+    assert r[0] == 1000.0 and r[2] >= 40 and r[1] >= 1000.04
