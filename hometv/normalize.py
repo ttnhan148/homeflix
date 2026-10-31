@@ -24,9 +24,11 @@ COUNTRIES = frozenset({"nga", "my", "han quoc", "nhat ban", "trung quoc", "phap"
                        "thai lan", "russia", "usa", "korea", "japan", "china", "france", "uk"})
 
 _QUALITY = frozenset({"hd", "fhd", "sd", "uhd", "4k", "1080p", "1080i", "720p", "576p", "480p", "backup"})
+# Nhãn iptv-org trong ngoặc: bỏ hẳn khỏi tên (không phải chất lượng)
+_TAGS = frozenset({"geo blocked", "not 24 7"})
 _FAKE_IDS = frozenset({"", "no_epg", "none", "null", "undefined"})
 _MAX_TVG_ID = 200
-_MARK = ""  # đánh dấu từ chất lượng trong ngoặc
+_MARK = "\ue000"  # đánh dấu từ chất lượng trong ngoặc
 _BRACKET = re.compile(r"[(\[{][^)\]}]*[)\]}]")
 
 
@@ -43,6 +45,8 @@ def _split_quality(name: str) -> tuple[list[str], list[str]]:
 
     def unwrap(m: re.Match) -> str:
         words = re.sub(r"[^\w]+", " ", m.group(0)).split()
+        if " ".join(words) in _TAGS:
+            return " "
         if words and all(w in _QUALITY for w in words):
             return " " + " ".join(_MARK + w for w in words) + " "
         return m.group(0)
@@ -84,7 +88,7 @@ _GROUP_JUNK = ("So", "Sk", "Cf", "Me", "Cs", "Co", "Cn")
 
 def strip_group(group_title: str) -> str:
     """Bỏ emoji, ký tự ký hiệu và tiền tố dạng `xx| `."""
-    s = "".join(c for c in group_title if unicodedata.category(c) not in _GROUP_JUNK and c != "️")
+    s = "".join(c for c in group_title if unicodedata.category(c) not in _GROUP_JUNK and c != "\ufe0f")
     s = _GROUP_PREFIX.sub("", re.sub(r"^\s*\|\s*", "|", s))
     s = re.sub(r"^\|\s*", "", s)
     return " ".join(s.split())

@@ -93,3 +93,9 @@ def test_provinces():
     for p in ("ha noi", "ho chi minh", "da nang", "dong nai", "ba ria vung tau", "thua thien hue"):
         assert p in normalize.PROVINCES
     assert all(p == normalize.fold(p) for p in normalize.PROVINCES)
+
+
+def test_iptv_org_tags_stripped():
+    n = normalize.normalize_name
+    assert n("An Giang TV1 [Geo-blocked]") == n("An Giang TV1")
+    assert n("Da Nang TV1 [Not 24/7]") == n("Da Nang TV1")
