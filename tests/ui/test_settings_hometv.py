@@ -277,3 +277,137 @@ def test_edit_priority_and_interval(pw, open_app):
     do(page, sid, "edit")
     assert page.locator(f'{src(sid)} [data-key="hometv.priority"]').count() == 0
     assert page.console_errors == []
+
+
+# --- Sức khỏe stream (gói 4) ---
+import pytest  # noqa: E402
+
+from hometv import geo, health_store  # noqa: E402
+from hometv.geo import HealthMode  # noqa: E402
+from hometv.health import HealthResult  # noqa: E402
+from tests.hometv.test_hometv_catalog import seed_channel, seed_stream  # noqa: E402
+
+STATUS = ".hometv-health-status"
+
+
+def geo_is(monkeypatch, enabled, country="VN"):
+    monkeypatch.setattr(geo, "current", lambda now=None: HealthMode("auto", enabled, country, 1.0))
+
+
+def approve(sid="doubo-vn"):
+    set_source(sid, rights_status="approved")
+
+
+def seed_health(sid="doubo-vn", dead_name="Kênh chết", streak=3, alive=1):
+    c = hometv.db.conn()
+    seed_channel(c, 1, dead_name)
+    for i in range(1, alive + 1):
+        seed_stream(c, 10 + i, 1, sid, "https://ok.example/%d.m3u8" % i)
+        health_store.record(10 + i, HealthResult(ok=True, height=720), True, 1.0)
+    seed_stream(c, 99, 1, sid, "https://dead.example/x.m3u8")
+    for n in range(streak):
+        health_store.record(99, HealthResult(ok=False, error="HTTP 403"), True, float(n))
+
+
+@pytest.mark.parametrize("enabled,country,text", [
+    (True, "VN", "Kiểm tra stream: bật (máy chủ ở VN)"),
+    (False, "MY", "Kiểm tra stream: tắt (máy chủ ngoài Việt Nam)"),
+    (False, None, "Kiểm tra stream: tắt (chưa xác định vị trí máy chủ)"),
+])
+def test_status_row(pw, open_app, monkeypatch, enabled, country, text):
+    geo_is(monkeypatch, enabled, country)
+    page = hometv_page(open_app)
+    page.wait_for_selector(STATUS)
+    assert page.locator(STATUS).inner_text() == text
+    assert page.locator(f"{GROUP} .set-row").count() == 5   # hàng trạng thái không phải .set-row (không lẫn danh sách nguồn)
+
+
+def test_meta_shows_alive_over_checked(pw, open_app, monkeypatch):
+    geo_is(monkeypatch, True)
+    approve()
+    seed_health(alive=2)
+    page = hometv_page(open_app)
+    wait_meta(page, "doubo-vn", "2/3 sống")
+    assert meta(page, "doubo-vn") == "Đã duyệt · 0 kênh · 2/3 sống"
+    assert "sống" not in meta(page, "iptv-org-vn")
+
+
+def test_meta_shows_checking_and_polls_until_done(pw, open_app, monkeypatch):
+    geo_is(monkeypatch, True)
+    approve()
+    seed_health()
+    health_store.checking.add("doubo-vn")
+    try:
+        page = hometv_page(open_app, clock=True)
+        wait_meta(page, "doubo-vn", "Đang kiểm tra…")
+        health_store.checking.discard("doubo-vn")
+        page.clock.fast_forward(3100)
+        wait_meta(page, "doubo-vn", "Đang kiểm tra…", present=False)
+    finally:
+        health_store.checking.discard("doubo-vn")
+
+
+def test_check_now_visibility(pw, open_app, monkeypatch):
+    geo_is(monkeypatch, True)
+    approve()
+    set_source("dangdvd-iptv", rights_status="approved", enabled=0)
+    page = hometv_page(open_app)
+    for sid, shown in (("doubo-vn", True), ("iptv-org-vn", False), ("dangdvd-iptv", False)):
+        open_source(page, sid)
+        assert (["check", "Kiểm tra ngay"] in acts(page, sid)) is shown, sid
+    geo_is(monkeypatch, False, "MY")
+    page = hometv_page(open_app)
+    open_source(page, "doubo-vn")
+    assert ["check", "Kiểm tra ngay"] not in acts(page, "doubo-vn")
+
+
+def test_check_now_posts_and_shows_checking(pw, open_app, monkeypatch):
+    geo_is(monkeypatch, True)
+    approve()
+    page = hometv_page(open_app, clock=True)
+    open_source(page, "doubo-vn")
+    do(page, "doubo-vn", "check")
+    wait_request(page, f"POST {PATH}/doubo-vn/check")
+    wait_meta(page, "doubo-vn", "Đang kiểm tra…")
+    health_store.checking.add("doubo-vn")   # vòng nền nhận lượt
+    try:
+        page.clock.fast_forward(3100)
+        page.wait_for_timeout(200)
+        assert "Đang kiểm tra…" in meta(page, "doubo-vn")
+    finally:
+        health_store.checking.discard("doubo-vn")
+    page.clock.fast_forward(3100)
+    wait_meta(page, "doubo-vn", "Đang kiểm tra…", present=False)
+
+
+def test_dead_list_shows_reason_and_streak(pw, open_app, monkeypatch):
+    geo_is(monkeypatch, True)
+    approve()
+    seed_health(dead_name="VTV9", streak=3)
+    page = hometv_page(open_app)
+    open_source(page, "doubo-vn")
+    do(page, "doubo-vn", "dead")
+    page.wait_for_selector(f"{src('doubo-vn')} .hometv-dead-item")
+    assert page.locator(f"{src('doubo-vn')} .hometv-dead-item").all_inner_texts() == ["VTV9 · HTTP 403 · chết 3 lần"]
+
+
+def test_dead_list_empty_message(pw, open_app, monkeypatch):
+    geo_is(monkeypatch, True)
+    approve()
+    page = hometv_page(open_app)
+    open_source(page, "doubo-vn")
+    do(page, "doubo-vn", "dead")
+    page.wait_for_selector(f"{src('doubo-vn')} .hometv-dead-empty")
+    assert page.locator(f"{src('doubo-vn')} .hometv-dead-empty").inner_text() == "Không có stream chết"
+
+
+def test_dead_list_escapes_html_in_channel_name(pw, open_app, monkeypatch):
+    geo_is(monkeypatch, True)
+    approve()
+    seed_health(dead_name="<img src=x onerror=window.__pwned=1>")
+    page = hometv_page(open_app)
+    open_source(page, "doubo-vn")
+    do(page, "doubo-vn", "dead")
+    page.wait_for_selector(f"{src('doubo-vn')} .hometv-dead-item")
+    assert page.locator(f"{src('doubo-vn')} .hometv-dead-item img").count() == 0
+    assert page.evaluate("window.__pwned") is None
