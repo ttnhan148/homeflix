@@ -171,19 +171,23 @@ def create(name: str, url: str, now: float) -> dict:
 
 
 def update(source_id: str, changes: dict, now: float) -> dict:
-    if _row(source_id) is None:
+    cur_row = _row(source_id)
+    if cur_row is None:
         raise KeyError(source_id)
     ok, errors = _validate(changes)
     if errors:
         raise ValidationError(errors)
     sets = dict(ok, updated_at=now)
-    if "url" in ok:  # đổi URL: tải lại từ đầu
+    url_changed = "url" in ok and ok["url"] != cur_row["url"]
+    if url_changed:  # đổi URL: tải lại từ đầu, bỏ bản tốt của URL cũ
         sets.update(content_hash=None, next_fetch_at=now, retry_count=0, last_error=None)
     with db.tx() as c:
         cur = c.execute(f"UPDATE sources SET {', '.join(k + '=?' for k in sets)} WHERE id=?",
                         (*sets.values(), source_id))
         if cur.rowcount == 0:  # bị xoá giữa chừng
             raise KeyError(source_id)
+        if url_changed:  # URL mới chưa có mốc "bản tốt" để so số kênh
+            c.execute("DELETE FROM source_versions WHERE source_id=?", (source_id,))
     return get(source_id, now)
 
 

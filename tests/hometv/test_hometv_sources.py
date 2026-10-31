@@ -235,3 +235,29 @@ def test_get_create_update_list_same_shape(db, public_dns):
     assert sources.get("nope") is None and sources.internal("nope") is None
     assert {"content_hash", "retry_count", "timeout", "max_size_mb", "next_fetch_at",
             "refresh_interval"} <= set(sources.internal("a"))
+
+
+def seed_version(sid, n=100):
+    sources.record_success(sid, now=1.0, content_hash="h", body=b"x", stats=stats(), entry_count=n)
+
+
+def test_url_change_drops_old_baseline(db, public_dns):
+    sources.create("A", URL, 0.0)
+    seed_version("a")
+    assert sources.last_good_entry_count("a") == 100
+    sources.update("a", {"url": "https://example.com/new.m3u"}, 5.0)
+    assert sources.last_good_entry_count("a") is None
+    assert hdb.conn().execute("SELECT COUNT(*) FROM source_versions").fetchone()[0] == 0
+    assert sources.check_version(sources.last_good_entry_count("a"), Playlist([ENTRY] * 10, 0, True)) is None
+
+
+def test_same_url_keeps_state(db, public_dns):
+    sources.create("A", URL, 0.0)
+    seed_version("a")
+    sources.record_failure("a", now=2.0, message="e", retryable=True, rand=0.0)
+    before = sources.internal("a")
+    sources.update("a", {"url": URL, "priority": 9}, 7.0)
+    after = sources.internal("a")
+    for k in ("content_hash", "retry_count", "last_error", "next_fetch_at"):
+        assert after[k] == before[k]
+    assert after["priority"] == 9 and sources.last_good_entry_count("a") == 100
