@@ -325,6 +325,16 @@ Tên file được làm sạch bằng `clean_filename()` (bỏ dấu tiếng Vi�
 
 ---
 
+## 🔑 Thiết lập quyền admin (chủ nhà)
+
+- Đặt `HOMEFLIX_ADMIN_PASSWORD` trong `deploy/.env` (file này bị git bỏ qua; chạy `chmod 600 deploy/.env`). Dùng mật khẩu ASCII ngẫu nhiên, dài từ 16 ký tự trở lên.
+- Không đặt (hoặc để rỗng) thì mọi tính năng admin tắt, Cài đặt chỉ hiện nhóm "Thiết bị này"; app ghi cảnh báo lúc khởi động.
+- Sau khi tạo/đổi `deploy/.env`, chạy `deploy/deploy.sh --force` (nếu không, script báo "up to date" khi `main` chưa đổi).
+- `TRUSTED_PROXIES` phải là IP của nginx mà app thấy (peer), để app đọc đúng IP thật của client. Nếu sai, mọi client đều giống nginx và giới hạn khoá đăng nhập sai thành khoá toàn cục.
+- TV không gõ mật khẩu được: chọn "Xin duyệt từ máy admin" rồi duyệt mã 6 số trên điện thoại đã đăng nhập admin.
+
+---
+
 ## ⚠️ Bảo mật & lưu ý
 
 - **Không có xác thực**: toàn bộ API (kể cả xoá cache, tải phim) đều mở. Nếu deploy ra internet công khai, hãy đặt sau reverse proxy có auth (vd. `basic-auth` của Caddy/nginx) hoặc mở qua VPN.
