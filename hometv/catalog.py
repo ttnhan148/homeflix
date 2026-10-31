@@ -27,15 +27,25 @@ def _is_valid_channel(c, channel_id: int) -> bool:
     return row is not None
 
 
+def _status(ok_max, use_health: bool) -> str | None:
+    if not use_health:
+        return None
+    return "unchecked" if ok_max is None else ("alive" if ok_max else "dead")
+
+
 def list_channels(now: float, use_health: bool = False) -> list[dict]:
     """use_health: ẩn kênh mà mọi stream hợp lệ đều chết liên tiếp từ FAIL_HIDE lần kiểm trở lên."""
     alive = f" AND (h.stream_id IS NULL OR h.fail_streak < {FAIL_HIDE})" if use_health else ""
     join = _HEALTH if use_health else ""
+    # MAX(h.ok): 1 = có stream vừa kiểm thành công, 0 = đã kiểm mà chết hết, NULL = chưa kiểm
+    ok_max = (f"(SELECT MAX(h.ok) FROM {_FROM}{_HEALTH} WHERE s.channel_id = oc.id AND {_VALID}) AS ok_max"
+              if use_health else "NULL AS ok_max")
     rows = _read(f"""
         SELECT oc.id, oc.category, oc.logo_url, oc.display_name, oc.normalized_name,
                (SELECT s.display_name FROM {_FROM} WHERE s.channel_id = oc.id AND {_VALID}
                 ORDER BY src.priority, s.id LIMIT 1) AS best_name,
-               f.channel_id IS NOT NULL AS favorite, r.viewed_at
+               f.channel_id IS NOT NULL AS favorite, r.viewed_at,
+               {ok_max}
         FROM channels oc
         LEFT JOIN favorites f ON f.channel_id = oc.id
         LEFT JOIN recents r ON r.channel_id = oc.id
@@ -48,6 +58,7 @@ def list_channels(now: float, use_health: bool = False) -> list[dict]:
         "logo": "/proxy/image?url=" + quote(r["logo_url"], safe="") if r["logo_url"] else None,
         "favorite": bool(r["favorite"]),
         "recent_at": r["viewed_at"],
+        "status": _status(r["ok_max"], use_health),
     } for r in rows]
 
 

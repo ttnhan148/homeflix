@@ -5,7 +5,7 @@
   const BATCH = 60;
   const $ = (id) => document.getElementById(id);
 
-  const state = { channels: [], chip: 'all', query: '', shown: 0, loaded: false };
+  const state = { channels: [], health: false, chip: 'all', query: '', shown: 0, loaded: false };
   let observer = null;
 
   function store() {
@@ -150,7 +150,9 @@
     $('tvChips').replaceChildren();
     $('tvMore').hidden = true;
     try {
-      state.channels = await api('GET', '/api/hometv/channels');
+      const res = await api('GET', '/api/hometv/channels');
+      state.channels = res.channels;
+      state.health = res.health;
     } catch (e) {
       state.loaded = false;
       if (e.status === 503) $('hometvToggle').hidden = true;

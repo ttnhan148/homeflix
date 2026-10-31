@@ -20,8 +20,11 @@ def test_channels_lists_only_valid_without_urls(app_module, make_client):
     seed(app_module)
     r = make_client().get("/api/hometv/channels")
     assert r.status_code == 200
-    assert r.json() == [{"id": 1, "name": "VTV1", "category": "National TV", "favorite": False,
-                         "recent_at": None, "logo": "/proxy/image?url=https%3A%2F%2Fl%2Fvtv1.png"}]
+    body = r.json()
+    assert set(body) == {"health", "channels"} and body["health"] is False
+    assert body["channels"] == [{"id": 1, "name": "VTV1", "category": "National TV", "favorite": False,
+                                 "recent_at": None, "status": None,
+                                 "logo": "/proxy/image?url=https%3A%2F%2Fl%2Fvtv1.png"}]
     assert "cdn" not in r.text and "SECRET" not in r.text
 
 
@@ -46,11 +49,11 @@ def test_favorite_and_recent_roundtrip(app_module, make_client):
     assert c.put("/api/hometv/favorites/1").status_code == 204
     assert c.put("/api/hometv/favorites/1").status_code == 204
     assert c.post("/api/hometv/recent/1").status_code == 204
-    ch = c.get("/api/hometv/channels").json()[0]
+    ch = c.get("/api/hometv/channels").json()["channels"][0]
     assert ch["favorite"] is True and ch["recent_at"] is not None
     assert c.delete("/api/hometv/favorites/1").status_code == 204
     assert c.delete("/api/hometv/favorites/1").status_code == 204
-    assert c.get("/api/hometv/channels").json()[0]["favorite"] is False
+    assert c.get("/api/hometv/channels").json()["channels"][0]["favorite"] is False
 
 
 def test_unknown_or_hidden_channel_404(app_module, make_client):
@@ -72,9 +75,11 @@ def test_public_api_uses_geo_enabled_for_hiding_but_play_still_works(app_module,
         health_store.record(1, HealthResult(ok=False, error="x"), True, float(n))
     c = make_client()
     monkeypatch.setattr(geo, "current", lambda now=None: HealthMode("auto", True, "VN", 1.0))
-    assert c.get("/api/hometv/channels").json() == []
+    assert c.get("/api/hometv/channels").json() == {"health": True, "channels": []}
     app_module.hometv_play_client = hometv.fetcher.make_client(
         httpx.MockTransport(lambda r: httpx.Response(200, content=b"#EXTM3U\n#EXTINF:4,\ns.ts\n")))
     assert c.get("/api/hometv/play/1/index.m3u8").status_code == 200   # đường phát không lọc theo sức khỏe
     monkeypatch.setattr(geo, "current", lambda now=None: HealthMode("auto", False, "MY", 1.0))
-    assert len(c.get("/api/hometv/channels").json()) == 1
+    body = c.get("/api/hometv/channels").json()
+    assert body["health"] is False and len(body["channels"]) == 1
+    assert body["channels"][0]["status"] is None

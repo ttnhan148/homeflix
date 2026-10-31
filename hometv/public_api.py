@@ -28,7 +28,8 @@ def make_public_router(get_client: Callable[[], httpx.AsyncClient]) -> APIRouter
 
     @router.get("/channels")
     async def channels():
-        return await _db(catalog.list_channels, time.time(), geo.current().enabled)
+        enabled = geo.current().enabled
+        return {"health": enabled, "channels": await _db(catalog.list_channels, time.time(), enabled)}
 
     @router.get("/channels/{channel_id}/streams")
     async def streams(channel_id: int):

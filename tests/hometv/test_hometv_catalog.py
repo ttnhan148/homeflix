@@ -102,3 +102,24 @@ def test_cascade_removes_favorite_when_channel_deleted(db):
     catalog.set_favorite(1, True, 1.0)
     db.execute("DELETE FROM channels WHERE id = 1")
     assert db.execute("SELECT COUNT(*) FROM favorites").fetchone()[0] == 0
+
+
+def _health(c, sid, ok, streak=0):
+    c.execute("INSERT INTO stream_health(stream_id, ok, fail_streak, score) VALUES (?,?,?,50)", (sid, int(ok), streak))
+
+
+def test_list_channels_status_alive_dead_unchecked(db):
+    seed_source(db, "ok")
+    for i in (1, 2, 3):
+        seed_channel(db, i); seed_stream(db, i, i, "ok", "https://s/%d" % i)
+    _health(db, 1, True)
+    _health(db, 2, False, streak=1)
+    got = catalog.list_channels(1.0, True)
+    assert [(c["id"], c["status"]) for c in got] == [(1, "alive"), (2, "dead"), (3, "unchecked")]
+
+
+def test_list_channels_status_none_without_health(db):
+    seed_source(db, "ok")
+    seed_channel(db, 1); seed_stream(db, 1, 1, "ok", "https://s/1")
+    _health(db, 1, True)
+    assert [c["status"] for c in catalog.list_channels(1.0)] == [None]
