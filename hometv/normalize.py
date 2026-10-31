@@ -132,20 +132,20 @@ def _has(tokens: list[str], keywords) -> bool:
 
 
 _RULES = (
-    ("International", ("quoc te", "international", *COUNTRIES)),
-    ("National TV", ("vtv", "htv", "vtc", "quoc gia")),
     ("News", ("tin tuc", "news", "vnews")),
     ("Sports", ("the thao", "sport", "sports", "bong da", "football")),
     ("Kids", ("hoat hinh", "thieu nhi", "kids", "cartoon")),
     ("Movies", ("phim", "movie", "movies", "cinema")),
     ("Music", ("am nhac", "music", "radio")),
     ("Entertainment", ("giai tri", "entertainment", "kham pha", "discovery")),
+    ("International", ("quoc te", "international", *COUNTRIES)),
+    ("National TV", ("vtv", "htv", "vtc", "quoc gia")),
     ("General", ("general",)),
 )
 
 
 def category(group_title: str, broadcaster: str) -> str:
-    """Nhóm tự động, kiểm theo thứ tự của spec (Local, International, National, ...)."""
+    """Nhóm tự động, kiểm theo thứ tự của spec (Local, thể loại, International, National, ...)."""
     toks = _tokens(fold(strip_group(group_title)))
     if _find_seq(toks, "dia phuong") >= 0 or broadcaster in PROVINCES:
         return "Local TV"

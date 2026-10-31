@@ -80,7 +80,8 @@ def test_broadcaster(name, group, b):
     ("🇷🇺| Nga và Cộng đồng các Quốc gia Độc lập", "", "International"),
     ("General", "", "General"), ("Undefined", "", "Unknown"), ("", "", "Unknown"),
     ("Banh", "", "Unknown"), ("Thành phố", "", "Unknown"),
-    ("Quốc tế", "", "International"), ("🇰🇷| Han Quoc", "", "International"), ("Phim Anh", "", "International"),
+    ("Quốc tế", "", "International"), ("🇰🇷| Han Quoc", "", "International"), ("Phim Anh", "", "Movies"), ("🎬| Phim ảnh", "", "Movies"),
+    ("⚽| Thể thao quốc tế", "", "Sports"), ("Kênh Anh", "", "International"),
 ])
 def test_category(group, b, cat):
     assert normalize.category(group, b) == cat
