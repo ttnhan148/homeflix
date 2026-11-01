@@ -5,7 +5,8 @@
   const BATCH = 60;
   const $ = (id) => document.getElementById(id);
 
-  const state = { channels: [], health: false, chip: 'all', query: '', shown: 0, loaded: false };
+  const state = { channels: [], health: false, alive: false, group: '', query: '', shown: 0, loaded: false };
+  const RECENT_MAX = 3;
   let observer = null;
 
   function store() {
@@ -26,59 +27,13 @@
     return r.status === 204 ? null : r.json();
   }
 
+  // Danh sách theo bộ lọc của tab Home (Alive, Nhóm); dùng cho lưới và để chuyển kênh trong player
   function visible() {
-    return U.filterChannels(state.channels, { chip: state.chip, query: state.query });
+    return U.filterChannels(state.channels, { alive: state.alive, group: state.group });
   }
 
   function categoryLabel(c) {
     return U.CATEGORY_LABELS[U.CATEGORY_ORDER.includes(c.category) ? c.category : 'Unknown'];
-  }
-
-  function buildCard(c) {
-    const card = document.createElement('div');
-    card.className = 'movie-card tv-card';
-    card.dataset.id = String(c.id);
-    card.tabIndex = 0;
-    card.setAttribute('role', 'button');
-
-    const wrap = document.createElement('div');
-    wrap.className = 'poster-wrap';
-    if (c.logo) {
-      const img = document.createElement('img');
-      img.className = 'movie-poster';
-      img.loading = 'lazy';
-      img.alt = '';
-      img.src = c.logo;
-      img.addEventListener('error', () => { img.replaceWith(initialEl(c)); });
-      wrap.appendChild(img);
-    } else {
-      wrap.appendChild(initialEl(c));
-    }
-    const star = document.createElement('button');
-    star.type = 'button';
-    star.className = 'tv-star';
-    star.textContent = '★';
-    star.setAttribute('aria-pressed', String(c.favorite));
-    star.setAttribute('aria-label', 'Yêu thích');
-    star.addEventListener('click', (e) => { e.stopPropagation(); toggleFavorite(c); });
-    wrap.appendChild(star);
-
-    const info = document.createElement('div');
-    info.className = 'movie-info';
-    const title = document.createElement('div');
-    title.className = 'movie-title';
-    title.textContent = c.name;
-    const meta = document.createElement('div');
-    meta.className = 'movie-meta';
-    meta.textContent = categoryLabel(c);
-    info.append(title, meta);
-    card.append(wrap, info);
-    card.addEventListener('click', () => open(c.id));
-    card.addEventListener('keydown', (e) => {
-      // stopPropagation: trình xử lý Enter chung của trang không click thêm lần nữa
-      if (e.key === 'Enter' && e.target === card) { e.preventDefault(); e.stopPropagation(); open(c.id); }
-    });
-    return card;
   }
 
   function initialEl(c) {
@@ -88,23 +43,68 @@
     return span;
   }
 
+  // Thẻ kênh dựng bằng buildPosterCard của HomeFlix, gắn thêm sao yêu thích và chấm trạng thái
+  function buildChannelCard(c) {
+    const card = root.buildPosterCard({ title: c.name, meta: categoryLabel(c), imgSrc: c.logo, onClick: () => open(c.id), focusable: true });
+    card.classList.add('tv-card');
+    card.dataset.id = String(c.id);
+    card.setAttribute('role', 'button');
+    const wrap = card.querySelector('.poster-wrap');
+    const img = wrap.querySelector('img');
+    if (c.logo) img.onerror = () => { img.replaceWith(initialEl(c)); };
+    else img.replaceWith(initialEl(c));
+    if (state.health && c.status) {
+      const dot = document.createElement('span');
+      dot.className = 'tv-dot';
+      dot.dataset.status = c.status;
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', U.statusLabel(c.status));
+      wrap.appendChild(dot);
+    }
+    const star = document.createElement('button');
+    star.type = 'button';
+    star.className = 'tv-star';
+    star.textContent = '★';
+    star.setAttribute('aria-pressed', String(c.favorite));
+    star.setAttribute('aria-label', 'Yêu thích');
+    star.addEventListener('click', (e) => { e.stopPropagation(); toggleFavorite(c); });
+    wrap.appendChild(star);
+    card.addEventListener('keydown', (e) => {
+      // stopPropagation: trình xử lý Enter chung của trang không click thêm lần nữa
+      if (e.key === 'Enter' && e.target === card) { e.preventDefault(); e.stopPropagation(); open(c.id); }
+    });
+    return card;
+  }
+
   function open(id) {
     if (root.HFTV && typeof root.HFTV.openChannel === 'function') root.HFTV.openChannel(id);
   }
 
-  function renderChips() {
-    const bar = $('tvChips');
-    const chips = [{ key: 'all', label: 'Tất cả' }, ...U.buildChips(state.channels)];
-    if (!chips.some((c) => c.key === state.chip)) state.chip = 'all';
-    bar.replaceChildren(...chips.map((c) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'filter-option' + (c.key === state.chip ? ' active' : '');
-      b.dataset.chip = c.key;
-      b.textContent = c.label;
-      b.addEventListener('click', () => { state.chip = c.key; renderChips(); renderGrid(); });
-      return b;
+  // Hàng "Kênh xem gần đây": thẻ Xem tiếp của HomeFlix, không vuốt, không thanh tiến độ
+  function renderRecent() {
+    const list = $('tvRecentList');
+    const rows = U.recentChannels(state.channels, RECENT_MAX);
+    list.replaceChildren(...rows.map((c, i) => {
+      const card = root.buildContinueCard({ slug: 'ch-' + c.id, name: c.name }, 'home-cont' + (i === 0 ? ' is-lead' : ''), {
+        poster: () => c.logo, meta: () => categoryLabel(c), pct: () => 0, label: () => 'Mở ' + c.name,
+        onPlay: () => open(c.id), swipe: false,
+      });
+      card.dataset.id = String(c.id);
+      return card;
     }));
+    $('tvRecent').hidden = rows.length === 0;
+  }
+
+  function renderFilters() {
+    const alive = document.querySelector('[data-tvfilter="alive"]');
+    alive.hidden = !state.health;
+    document.querySelectorAll('[data-tvfilter]').forEach((b) => b.classList.toggle('active', (b.dataset.tvfilter === 'alive') === state.alive));
+    const opt = U.groupOptions(state.channels).find((o) => o.value === state.group);
+    if (!opt) state.group = '';
+    const btn = $('filterBtn-group');
+    btn.textContent = opt ? opt.label : 'Nhóm';
+    btn.classList.toggle('active', !!opt);
+    $('tvClearBtn').style.display = state.alive || state.group ? 'inline-block' : 'none';
   }
 
   function renderGrid() {
@@ -114,13 +114,14 @@
     state.shown = 0;
     $('tvEmpty').hidden = list.length > 0 || !state.loaded || state.channels.length === 0;
     if (!$('tvEmpty').hidden) $('tvEmpty').textContent = 'Không có kênh nào khớp.';
+    $('tvResultCount').textContent = state.loaded ? list.length + ' kênh' : '';
     appendBatch(list);
   }
 
   function appendBatch(list) {
     const grid = $('tvGrid');
     const next = list.slice(state.shown, state.shown + BATCH);
-    grid.append(...next.map(buildCard));
+    grid.append(...next.map(buildChannelCard));
     state.shown += next.length;
     $('tvMore').hidden = state.shown >= list.length;
   }
@@ -129,6 +130,17 @@
     const more = $('tvMore');
     if (!more.hidden) appendBatch(visible());
   }
+
+  function refilter() {
+    renderFilters();
+    renderGrid();
+  }
+
+  filterProviders.group = () => ({
+    options: U.groupOptions(state.channels),
+    current: state.group,
+    onPick: (value) => { state.group = value; root.closeAllFilterDropdowns(); refilter(); },
+  });
 
   function showMessage(text, retry) {
     const box = $('tvEmpty');
@@ -147,7 +159,6 @@
 
   async function load() {
     $('tvGrid').replaceChildren();
-    $('tvChips').replaceChildren();
     $('tvMore').hidden = true;
     try {
       const res = await api('GET', '/api/hometv/channels');
@@ -165,8 +176,9 @@
       return;
     }
     $('tvEmpty').hidden = true;
-    renderChips();
-    renderGrid();
+    if (!state.health) state.alive = false;
+    renderRecent();
+    refilter();
   }
 
   async function toggleFavorite(c) {
@@ -174,7 +186,6 @@
     const redraw = () => {
       // Vẽ lại lưới làm mất focus: trả focus về thẻ vừa thao tác (nếu còn trong danh sách)
       const hadFocus = !!document.activeElement && !!document.activeElement.closest('#tvGrid');
-      renderChips();
       renderGrid();
       const card = hadFocus && document.querySelector('#tvGrid .tv-card[data-id="' + c.id + '"]');
       if (card) card.focus({ preventScroll: true });
@@ -243,6 +254,8 @@
       toast('');
       if (!play.recentSent) {
         play.recentSent = true;
+        const played = channelById(play.channelId);
+        if (played) played.recent_at = Date.now() / 1000;
         api('POST', '/api/hometv/recent/' + play.channelId).catch(() => {});
       }
     };
@@ -319,7 +332,11 @@
 
   // ---------- Remote TV ----------
   function gridRows() {
-    const rows = [[$('tvSearch')], [...document.querySelectorAll('#tvChips [data-chip]')]];
+    const rows = [
+      [...document.querySelectorAll('#tvRecentList .home-cont')],
+      [...document.querySelectorAll('[data-tvfilter]')].filter((b) => !b.hidden),
+      [$('filterBtn-group'), $('tvClearBtn')].filter((b) => b && b.style.display !== 'none'),
+    ];
     let top = null;
     for (const card of document.querySelectorAll('#tvGrid .tv-card')) {
       if (top === null || Math.abs(card.offsetTop - top) > 4) { rows.push([]); top = card.offsetTop; }
@@ -329,7 +346,7 @@
   }
 
   function onKey(e) {
-    if (!document.body.classList.contains('mode-hometv') || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!active() || e.altKey || e.ctrlKey || e.metaKey) return;
     if (!$('tvPlayer').hidden) {
       if (e.key === 'Enter' && !(e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO')) {
         e.preventDefault();
@@ -351,7 +368,6 @@
       return;
     }
     if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
-    if (target === $('tvSearch') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
     const rows = gridRows();
     let row = -1;
     let col = -1;
@@ -365,26 +381,58 @@
     dest.scrollIntoView({ block: 'nearest' });
   }
 
+  // Nhãn nút tab đổi theo mode: nhãn HomeTV nằm ở data-tv-label, nhãn gốc cất ở data-hf-label
+  function relabel(on) {
+    document.querySelectorAll('[data-tv-label]').forEach((el) => {
+      if (on) { el.dataset.hfLabel = el.textContent; el.textContent = el.dataset.tvLabel; }
+      else if (el.dataset.hfLabel != null) { el.textContent = el.dataset.hfLabel; }
+    });
+  }
+
+  const TAB_MAP = { 'search-tab': 'tv-home-tab', 'saved-tab': 'tv-saved-tab', 'player-tab': 'tv-search-tab' };
+
+  function active() {
+    return document.body.classList.contains('mode-hometv');
+  }
+
+  function tab(tabId) {
+    return TAB_MAP[tabId] || tabId;
+  }
+
+  function onTab(tabId) {
+    if (!state.loaded) return;
+    if (tabId === 'tv-home-tab') renderRecent();
+  }
+
   function enter() {
     document.body.classList.add('mode-hometv');
     $('hometv-root').hidden = false;
     $('hometvToggle').setAttribute('aria-pressed', 'true');
     remember(true);
+    relabel(true);
+    root.switchTab('tv-home-tab');
     load();
   }
 
-  function leave() {
+  // keepTab: người gọi tự lo tab sắp hiện (Cài đặt, phát phim); mặc định về tab Home của HomeFlix
+  function leave(keepTab) {
     if (!$('tvPlayer').hidden) closePlayer();
     document.body.classList.remove('mode-hometv');
     $('hometv-root').hidden = true;
     $('hometvToggle').setAttribute('aria-pressed', 'false');
     remember(false);
+    relabel(false);
+    if (!keepTab) root.switchTab('search-tab');
   }
 
   function init() {
     if (!$('hometvToggle') || !U) return;
-    $('hometvToggle').addEventListener('click', () => (document.body.classList.contains('mode-hometv') ? leave() : enter()));
-    $('tvSearch').addEventListener('input', (e) => { state.query = e.target.value; renderGrid(); });
+    $('hometvToggle').addEventListener('click', () => (active() ? leave() : enter()));
+    document.querySelectorAll('[data-tvfilter]').forEach((b) => b.addEventListener('click', () => {
+      state.alive = b.dataset.tvfilter === 'alive';
+      refilter();
+    }));
+    $('tvClearBtn').addEventListener('click', () => { state.alive = false; state.group = ''; root.closeAllFilterDropdowns(); refilter(); });
     if ('IntersectionObserver' in root) {
       observer = new IntersectionObserver((entries) => { if (entries.some((en) => en.isIntersecting)) loadMore(); },
         { rootMargin: '400px' });
@@ -393,11 +441,11 @@
     $('tvPlayerClose').addEventListener('click', closePlayer);
     $('tvPlayerRetry').addEventListener('click', () => { if (play.streams.length) attempt(0); else openChannel(play.channelId); });
     document.addEventListener('keydown', onKey, true);  // capture: chạy trước trình xử lý Enter chung của trang
-    $('settingsBtn').addEventListener('click', () => { if (document.body.classList.contains('mode-hometv')) leave(); });
+    $('settingsBtn').addEventListener('click', () => { if (active()) leave(true); });
     if (remembered()) enter();
   }
 
-  root.HFTV = Object.assign(root.HFTV || {}, { enter, leave, channels: () => state.channels, openChannel, closePlayer });
+  root.HFTV = Object.assign(root.HFTV || {}, { enter, leave, active, tab, onTab, channels: () => state.channels, openChannel, closePlayer });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })(typeof globalThis !== 'undefined' ? globalThis : this);

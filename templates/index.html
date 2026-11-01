@@ -1934,8 +1934,8 @@
                 <!-- TV, máy tính: điều hướng nằm cùng hàng với logo -->
                 <nav class="tabs-nav" id="appTabsNav" aria-label="Điều hướng chính">
                     <button class="tab-btn active" id="tabBtnSearch" onclick="switchTab('search-tab')">Home</button>
-                    <button class="tab-btn" id="tabBtnSaved" onclick="switchTab('saved-tab')">Tủ phim</button>
-                    <button class="tab-btn" id="tabBtnPlayer" onclick="switchTab('player-tab')">Nhập link</button>
+                    <button class="tab-btn" id="tabBtnSaved" onclick="switchTab('saved-tab')" data-tv-label="Tủ kênh">Tủ phim</button>
+                    <button class="tab-btn" id="tabBtnPlayer" onclick="switchTab('player-tab')" data-tv-label="Tìm kiếm">Nhập link</button>
                 </nav>
                 <div class="header-actions">
                     <button type="button" id="castBtn" class="cast-top-btn" aria-label="Phát lên TV">
@@ -1949,15 +1949,35 @@
             </header>
         </div>
 
-        <!-- HOMETV: lưới kênh (hiện khi body có mode-hometv) -->
+        <!-- HOMETV: ba tab (hiện khi body có mode-hometv), dựng bằng cùng macro và class với HomeFlix -->
         <div id="hometv-root" class="hometv-root" hidden>
-            <div class="tv-bar">
-                <input type="search" id="tvSearch" class="tv-search" placeholder="Tìm kênh" aria-label="Tìm kênh" autocomplete="off">
-                <div id="tvChips" class="tv-chips"></div>
+            <div id="tv-home-tab" class="tab-content tv-tab">
+                <div class="search-container">
+                    <div id="tvHomeContent" style="display: flex;">
+                    {{ continue_section('tvRecent', 'Kênh xem gần đây', 'Tủ kênh', 'tv-saved-tab') }}
+                    <div class="grid-tabs-section">
+                        <div id="tvFilterBar" class="filter-bar-wrap">
+                            <div class="grid-tabs-nav type-row">
+                                <button type="button" class="grid-tab-btn active" data-tvfilter="all">Tất cả</button>
+                                <button type="button" class="grid-tab-btn" data-tvfilter="alive">Alive</button>
+                            </div>
+                            <div class="chip-row">
+                                <div class="filter-bar">
+                                    {{ filter_dropdown('group', 'Nhóm') }}
+                                    <button type="button" class="filter-clear-btn" id="tvClearBtn" style="display:none;">Xóa lọc</button>
+                                </div>
+                                <span id="tvResultCount" class="result-count"></span>
+                            </div>
+                        </div>
+                        <div id="tvEmpty" class="tv-empty" hidden></div>
+                        <div id="tvGrid" class="movies-grid"></div>
+                        <div id="tvMore" class="grid-load-more" hidden>Đang tải thêm</div>
+                    </div>
+                    </div>
+                </div>
             </div>
-            <div id="tvEmpty" class="tv-empty" hidden></div>
-            <div id="tvGrid" class="movies-grid"></div>
-            <div id="tvMore" class="grid-load-more" hidden>Đang tải thêm</div>
+            <div id="tv-search-tab" class="tab-content tv-tab"></div>
+            <div id="tv-saved-tab" class="tab-content tv-tab"></div>
         </div>
         <div id="tvPlayer" class="tv-player" tabindex="-1" hidden>
             <video id="tvVideo" playsinline webkit-playsinline controls></video>
@@ -2216,7 +2236,7 @@
             </button>
             <button type="button" class="fab-tab" id="fabTabLibrary" onclick="switchTab('saved-tab')">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4h11v16.5L12 16.8l-5.5 3.7z"/></svg>
-                <span>Tủ phim</span>
+                <span data-tv-label="Tủ kênh">Tủ phim</span>
             </button>
         </div>
     </nav>
@@ -3424,17 +3444,25 @@ document.addEventListener('visibilitychange', () => {
 
         // --- TAB SYSTEM ---
         function syncFloatTabs(tabId) {
-            const active = { 'search-tab': 'fabTabExplore', 'saved-tab': 'fabTabLibrary' }[tabId];
+            const active = { 'search-tab': 'fabTabExplore', 'saved-tab': 'fabTabLibrary',
+                'tv-home-tab': 'fabTabExplore', 'tv-saved-tab': 'fabTabLibrary', 'tv-search-tab': 'fabTabSearch' }[tabId];
             document.querySelectorAll('.fab-tab').forEach(b => b.classList.toggle('active', b.id === active));
         }
 
         function openSearchOverlay() {
+            if (window.HFTV && HFTV.active && HFTV.active()) { // HomeTV: tab Tìm kiếm riêng, không mở lớp tìm phim
+                switchTab('tv-search-tab');
+                const box = document.getElementById('tvSearch');
+                if (box) box.focus();
+                return;
+            }
             switchTab('search-tab');
             document.getElementById('searchOverlay').classList.add('active');
             document.getElementById('searchOverlayInput').focus();
         }
 
         function switchTab(tabId) {
+            if (window.HFTV && HFTV.active && HFTV.active()) tabId = HFTV.tab(tabId); // mode HomeTV: nút tab dẫn sang tab kênh
             const prevTab = document.querySelector('.tab-content.active');
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
@@ -3445,7 +3473,9 @@ document.addEventListener('visibilitychange', () => {
             document.getElementById(tabId).classList.add('active');
             syncFloatTabs(tabId);
             
-            if (tabId === 'player-tab') document.getElementById('tabBtnPlayer').classList.add('active');
+            if (tabId === 'player-tab' || tabId === 'tv-search-tab') document.getElementById('tabBtnPlayer').classList.add('active');
+            if (tabId === 'tv-home-tab') document.getElementById('tabBtnSearch').classList.add('active');
+            if (tabId === 'tv-saved-tab') document.getElementById('tabBtnSaved').classList.add('active');
             if (tabId === 'search-tab') {
                 document.getElementById('tabBtnSearch').classList.add('active');
                 // If detail is showing, keep it; otherwise show homepage
@@ -3463,6 +3493,7 @@ document.addEventListener('visibilitychange', () => {
             // Cài đặt: không tô nút nào ở thanh tab; nút ‹ quay về tab trước. Rời trang thì dừng các bộ đếm của nó
             if (tabId === 'settings-tab' && window.HFSettings) HFSettings.open(prevTab && prevTab.id);
             else if (prevTab && prevTab.id === 'settings-tab' && window.HFSettings) HFSettings.close();
+            if (tabId.startsWith('tv-') && window.HFTV && HFTV.onTab) HFTV.onTab(tabId);
             setTimeout(initTabbing, 100);
         }
 
@@ -3543,7 +3574,7 @@ document.addEventListener('visibilitychange', () => {
             }
             
             playbackEpisodes = episodesArray;
-            if (window.HFTV) HFTV.leave(); // phim (kể cả từ cast) phát thì rời mode HomeTV, không để lớp phủ che
+            if (window.HFTV) HFTV.leave(true); // phim (kể cả từ cast) phát thì rời mode HomeTV, không để lớp phủ che
             
             if (stickyHeader) stickyHeader.style.display = 'none';
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');

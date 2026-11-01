@@ -399,12 +399,14 @@ body.device-tv .btn-main {
 }
 
 /* ---------- Home ---------- */
-#homepageContent {
+#homepageContent,
+#tvHomeContent {
     flex-direction: column;
     gap: 32px;
 }
 
-body.device-tv #homepageContent {
+body.device-tv #homepageContent,
+body.device-tv #tvHomeContent {
     gap: 44px;
 }
 
@@ -943,7 +945,8 @@ body.device-tv .hero-btn-save {
     gap: 0;
 }
 
-#filterBar {
+#filterBar,
+#tvFilterBar {
     position: relative;
     z-index: 60;
     display: flex;
@@ -952,7 +955,8 @@ body.device-tv .hero-btn-save {
     padding: 0 0 14px;
 }
 
-body.device-mobile #filterBar {
+body.device-mobile #filterBar,
+body.device-mobile #tvFilterBar {
     position: sticky;
     top: var(--safe-top);
     margin: 0 calc(-1 * max(var(--edge), var(--safe-right))) 0 calc(-1 * max(var(--edge), var(--safe-left)));
@@ -960,7 +964,8 @@ body.device-mobile #filterBar {
 }
 
 /* Kính nằm ở phần tử giả để tờ chọn (position: fixed) không bị kẹt trong backdrop-filter */
-body.device-mobile #filterBar::before {
+body.device-mobile #filterBar::before,
+body.device-mobile #tvFilterBar::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -972,7 +977,8 @@ body.device-mobile #filterBar::before {
 }
 
 #filterBar .type-row,
-body.device-mobile .grid-tabs-nav {
+body.device-mobile .grid-tabs-nav,
+#tvFilterBar .type-row {
     display: flex;
     flex-wrap: nowrap;
     gap: 24px;
@@ -983,16 +989,19 @@ body.device-mobile .grid-tabs-nav {
     padding: 0;
 }
 
-body.device-mobile #filterBar .type-row {
+body.device-mobile #filterBar .type-row,
+body.device-mobile #tvFilterBar .type-row {
     border-bottom: 0;
     gap: 22px;
 }
 
-#filterBar .type-row::-webkit-scrollbar {
+#filterBar .type-row::-webkit-scrollbar,
+#tvFilterBar .type-row::-webkit-scrollbar {
     display: none;
 }
 
-#filterBar .grid-tab-btn {
+#filterBar .grid-tab-btn,
+#tvFilterBar .grid-tab-btn {
     flex: 0 0 auto;
     min-height: var(--tap);
     padding: 0;
@@ -1006,28 +1015,33 @@ body.device-mobile #filterBar .type-row {
     font-weight: 500;
 }
 
-body.device-mobile #filterBar .grid-tab-btn {
+body.device-mobile #filterBar .grid-tab-btn,
+body.device-mobile #tvFilterBar .grid-tab-btn {
     color: var(--muted);
 }
 
-#filterBar .grid-tab-btn:hover {
+#filterBar .grid-tab-btn:hover,
+#tvFilterBar .grid-tab-btn:hover {
     color: var(--text);
     background: transparent;
 }
 
-#filterBar .grid-tab-btn.active {
+#filterBar .grid-tab-btn.active,
+#tvFilterBar .grid-tab-btn.active {
     color: var(--text);
     border-bottom-color: var(--text);
     background: transparent;
 }
 
-#filterBar .chip-row {
+#filterBar .chip-row,
+#tvFilterBar .chip-row {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-#filterBar .filter-bar {
+#filterBar .filter-bar,
+#tvFilterBar .filter-bar {
     display: flex;
     flex-wrap: wrap;
     flex: 0 1 auto;
@@ -1038,22 +1052,27 @@ body.device-mobile #filterBar .grid-tab-btn {
 }
 
 /* iPhone: hàng chip cuộn ngang trong khung của nó, không đẩy trang tràn ngang.
-   Tờ chọn ở đây là position: fixed nên không bị overflow cắt. */
-body.device-mobile #filterBar .filter-bar {
+Tờ chọn ở đây là position: fixed nên không bị overflow cắt. */
+body.device-mobile #filterBar .filter-bar,
+Tờ chọn ở đây là position: fixed nên không bị overflow cắt. */
+body.device-mobile #tvFilterBar .filter-bar {
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
 }
 
-#filterBar .filter-bar::-webkit-scrollbar {
+#filterBar .filter-bar::-webkit-scrollbar,
+#tvFilterBar .filter-bar::-webkit-scrollbar {
     display: none;
 }
 
-#filterBar .filter-dropdown {
+#filterBar .filter-dropdown,
+#tvFilterBar .filter-dropdown {
     flex: none;
 }
 
-#filterBar .filter-btn {
+#filterBar .filter-btn,
+#tvFilterBar .filter-btn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -1070,16 +1089,20 @@ body.device-mobile #filterBar .filter-bar {
 }
 
 body.device-mobile #filterBar .filter-btn,
-body.device-mobile #filterBar .filter-clear-btn {
+body.device-mobile #filterBar .filter-clear-btn,
+body.device-mobile #tvFilterBar .filter-btn,
+body.device-mobile #tvFilterBar .filter-clear-btn {
     height: var(--tap);
     min-height: var(--tap);
 }
 
-body.device-mobile #filterBar .filter-btn {
+body.device-mobile #filterBar .filter-btn,
+body.device-mobile #tvFilterBar .filter-btn {
     background: rgba(255, 255, 255, 0.1);
 }
 
-#filterBar .filter-btn::after {
+#filterBar .filter-btn::after,
+#tvFilterBar .filter-btn::after {
     content: "";
     width: 6px;
     height: 6px;
@@ -1088,12 +1111,14 @@ body.device-mobile #filterBar .filter-btn {
     transform: translateY(-2px) rotate(45deg);
 }
 
-#filterBar .filter-btn.active {
+#filterBar .filter-btn.active,
+#tvFilterBar .filter-btn.active {
     background: #fff;
     color: #000;
 }
 
-#filterBar .filter-clear-btn {
+#filterBar .filter-clear-btn,
+#tvFilterBar .filter-clear-btn {
     height: 40px;
     padding: 0 6px;
     border: 0;
@@ -1172,18 +1197,25 @@ body.device-mobile .filter-option.active {
 body.device-tv #filterBar .grid-tab-btn,
 body.device-tv #filterBar .filter-btn,
 body.device-tv #filterBar .filter-clear-btn,
-body.device-tv .result-count {
+body.device-tv .result-count,
+body.device-tv #tvFilterBar .grid-tab-btn,
+body.device-tv #tvFilterBar .filter-btn,
+body.device-tv #tvFilterBar .filter-clear-btn {
     font-size: 20px;
 }
 
 body.device-tv #filterBar .grid-tab-btn,
 body.device-tv #filterBar .filter-btn,
-body.device-tv #filterBar .filter-clear-btn {
+body.device-tv #filterBar .filter-clear-btn,
+body.device-tv #tvFilterBar .grid-tab-btn,
+body.device-tv #tvFilterBar .filter-btn,
+body.device-tv #tvFilterBar .filter-clear-btn {
     min-height: 56px;
     height: 56px;
 }
 
-body.device-tv #filterBar .filter-btn {
+body.device-tv #filterBar .filter-btn,
+body.device-tv #tvFilterBar .filter-btn {
     padding: 0 22px 0 24px;
 }
 
@@ -1882,7 +1914,8 @@ body.device-tv .ep-item {
 }
 
 /* ---------- Tủ phim ---------- */
-#saved-tab .search-container {
+#saved-tab .search-container,
+#tv-saved-tab .search-container {
     display: flex;
     flex-direction: column;
     gap: 28px;
@@ -3361,10 +3394,36 @@ body.device-tv .set-row[tabindex="0"]:focus-visible {
     color: var(--accent);
 }
 
-body.mode-hometv .tab-content,
-body.mode-hometv .tabs-nav,
-body.mode-hometv .float-tabbar {
+/* Trong mode HomeTV chỉ các tab kênh (tv-*) được hiện; tab phim nằm ngoài */
+body.mode-hometv #search-tab,
+body.mode-hometv #saved-tab,
+body.mode-hometv #player-tab {
     display: none !important;
+}
+
+/* Chấm trạng thái kênh: góc trên trái poster */
+.tv-dot {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--faint);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55);
+}
+
+.tv-dot[data-status="alive"] {
+    background: #3ecf8e;
+}
+
+.tv-dot[data-status="dead"] {
+    background: var(--danger);
+}
+
+#tvRecentList .continue-poster {
+    object-fit: contain;
+    background: var(--surface);
 }
 
 .tv-bar {

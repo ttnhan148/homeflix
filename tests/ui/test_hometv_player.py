@@ -136,7 +136,7 @@ def test_tv_remote_grid_navigation_enter_and_star(app_module, open_app):
     page.keyboard.press("ArrowRight")
     assert page.evaluate("document.activeElement.dataset.id") == "2"
     page.keyboard.press("f")
-    page.wait_for_selector('#tvChips [data-chip="favorites"]')
+    page.wait_for_function("document.querySelector('#tvGrid .tv-card[data-id=\"2\"] .tv-star').getAttribute('aria-pressed') === 'true'")
     assert hometv.db.conn().execute("SELECT channel_id FROM favorites").fetchall()[0][0] == 2
     page.keyboard.press("Enter")
     page.wait_for_function("window.__hlsSource !== undefined")
