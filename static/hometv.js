@@ -237,7 +237,7 @@
   const STALL_MS = 8000;
   const SWITCH_DEBOUNCE_MS = 400;
   const play = { token: 0, hls: null, timer: null, streams: [], index: 0, channelId: null, recentSent: false,
-    pendingId: null, switchTimer: null };
+    pendingId: null, switchTimer: null, list: null, returnTab: null };
 
   function channelById(id) {
     return state.channels.find((c) => c.id === id) || null;
@@ -309,14 +309,65 @@
     else { stopAttempt(); playerError('Kênh tạm thời không phát được.'); }
   }
 
+  // Danh sách phát: lấy theo bộ lọc của tab Home; kênh mở ra không nằm trong đó (vd. mở từ hàng Xem gần đây khi đang lọc Alive) thì lấy toàn bộ
+  function playlistFor(id) {
+    const list = visible();
+    return list.some((c) => c.id === id) ? list : state.channels;
+  }
+
+  function renderPlaylist() {
+    const box = $('tvPlaylist');
+    root.renderEpisodeList(box, {
+      episodes: play.list.map((c) => ({ name: c.name, link_m3u8: String(c.id) })),
+      watchStates: { [String(play.channelId)]: 'watching' },
+      rows: 10, unit: 'kênh', showMeta: false, autoFocusWatching: false, nameOf: (ep) => ep.name,
+      decorate: (btn, ep) => {
+        const c = channelById(Number(ep.link_m3u8));
+        if (!c) return;
+        if (c.logo) {
+          const img = document.createElement('img');
+          img.className = 'tv-pl-logo';
+          img.alt = '';
+          img.loading = 'lazy';
+          img.src = c.logo;
+          img.addEventListener('error', () => img.remove());
+          btn.prepend(img);
+        }
+        if (state.health && c.status) {
+          const dot = document.createElement('span');
+          dot.className = 'tv-dot tv-dot-inline';
+          dot.dataset.status = c.status;
+          dot.setAttribute('role', 'img');
+          dot.setAttribute('aria-label', U.statusLabel(c.status));
+          btn.appendChild(dot);
+        }
+      },
+      onPlay: (ep) => queueOpen(Number(ep.link_m3u8)),
+    });
+    const grid = box.querySelector('.ep-list-grid');
+    const cur = box.querySelector('.ep-item.is-watching');
+    if (grid && cur) {  // đưa dòng đang phát vào giữa bảng, chỉ cuộn bên trong bảng
+      const offset = cur.getBoundingClientRect().top - grid.getBoundingClientRect().top + grid.scrollTop;
+      grid.scrollTop = Math.max(0, offset - (grid.clientHeight - cur.offsetHeight) / 2);
+    }
+  }
+
   async function openChannel(id) {
     const c = channelById(id);
     stopAttempt();
+    if (!play.list || !play.list.some((x) => x.id === id)) play.list = playlistFor(id);
     play.channelId = id;
     play.recentSent = false;
     play.streams = [];
     $('tvPlayerTitle').textContent = c ? c.name : '';
-    $('tvPlayer').hidden = false;
+    if ($('tvPlayer').hidden) {  // mở trang play: ẩn header và các tab như HomeFlix, nhớ tab để quay lại
+      play.returnTab = activeTabId();
+      $('stickyHeader').style.display = 'none';
+      document.querySelectorAll('.tab-content').forEach((el) => { el.style.display = 'none'; });
+      document.body.classList.add('tv-player-active');
+      $('tvPlayer').hidden = false;
+    }
+    renderPlaylist();
     $('tvPlayer').focus({ preventScroll: true });  // focus rời lưới phía sau, Enter không mở lại thẻ cũ
     $('tvPlayerError').hidden = true;
     toast('');
@@ -333,33 +384,43 @@
     }
   }
 
-  function closePlayer() {
+  // restoreTab: false khi người gọi tự lo tab sắp hiện (rời mode HomeTV)
+  function closePlayer(restoreTab) {
     stopAttempt();
     if (play.switchTimer) { clearTimeout(play.switchTimer); play.switchTimer = null; }
+    play.pendingId = null;
     const video = $('tvVideo');
     video.pause();
     video.removeAttribute('src');
     $('tvPlayer').hidden = true;
-    const card = document.querySelector('#tvGrid .tv-card[data-id="' + play.channelId + '"]');
+    document.body.classList.remove('tv-player-active');
+    $('stickyHeader').style.display = 'flex';
+    if (restoreTab !== false) root.switchTab(play.returnTab || 'tv-home-tab');
+    play.list = null;
+    const active = document.querySelector('#hometv-root .tab-content.active');
+    const card = active && (active.querySelector('.tv-card[data-id="' + play.channelId + '"]')
+      || active.querySelector('.home-cont[data-id="' + play.channelId + '"]'));
     if (card) card.focus({ preventScroll: true });
   }
 
-  // Đổi kênh bằng phím Lên/Xuống: gom các lần bấm nhanh thành một lần mở
-  function stepPlayer(dir) {
-    const list = visible();
-    const from = play.pendingId != null ? play.pendingId : play.channelId;
-    const to = U.stepChannel(list, from, dir);
-    if (to == null) return;
-    play.pendingId = to;
-    const c = channelById(to);
+  // Đổi kênh: gom các lần bấm nhanh (phím Lên/Xuống, bấm dòng danh sách) thành một lần mở kênh cuối
+  function queueOpen(id) {
+    play.pendingId = id;
+    const c = channelById(id);
     $('tvPlayerTitle').textContent = c ? c.name : '';
     if (play.switchTimer) clearTimeout(play.switchTimer);
     play.switchTimer = setTimeout(() => {
       play.switchTimer = null;
-      const id = play.pendingId;
+      const target = play.pendingId;
       play.pendingId = null;
-      openChannel(id);
+      openChannel(target);
     }, SWITCH_DEBOUNCE_MS);
+  }
+
+  function stepPlayer(dir) {
+    const from = play.pendingId != null ? play.pendingId : play.channelId;
+    const to = U.stepChannel(play.list || visible(), from, dir);
+    if (to != null) queueOpen(to);
   }
 
   // ---------- Remote TV ----------
@@ -450,7 +511,7 @@
 
   // keepTab: người gọi tự lo tab sắp hiện (Cài đặt, phát phim); mặc định về tab Home của HomeFlix
   function leave(keepTab) {
-    if (!$('tvPlayer').hidden) closePlayer();
+    if (!$('tvPlayer').hidden) closePlayer(false);
     document.body.classList.remove('mode-hometv');
     $('hometv-root').hidden = true;
     $('hometvToggle').setAttribute('aria-pressed', 'false');

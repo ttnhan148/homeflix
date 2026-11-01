@@ -3509,62 +3509,47 @@ body.device-mobile #tvGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* HomeTV: lớp phủ player toàn màn hình */
+/* HomeTV: trang play kiểu theatre (khung lấy từ player_shell), danh sách phát nằm dưới video */
 .tv-player {
-    position: fixed;
-    inset: 0;
-    z-index: 960; /* dưới các hộp thoại và bảng cast (970+) để nhận cast khi đang xem kênh */
-    background: var(--ground);
     display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.tv-player video {
+    flex-direction: column;
+    gap: 1.25rem;
     width: 100%;
-    height: 100%;
-    background: var(--ground);
+    padding-top: 0.5rem;
 }
 
-.tv-player-title {
-    position: absolute;
-    top: calc(var(--safe-top) + 16px);
-    left: var(--edge);
-    right: 72px;
-    color: var(--text);
-    font-size: 16px;
-    font-weight: 500;
-    pointer-events: none;
+.tv-player[hidden] {
+    display: none;
 }
 
-.tv-player-close {
-    position: absolute;
-    top: calc(var(--safe-top) + 8px);
-    right: var(--edge);
-    width: var(--tap);
-    height: var(--tap);
-    border: 0;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.55);
-    color: var(--text);
-    font-size: 18px;
-}
-
-.tv-toast,
-.tv-player-error {
+.tv-toast {
     position: absolute;
     left: 50%;
-    bottom: calc(var(--safe-bottom) + 72px);
+    bottom: 56px;
     transform: translateX(-50%);
     padding: 10px 16px;
     border-radius: 12px;
     background: var(--raised);
     color: var(--text);
     font-size: 14px;
+    z-index: 6;
 }
 
-body.device-tv .tv-player-title {
-    font-size: 24px;
+#tvPlaylist {
+    padding: 0 max(16px, var(--safe-left)) 24px max(16px, var(--safe-left));
+}
+
+.tv-pl-logo {
+    flex: none;
+    width: 40px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.tv-dot.tv-dot-inline {
+    position: static;
+    flex: none;
+    margin-left: auto;
 }
 
 /* HomeTV (Cài đặt): trạng thái bộ kiểm stream và danh sách stream chết */

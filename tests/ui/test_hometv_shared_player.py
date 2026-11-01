@@ -10,7 +10,7 @@ def test_global_player_markup_unchanged_by_macro(app_module, open_app):
                 "#globalPlayerContainer > .player-wrapper > video#videoPlayer", ".player-wrapper > #playerError.player-error",
                 ".player-wrapper > #skipIntroBtn", ".player-wrapper > #autoNextOverlay", ".player-wrapper > #airplayOverlay"):
         assert page.locator(sel).count() == 1, sel
-    assert page.get_attribute(".btn-overlay-back", "onclick") == "exitPlayer()"
+    assert page.get_attribute("#playerHeader .btn-overlay-back", "onclick") == "exitPlayer()"
     assert page.get_attribute("#videoPlayer", "controls") is not None
 
 

@@ -1896,7 +1896,7 @@
                         <div id="{{ id }}List" class="home-continue"></div>
                     </section>
 {%- endmacro -%}
-{%- macro player_shell(ids, right_html='', wrapper_html='') -%}
+{%- macro player_shell(ids, right_html='', wrapper_html='', error_html='') -%}
             <!-- Player header: back button + title (above video, not overlapping) -->
             <div id="{{ ids.header }}" class="player-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0;">
                 <button class="btn-overlay-back"{% if ids.back %} id="{{ ids.back }}"{% endif %}{% if ids.back_onclick %} onclick="{{ ids.back_onclick }}"{% endif %} aria-label="Quay lại">
@@ -1910,7 +1910,7 @@
 
             <div class="player-wrapper">
                 <video id="{{ ids.video }}" playsinline webkit-playsinline controls x-webkit-airplay="allow" airplay="allow"></video>
-                <div id="{{ ids.error }}" class="player-error" role="alert" hidden></div>
+                <div id="{{ ids.error }}" class="player-error" role="alert" hidden>{{ error_html }}</div>
                 {{ wrapper_html }}
             </div>
 {%- endmacro -%}
@@ -2005,15 +2005,12 @@
                 </div>
             </div>
         </div>
+        <!-- HOMETV: trang play kiểu theatre của HomeFlix + danh sách phát -->
         <div id="tvPlayer" class="tv-player" tabindex="-1" hidden>
-            <video id="tvVideo" playsinline webkit-playsinline controls></video>
-            <div id="tvPlayerTitle" class="tv-player-title"></div>
-            <button type="button" id="tvPlayerClose" class="tv-player-close" aria-label="Đóng">✕</button>
-            <div id="tvToast" class="tv-toast" role="status" hidden></div>
-            <div id="tvPlayerError" class="tv-player-error" hidden>
-                <span id="tvPlayerMsg"></span>
-                <button type="button" id="tvPlayerRetry" class="filter-option">Thử lại</button>
-            </div>
+            {% set tv_wrapper %}<div id="tvToast" class="tv-toast" role="status" hidden></div>{% endset %}
+            {% set tv_error %}<span id="tvPlayerMsg"></span> <button type="button" id="tvPlayerRetry" class="filter-option">Thử lại</button>{% endset %}
+            {{ player_shell({'header': 'tvPlayerHeader', 'back': 'tvPlayerClose', 'title': 'tvPlayerTitle', 'right': 'tvPlayerRight', 'video': 'tvVideo', 'error': 'tvPlayerError'}, '', tv_wrapper, tv_error) }}
+            <div id="tvPlaylist"></div>
         </div>
 
         <!-- TAB CONTENT 1: MANUAL LINK -->

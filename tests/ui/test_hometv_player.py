@@ -51,6 +51,7 @@ def test_opens_player_and_attaches_first_stream(app_module, open_app):
     play(page)
     assert source(page) == "/api/hometv/play/1/index.m3u8"
     assert page.is_visible("#tvPlayer") and page.evaluate("window.__hlsAttached") is True
+    assert page.evaluate("document.body.classList.contains('tv-player-active')") is True
 
 
 def test_fatal_error_falls_to_next_stream_with_toast(app_module, open_app):
@@ -200,3 +201,81 @@ def test_cast_playback_leaves_hometv_mode(app_module, open_app):
     page.evaluate("playEpisodesListDirect([{name: 'T1', link_m3u8: 'https://x/a.m3u8'}], 0)")
     assert page.evaluate("document.body.classList.contains('mode-hometv')") is False
     assert page.is_hidden("#tvPlayer") and page.is_hidden("#hometv-root")
+
+
+def names_in_playlist(page):
+    return page.eval_on_selector_all("#tvPlaylist .ep-item .ep-name", "els => els.map(e => e.textContent)")
+
+
+def row(page, name):
+    return page.locator("#tvPlaylist .ep-item", has=page.locator(".ep-name", has_text=name))
+
+
+def test_playlist_shows_max_ten_rows_and_scrolls(app_module, open_app):
+    seed(channels=25, streams=1)
+    page = open_tv(open_app)
+    play(page, 1)
+    assert page.inner_text("#tvPlaylist .ep-list-title") == "25 kênh"
+    got = page.evaluate("""() => {
+        const g = document.querySelector('#tvPlaylist .ep-list-grid');
+        const it = g.querySelector('.ep-item').getBoundingClientRect().height;
+        const gap = parseFloat(getComputedStyle(g).rowGap) || 0;
+        return {scroll: g.scrollHeight > g.clientHeight, h: g.clientHeight, ten: 10 * it + 9 * gap};
+    }""")
+    assert got["scroll"] and abs(got["h"] - got["ten"]) <= 12
+
+
+def test_playlist_highlights_playing_channel_in_view(app_module, open_app):
+    seed(channels=25, streams=1)
+    page = open_tv(open_app)
+    play(page, 20)
+    page.wait_for_selector("#tvPlaylist .ep-item.is-watching")
+    assert page.inner_text("#tvPlaylist .ep-item.is-watching .ep-name") == "Kênh 020"
+    inside = page.evaluate("""() => {
+        const g = document.querySelector('#tvPlaylist .ep-list-grid').getBoundingClientRect();
+        const r = document.querySelector('#tvPlaylist .ep-item.is-watching').getBoundingClientRect();
+        return r.top >= g.top - 1 && r.bottom <= g.bottom + 1;
+    }""")
+    assert inside is True
+
+
+def test_click_playlist_row_switches_channel_debounced(app_module, open_app):
+    seed(channels=9, streams=1)
+    page = open_tv(open_app)
+    play(page, 1)
+    n = len([r for r in page.requests if "/streams" in r])
+    for name in ("Kênh 005", "Kênh 006", "Kênh 007"):
+        row(page, name).evaluate("b => b.click()")
+    page.wait_for_function("window.__hlsSource === '/api/hometv/play/7/index.m3u8'")
+    page.wait_for_selector("#tvPlaylist .ep-item.is-watching")
+    assert page.inner_text("#tvPlaylist .ep-item.is-watching .ep-name") == "Kênh 007"
+    assert len([r for r in page.requests if "/streams" in r]) == n + 1
+    assert page.inner_text("#tvPlayerTitle") == "Kênh 007"
+
+
+def test_playlist_uses_all_channels_when_current_not_in_filter(app_module, open_app, monkeypatch):
+    from tests.ui.test_hometv_ui import seed as seed_ui, set_geo
+    seed_ui(3, health={1: True})
+    hometv.db.conn().execute("INSERT INTO recents(channel_id, viewed_at) VALUES (2, 5.0)")
+    set_geo(monkeypatch, True)
+    page = open_app()
+    page.goto(URL)
+    tap(page, "#hometvToggle")
+    page.wait_for_selector("#tvGrid .tv-card")
+    tap(page, '[data-tvfilter="alive"]')
+    assert page.locator("#tvGrid .tv-card").count() == 1
+    tap(page, '#tvRecentList .home-cont[data-id="2"]')
+    page.wait_for_function("window.__hlsSource === '/api/hometv/play/2/index.m3u8'")
+    assert page.inner_text("#tvPlaylist .ep-list-title") == "3 kênh"
+    assert page.inner_text("#tvPlaylist .ep-item.is-watching .ep-name") == "Kênh 002"
+
+
+def test_player_hides_header_and_tabs_and_restores_on_close(app_module, open_app):
+    seed(channels=2, streams=1)
+    page = open_tv(open_app)
+    play(page, 1)
+    assert page.is_hidden("#stickyHeader") and page.is_hidden("#tv-home-tab") and page.is_visible("#tvPlayerHeader")
+    tap(page, "#tvPlayerClose")
+    assert page.is_hidden("#tvPlayer") and page.is_visible("#stickyHeader") and page.is_visible("#tv-home-tab")
+    assert page.evaluate("document.body.classList.contains('tv-player-active')") is False
+    assert page.evaluate("document.activeElement.dataset.id") == "1"
