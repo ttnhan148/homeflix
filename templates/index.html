@@ -1883,6 +1883,21 @@
 </head>
 
 <body>
+{%- macro continue_section(id, title, link_label, link_tab) -%}
+                    <section id="{{ id }}" class="home-section" hidden aria-labelledby="{{ id }}Title">
+                        <div class="sec-head">
+                            <h2 id="{{ id }}Title">{{ title }}</h2>
+                            <button type="button" class="sec-link" onclick="switchTab('{{ link_tab }}')">{{ link_label }}</button>
+                        </div>
+                        <div id="{{ id }}List" class="home-continue"></div>
+                    </section>
+{%- endmacro -%}
+{%- macro filter_dropdown(type, label) -%}
+                                    <div class="filter-dropdown">
+                                        <button class="filter-btn" id="filterBtn-{{ type }}" onclick="toggleFilterDropdown('{{ type }}')">{{ label }}</button>
+                                        <div class="filter-menu" id="filterMenu-{{ type }}"></div>
+                                    </div>
+{%- endmacro -%}
     <div class="container">
         <!-- STICKY HEADER WRAPPER -->
         <div id="stickyHeader" class="sticky-header">
@@ -1990,13 +2005,7 @@
                 <!-- Homepage content -->
                 <div id="homepageContent" style="display: flex;">
                     <!-- Xem tiếp: việc hay làm nhất, một chạm là phát -->
-                    <section id="homeContinue" class="home-section" hidden aria-labelledby="homeContinueTitle">
-                        <div class="sec-head">
-                            <h2 id="homeContinueTitle">Xem tiếp</h2>
-                            <button type="button" class="sec-link" onclick="switchTab('saved-tab')">Tủ phim</button>
-                        </div>
-                        <div id="homeContinueList" class="home-continue"></div>
-                    </section>
+                    {{ continue_section('homeContinue', 'Xem tiếp', 'Tủ phim', 'saved-tab') }}
 
                     <!-- Phim hot chiếu rạp: hàng thẻ cuộn ngang -->
                     <section id="hero" class="hero home-section" hidden aria-labelledby="heroHeading">
@@ -2017,18 +2026,9 @@
                             </div>
                             <div class="chip-row">
                                 <div class="filter-bar">
-                                    <div class="filter-dropdown">
-                                        <button class="filter-btn" id="filterBtn-category" onclick="toggleFilterDropdown('category')">Thể loại</button>
-                                        <div class="filter-menu" id="filterMenu-category"></div>
-                                    </div>
-                                    <div class="filter-dropdown">
-                                        <button class="filter-btn" id="filterBtn-country" onclick="toggleFilterDropdown('country')">Quốc gia</button>
-                                        <div class="filter-menu" id="filterMenu-country"></div>
-                                    </div>
-                                    <div class="filter-dropdown">
-                                        <button class="filter-btn" id="filterBtn-year" onclick="toggleFilterDropdown('year')">Năm</button>
-                                        <div class="filter-menu" id="filterMenu-year"></div>
-                                    </div>
+                                    {{ filter_dropdown('category', 'Thể loại') }}
+                                    {{ filter_dropdown('country', 'Quốc gia') }}
+                                    {{ filter_dropdown('year', 'Năm') }}
                                     <button class="filter-clear-btn" id="filterClearBtn" onclick="clearAllFilters()" style="display:none;">Xóa lọc</button>
                                 </div>
                                 <span id="resultCount" class="result-count"></span>
@@ -4358,6 +4358,9 @@ document.addEventListener('visibilitychange', () => {
             return found ? found.name : value;
         }
 
+        // Loại lọc ngoài category/country/year (vd. nhóm kênh HomeTV) đăng ký ở đây: () => ({ options, current, onPick })
+        const filterProviders = {};
+
         function toggleFilterDropdown(type) {
             const menu = document.getElementById(`filterMenu-${type}`);
             const willOpen = !menu.classList.contains('open');
@@ -4372,26 +4375,35 @@ document.addEventListener('visibilitychange', () => {
             document.querySelectorAll('.filter-menu.open').forEach(m => m.classList.remove('open'));
         }
 
+        function renderFilterMenu(menu, options, current, onPick) {
+            menu.innerHTML = '';
+            options.forEach(o => {
+                const btn = el('button', 'filter-option' + (o.value === current ? ' active' : ''), o.label);
+                btn.type = 'button';
+                btn.addEventListener('click', () => onPick(o.value));
+                menu.appendChild(btn);
+            });
+        }
+
         function renderFilterOptions(type) {
             const menu = document.getElementById(`filterMenu-${type}`);
             let options = [];
-            if (type === 'category') {
-                options = (filterData.categories || []).map(c => ({ label: c.name, value: c.slug }));
-            } else if (type === 'country') {
-                options = (filterData.countries || []).map(c => ({ label: c.name, value: c.slug }));
+            let current;
+            let onPick = (value) => setFilter(type, value);
+            if (filterProviders[type]) {
+                ({ options, current, onPick } = filterProviders[type]());
             } else {
-                const y = new Date().getFullYear();
-                for (let i = y; i >= 1990; i--) options.push({ label: String(i), value: String(i) });
+                if (type === 'category') {
+                    options = (filterData.categories || []).map(c => ({ label: c.name, value: c.slug }));
+                } else if (type === 'country') {
+                    options = (filterData.countries || []).map(c => ({ label: c.name, value: c.slug }));
+                } else {
+                    const y = new Date().getFullYear();
+                    for (let i = y; i >= 1990; i--) options.push({ label: String(i), value: String(i) });
+                }
+                current = homeState[homeKey(homeState.activeGridTab)].filters[type];
             }
-            const key = homeKey(homeState.activeGridTab);
-            const current = homeState[key].filters[type];
-            menu.innerHTML = '';
-            [{ label: 'Tất cả', value: '' }].concat(options).forEach(o => {
-                const btn = el('button', 'filter-option' + (o.value === current ? ' active' : ''), o.label);
-                btn.type = 'button';
-                btn.addEventListener('click', () => setFilter(type, o.value));
-                menu.appendChild(btn);
-            });
+            renderFilterMenu(menu, [{ label: 'Tất cả', value: '' }].concat(options), current, onPick);
         }
 
         function setFilter(type, value) {
