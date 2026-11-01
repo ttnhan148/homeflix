@@ -289,6 +289,8 @@ def test_devices_grouped_and_rename(pw, open_app, app_module):
     far = open_app(width=1280, height=800)
     far.goto(URL)
     app_module.db_execute("UPDATE devices SET household = ? WHERE id = ?", ("f" * 16, device_id(far)))
+    for p in (tv, far):
+        app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(p),))   # danh sách chỉ liệt kê máy admin
     login(page, "mk-test")
     page.wait_for_selector(SYSTEM)
     lists = page.locator('[data-group="devices"] .set-list:not(.set-requests)')
@@ -314,19 +316,20 @@ def test_devices_grouped_and_rename(pw, open_app, app_module):
                            ".textContent === 'Phòng khách'", arg=tv_id)
     names = {d["id"]: d["name"] for d in server_json(page, "/api/admin/devices")}
     assert names[tv_id] == "Phòng khách"
-    # cấp quyền admin cho TV
-    tap(page, f'.set-device[data-id="{tv_id}"] [data-act="admin"]')
-    page.wait_for_selector(f'.set-device[data-id="{tv_id}"] .set-tag')
-    assert {d["id"]: d["is_admin"] for d in server_json(page, "/api/admin/devices")}[tv_id] is True
+    # thu quyền admin của TV: máy rời khỏi danh sách
     assert page.locator(f'.set-device[data-id="{tv_id}"] [data-act="admin"]').inner_text() == "Thu quyền admin"
     assert page.eval_on_selector(f'.set-device[data-id="{tv_id}"] [data-act="admin"]',
                                  "b => getComputedStyle(b).color") == "rgb(229, 9, 20)"   # thu quyền: đỏ
+    tap(page, f'.set-device[data-id="{tv_id}"] [data-act="admin"]')
+    page.wait_for_selector(f'.set-device[data-id="{tv_id}"]', state="detached")
+    assert tv_id not in [d["id"] for d in server_json(page, "/api/admin/devices")]
     assert page.console_errors == []
 
 
-def test_device_rename_rejects_empty(pw, open_app):
+def test_device_rename_rejects_empty(pw, open_app, app_module):
     tv = open_app(tv=True)
     tv.goto(URL)
+    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(tv),))   # danh sách chỉ liệt kê máy admin
     page = admin_page(open_app)
     row = '.set-device:not(:has-text("máy này"))'
     tap(page, f"{row} .set-action")
@@ -359,9 +362,10 @@ def test_device_without_last_seen_shows_no_time(pw, open_app):
     assert page.locator('.set-device[data-id="bbb"] .set-device-meta').inner_text() == "Máy tính"
 
 
-def test_delete_device_asks_confirmation(pw, open_app):
+def test_delete_device_asks_confirmation(pw, open_app, app_module):
     tv = open_app(tv=True)
     tv.goto(URL)
+    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(tv),))   # danh sách chỉ liệt kê máy admin
     page = admin_page(open_app)
     tv_id = page.locator('.set-device:not(:has-text("máy này"))').get_attribute("data-id")
     row = f'.set-device[data-id="{tv_id}"]'
@@ -452,11 +456,12 @@ def test_tv_every_row_reachable_by_arrows(pw, open_app):
     assert page.evaluate("getComputedStyle(document.activeElement).outlineStyle") != "none"
 
 
-def test_tv_open_device_actions_walk_down_one_by_one(pw, open_app):
+def test_tv_open_device_actions_walk_down_one_by_one(pw, open_app, app_module):
     page = open_app(tv=True)
     page.goto(URL)
     other = open_app(width=1280, height=800)
     other.goto(URL)
+    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(other),))   # danh sách chỉ liệt kê máy admin
     page.reload()
     tap(page, "#settingsBtn")
     page.wait_for_selector(DEVICE)
@@ -501,3 +506,21 @@ def test_tv_arrows_inside_password_keep_caret(pw, open_app):
     page.keyboard.press("ArrowLeft")
     assert page.evaluate("document.activeElement.id") == "adminPassword"
     assert page.evaluate("document.activeElement.selectionStart") == 2
+
+
+@pytest.mark.parametrize("tv", [False, True])
+def test_device_list_scrolls_after_ten_rows(pw, open_app, tv):
+    page = admin_page(open_app, tv=tv)
+    fake = [{"id": f"d{i}", "name": f"Máy {i}", "kind": "phone", "household": "h1", "last_seen": 1e9 - i,
+             "is_admin": True, "is_self": i == 0} for i in range(14)]
+    page.route("**/api/admin/devices", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                         body=json.dumps(fake)))
+    reopen(page)
+    page.wait_for_selector('.set-device[data-id="d13"]', state="attached")
+    box = page.locator(".set-households")
+    assert box.evaluate("b => b.scrollHeight > b.clientHeight + 1")
+    assert box.evaluate("b => getComputedStyle(b).overflowY") == "auto"
+    whole = box.evaluate("""b => { const r = b.getBoundingClientRect();
+        return [...b.querySelectorAll('.set-device')].filter(
+            (d) => { const q = d.getBoundingClientRect(); return q.top >= r.top - 1 && q.bottom <= r.bottom + 1; }).length; }""")
+    assert whole == 10

@@ -3103,9 +3103,17 @@ body.device-tv .cast-switch {
 }
 
 .set-households {
+    --row-h: calc(var(--tap) + 12px);
     display: flex;
     flex-direction: column;
     gap: 16px;
+    /* Chừa đúng 10 dòng (cộng 9 đường kẻ giữa các dòng) rồi cuộn bên trong */
+    max-height: calc(10 * var(--row-h) + 9px);
+    overflow-y: auto;
+}
+
+body.device-tv .set-households {
+    --row-h: 80px;
 }
 
 .set-sub {

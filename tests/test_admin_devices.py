@@ -11,8 +11,9 @@ def _me(c):
     return next(d for d in _devices(c) if d["is_self"])
 
 
-def _other(c):
-    return next(d for d in _devices(c) if not d["is_self"])
+def _pid(app_module, client):
+    """Id công khai của một máy bất kỳ, kể cả máy không phải admin (danh sách chỉ liệt kê admin)."""
+    return app_module._cast_public_id(client.cookies["hf_device"])
 
 
 def _patch(c, pid, body):
@@ -25,8 +26,16 @@ def test_list_never_contains_real_ids(pw, make_client, admin_client):
     assert other.cookies["hf_device"] not in body and admin_client.cookies["hf_device"] not in body
 
 
+def test_list_only_admin_devices(pw, make_client, admin_client, app_module):
+    plain = make_client(); plain.get("/api/device")
+    second = make_client(); post(second, "/api/admin/login", {"password": "mk-test"})
+    rows = _devices(admin_client)
+    assert len(rows) == 2 and all(d["is_admin"] for d in rows)
+    assert _pid(app_module, plain) not in [d["id"] for d in rows]
+
+
 def test_list_marks_self_and_admin(pw, make_client, admin_client):
-    other = make_client(); other.get("/api/device")
+    other = make_client(); post(other, "/api/admin/login", {"password": "mk-test"})
     rows = _devices(admin_client)
     assert len(rows) >= 2
     selves = [d for d in rows if d["is_self"]]
@@ -41,24 +50,23 @@ def test_non_admin_forbidden_and_disabled_404(pw, make_client, admin_client, mon
     assert admin_client.get("/api/admin/devices").status_code == 404
 
 
-def test_rename(pw, make_client, admin_client):
+def test_rename(pw, make_client, admin_client, app_module):
     other = make_client(); other.get("/api/device")
-    t = _other(admin_client)
-    r = _patch(admin_client, t["id"], {"name": "TV phòng khách"})
+    t = _pid(app_module, other)
+    r = _patch(admin_client, t, {"name": "TV phòng khách"})
     assert r.status_code == 200 and r.json()["name"] == "TV phòng khách"
-    assert any(d["name"] == "TV phòng khách" for d in _devices(admin_client))
-    assert _patch(admin_client, t["id"], {"name": "  "}).status_code == 422
-    assert _patch(admin_client, t["id"], {"name": "x" * 41}).status_code == 422
+    assert _patch(admin_client, t, {"name": "  "}).status_code == 422
+    assert _patch(admin_client, t, {"name": "x" * 41}).status_code == 422
 
 
 def test_grant_and_revoke(pw, make_client, admin_client, app_module):
     other = make_client(); other.get("/api/device")
-    t = _other(admin_client)
-    assert _patch(admin_client, t["id"], {"is_admin": True}).json()["is_admin"] is True
+    t = _pid(app_module, other)
+    assert _patch(admin_client, t, {"is_admin": True}).json()["is_admin"] is True
     assert app_module._db_is_admin(other.cookies["hf_device"])
-    assert _patch(admin_client, t["id"], {"is_admin": False}).json()["is_admin"] is False
+    assert _patch(admin_client, t, {"is_admin": False}).json()["is_admin"] is False
     assert not app_module._db_is_admin(other.cookies["hf_device"])
-    assert _patch(admin_client, t["id"], {"is_admin": "yes"}).status_code == 422
+    assert _patch(admin_client, t, {"is_admin": "yes"}).status_code == 422
 
 
 def test_cannot_revoke_last_admin_even_self(pw, admin_client):
@@ -93,8 +101,7 @@ def test_delete_removes_device_and_its_data(pw, make_client, admin_client, app_m
                           "VALUES ('r1', ?, '123456', 'pending', ?)", (oid, app_module._now()))
     app_module.db_execute("INSERT INTO cast_allowed (target_id, controller_id, created_at) VALUES (?, 'zz', 1)", (oid,))
     app_module.db_execute("INSERT INTO app_settings (key, value) VALUES (?, '1')", (app_module._cast_allow_key(oid),))
-    target = next(d for d in _devices(admin_client) if not d["is_self"])
-    assert admin_client.request("DELETE", f"/api/admin/devices/{target['id']}", json={}).status_code == 204
+    assert admin_client.request("DELETE", f"/api/admin/devices/{_pid(app_module, other)}", json={}).status_code == 204
     q = app_module.db_query_one
     assert q("SELECT 1 FROM devices WHERE id = ?", (oid,)) is None
     assert q("SELECT 1 FROM device_movies WHERE device_id = ?", (oid,)) is None

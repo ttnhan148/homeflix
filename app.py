@@ -1206,7 +1206,7 @@ def _resolve_public_device(public_id: str) -> dict | None:
 
 def _db_admin_devices(self_id: str) -> list[dict]:
     salt = get_household_salt()
-    out = [_admin_device_view(r, salt, self_id) for r in db_query("SELECT * FROM devices")]
+    out = [_admin_device_view(r, salt, self_id) for r in db_query("SELECT * FROM devices WHERE is_admin = 1")]
     out.sort(key=lambda d: d["last_seen"], reverse=True)
     out.sort(key=lambda d: d["household"])
     return out
