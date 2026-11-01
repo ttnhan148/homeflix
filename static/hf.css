@@ -358,6 +358,11 @@ body.device-mobile .search-bar {
     display: none;
 }
 
+/* Tab Tìm kiếm của HomeTV là trang riêng, nên ô tìm luôn hiện (kể cả điện thoại) */
+body.device-mobile .search-bar.tv-search-bar {
+    display: flex;
+}
+
 body.device-tv .search-bar input {
     height: 60px;
     font-size: 20px;

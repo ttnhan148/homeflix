@@ -1976,8 +1976,34 @@
                     </div>
                 </div>
             </div>
-            <div id="tv-search-tab" class="tab-content tv-tab"></div>
-            <div id="tv-saved-tab" class="tab-content tv-tab"></div>
+            <div id="tv-search-tab" class="tab-content tv-tab">
+                <div class="search-container">
+                    <div class="search-bar tv-search-bar">
+                        <div class="search-input-wrap">
+                            <svg class="search-input-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                            <input type="text" id="tvSearch" placeholder="Tìm kênh" aria-label="Tìm kênh" autocomplete="off">
+                        </div>
+                    </div>
+                    <div id="tvSearchEmpty" class="tv-empty" role="status" hidden>Không có kênh nào khớp.</div>
+                    <div id="tvSearchGrid" class="movies-grid"></div>
+                </div>
+            </div>
+            <div id="tv-saved-tab" class="tab-content tv-tab">
+                <div class="search-container">
+                    <h2 class="library-heading">Tủ kênh</h2>
+                    <section id="tvFavSection" class="library-section" hidden>
+                        <h3 class="library-title">Yêu thích</h3>
+                        <div id="tvFavGrid" class="movies-grid"></div>
+                    </section>
+                    <section id="tvLibRecentSection" class="library-section" hidden>
+                        <h3 class="library-title">Xem gần đây</h3>
+                        <div id="tvLibRecentGrid" class="movies-grid"></div>
+                    </section>
+                    <div id="tvLibraryEmpty" class="library-empty" hidden>Tủ kênh trống</div>
+                </div>
+            </div>
         </div>
         <div id="tvPlayer" class="tv-player" tabindex="-1" hidden>
             <video id="tvVideo" playsinline webkit-playsinline controls></video>

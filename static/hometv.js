@@ -7,6 +7,7 @@
 
   const state = { channels: [], health: false, alive: false, group: '', query: '', shown: 0, loaded: false };
   const RECENT_MAX = 3;
+  const SEARCH_MAX = 120;  // kết quả tìm kiếm không phân lô: cắt ở mức này
   let observer = null;
 
   function store() {
@@ -136,6 +137,37 @@
     renderGrid();
   }
 
+  // Tab Tìm kiếm: chỉ hiện kết quả khi có từ khoá, giống ô tìm phim của HomeFlix; lọc Alive vẫn áp dụng
+  function renderSearch() {
+    const q = state.query.trim();
+    const found = q ? U.filterChannels(state.channels, { query: q, alive: state.alive }) : [];
+    $('tvSearchGrid').replaceChildren(...found.slice(0, SEARCH_MAX).map(buildChannelCard));
+    $('tvSearchEmpty').hidden = !q || found.length > 0;
+  }
+
+  // Tab Tủ kênh: yêu thích và xem gần đây; vẽ lại mỗi lần vào tab
+  function renderLibrary() {
+    const favs = U.favoriteChannels(state.channels);
+    const recents = U.recentChannels(state.channels, Infinity);
+    $('tvFavGrid').replaceChildren(...favs.map(buildChannelCard));
+    $('tvLibRecentGrid').replaceChildren(...recents.map(buildChannelCard));
+    $('tvFavSection').hidden = favs.length === 0;
+    $('tvLibRecentSection').hidden = recents.length === 0;
+    $('tvLibraryEmpty').hidden = favs.length + recents.length > 0;
+  }
+
+  function activeTabId() {
+    const el = document.querySelector('#hometv-root .tab-content.active');
+    return el ? el.id : null;
+  }
+
+  function renderActive() {
+    const id = activeTabId();
+    if (id === 'tv-search-tab') renderSearch();
+    else if (id === 'tv-saved-tab') renderLibrary();
+    else renderGrid();
+  }
+
   filterProviders.group = () => ({
     options: U.groupOptions(state.channels),
     current: state.group,
@@ -185,9 +217,9 @@
     const want = !c.favorite;
     const redraw = () => {
       // Vẽ lại lưới làm mất focus: trả focus về thẻ vừa thao tác (nếu còn trong danh sách)
-      const hadFocus = !!document.activeElement && !!document.activeElement.closest('#tvGrid');
-      renderGrid();
-      const card = hadFocus && document.querySelector('#tvGrid .tv-card[data-id="' + c.id + '"]');
+      const hadFocus = !!document.activeElement && !!document.activeElement.closest('.movies-grid');
+      renderActive();
+      const card = hadFocus && document.querySelector('#hometv-root .tab-content.active .tv-card[data-id="' + c.id + '"]');
       if (card) card.focus({ preventScroll: true });
     };
     c.favorite = want;
@@ -402,6 +434,8 @@
   function onTab(tabId) {
     if (!state.loaded) return;
     if (tabId === 'tv-home-tab') renderRecent();
+    else if (tabId === 'tv-search-tab') renderSearch();
+    else if (tabId === 'tv-saved-tab') renderLibrary();
   }
 
   function enter() {
@@ -432,6 +466,7 @@
       state.alive = b.dataset.tvfilter === 'alive';
       refilter();
     }));
+    $('tvSearch').addEventListener('input', (e) => { state.query = e.target.value; renderSearch(); });
     $('tvClearBtn').addEventListener('click', () => { state.alive = false; state.group = ''; root.closeAllFilterDropdowns(); refilter(); });
     if ('IntersectionObserver' in root) {
       observer = new IntersectionObserver((entries) => { if (entries.some((en) => en.isIntersecting)) loadMore(); },

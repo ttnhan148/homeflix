@@ -229,3 +229,73 @@ def test_error_state_and_retry(app_module, open_app):
     page.unroute("**/api/hometv/channels")
     tap(page, "#tvRetry")
     page.wait_for_selector("#tvGrid .tv-card")
+
+
+def go(page, fab):
+    tap(page, "#" + fab)
+    page.wait_for_function("document.querySelector('#hometv-root .tab-content.active') !== null")
+
+
+def grid_titles(page, grid):
+    return page.eval_on_selector_all("%s .tv-card .movie-title" % grid, "els => els.map(e => e.textContent)")
+
+
+def test_search_tab_folds_diacritics_and_ignores_blank(app_module, open_app):
+    seed(3, names={1: "Đài Thể Thao", 2: "VTV1", 3: "HTV7"})
+    page = enter(open_app)
+    page.wait_for_selector("#tvGrid .tv-card")
+    go(page, "fabTabSearch")
+    assert page.is_visible("#tv-search-tab") and page.is_hidden("#tv-home-tab")
+    page.fill("#tvSearch", "dai the")
+    assert grid_titles(page, "#tvSearchGrid") == ["Đài Thể Thao"]
+    page.fill("#tvSearch", "zzz")
+    assert page.is_visible("#tvSearchEmpty") and "Không có kênh nào khớp." in page.inner_text("#tvSearchEmpty")
+    page.fill("#tvSearch", "   ")
+    assert page.locator("#tvSearchGrid .tv-card").count() == 0 and page.is_hidden("#tvSearchEmpty")
+
+
+def test_search_respects_alive_filter(app_module, open_app, monkeypatch):
+    seed(3, health={1: True, 2: False})
+    set_geo(monkeypatch, True)
+    page = enter(open_app)
+    page.wait_for_selector("#tvGrid .tv-card")
+    tap(page, '[data-tvfilter="alive"]')
+    go(page, "fabTabSearch")
+    page.fill("#tvSearch", "kenh")
+    assert grid_titles(page, "#tvSearchGrid") == ["Kênh 001"]
+
+
+def test_library_shows_favorites_and_recents_then_empty_text(app_module, open_app):
+    seed(4)
+    c = hometv.db.conn()
+    c.execute("INSERT INTO favorites(channel_id, created_at) VALUES (2, 1.0)")
+    for cid, at in ((1, 10.0), (3, 30.0), (4, 20.0)):
+        c.execute("INSERT INTO recents(channel_id, viewed_at) VALUES (?,?)", (cid, at))
+    page = enter(open_app)
+    page.wait_for_selector("#tvGrid .tv-card")
+    go(page, "fabTabLibrary")
+    assert grid_titles(page, "#tvFavGrid") == ["Kênh 002"]
+    assert grid_titles(page, "#tvLibRecentGrid") == ["Kênh 003", "Kênh 004", "Kênh 001"]
+    assert page.is_hidden("#tvLibraryEmpty")
+
+
+def test_library_empty_text(app_module, open_app):
+    seed(2)
+    page = enter(open_app)
+    page.wait_for_selector("#tvGrid .tv-card")
+    go(page, "fabTabLibrary")
+    assert page.inner_text("#tvLibraryEmpty") == "Tủ kênh trống"
+    assert page.is_hidden("#tvFavSection") and page.is_hidden("#tvLibRecentSection")
+
+
+def test_library_redraws_after_favorite_toggled_in_home(app_module, open_app):
+    seed(3)
+    page = enter(open_app)
+    page.wait_for_selector("#tvGrid .tv-card")
+    go(page, "fabTabLibrary")
+    assert page.is_visible("#tvLibraryEmpty")
+    go(page, "fabTabExplore")
+    tap(page, '#tvGrid .tv-card[data-id="3"] .tv-star')
+    page.wait_for_function("document.querySelector('#tvGrid .tv-card[data-id=\"3\"] .tv-star').getAttribute('aria-pressed') === 'true'")
+    go(page, "fabTabLibrary")
+    assert grid_titles(page, "#tvFavGrid") == ["Kênh 003"] and page.is_hidden("#tvLibraryEmpty")
