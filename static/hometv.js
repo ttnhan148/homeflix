@@ -447,9 +447,21 @@
         return;
       }
       if (e.key === 'Escape') { e.preventDefault(); closePlayer(); }
-      else if (isTVDevice() && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-        e.preventDefault();
-        stepPlayer(e.key === 'ArrowDown' ? 1 : -1);
+      else if (isTVDevice() && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        const item = e.target.closest && e.target.closest('#tvPlaylist .ep-item');
+        if (item) {  // trong danh sách phát: Lên/Xuống đi giữa các dòng, Trái về khung player
+          e.preventDefault();
+          if (e.key === 'ArrowLeft') { $('tvPlayer').focus({ preventScroll: true }); return; }
+          const rows = [...document.querySelectorAll('#tvPlaylist .ep-item')];
+          const to = rows[rows.indexOf(item) + (e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0)];
+          if (to) { to.focus({ preventScroll: true }); to.scrollIntoView({ block: 'nearest' }); }
+        } else if (e.key === 'ArrowRight') {  // từ khung player sang dòng đang phát
+          const cur = document.querySelector('#tvPlaylist .ep-item.is-watching');
+          if (cur) { e.preventDefault(); cur.focus({ preventScroll: true }); }
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          stepPlayer(e.key === 'ArrowDown' ? 1 : -1);
+        }
       }
       return;
     }

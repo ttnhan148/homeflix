@@ -279,3 +279,44 @@ def test_player_hides_header_and_tabs_and_restores_on_close(app_module, open_app
     assert page.is_hidden("#tvPlayer") and page.is_visible("#stickyHeader") and page.is_visible("#tv-home-tab")
     assert page.evaluate("document.body.classList.contains('tv-player-active')") is False
     assert page.evaluate("document.activeElement.dataset.id") == "1"
+
+
+def test_tv_remote_moves_from_recent_row_to_filter_row_to_grid(app_module, open_app):
+    from tests.ui.test_hometv_ui import seed as seed_ui
+    seed_ui(6)
+    for cid, at in ((1, 10.0), (2, 20.0), (3, 30.0)):
+        hometv.db.conn().execute("INSERT INTO recents(channel_id, viewed_at) VALUES (?,?)", (cid, at))
+    page = open_tv(open_app, tv=True)
+    page.focus("#tvRecentList .home-cont >> nth=0")
+    page.keyboard.press("ArrowRight")
+    assert page.evaluate("document.activeElement.dataset.id") == "2"
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.dataset.tvfilter") == "all"
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.id") == "filterBtn-group"
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.classList.contains('tv-card')") is True
+    page.keyboard.press("ArrowUp")
+    assert page.evaluate("document.activeElement.id") == "filterBtn-group"
+
+
+def test_tv_up_down_in_playlist_moves_between_rows_without_switching(app_module, open_app):
+    seed(channels=4, streams=1)
+    page = open_tv(open_app, tv=True)
+    page.focus('#tvGrid .tv-card[data-id="1"]')
+    page.keyboard.press("Enter")
+    page.wait_for_function("window.__hlsSource === '/api/hometv/play/1/index.m3u8'")
+    n = len([r for r in page.requests if "/streams" in r])
+    page.keyboard.press("ArrowRight")  # từ video sang dòng đang phát trong danh sách
+    focused = "document.activeElement.classList.contains('ep-item') && document.activeElement.querySelector('.ep-name').textContent"
+    assert page.evaluate(focused) == "Kênh 001"
+    page.keyboard.press("ArrowDown")
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate(focused) == "Kênh 003"
+    page.wait_for_timeout(600)
+    assert source(page) == "/api/hometv/play/1/index.m3u8"
+    assert len([r for r in page.requests if "/streams" in r]) == n
+    page.keyboard.press("Enter")  # Enter trên dòng chọn kênh đó
+    page.wait_for_function("window.__hlsSource === '/api/hometv/play/3/index.m3u8'")
+    page.keyboard.press("ArrowLeft")  # về khung player: Lên/Xuống lại đổi kênh
+    assert page.evaluate("document.activeElement.id") == "tvPlayer"

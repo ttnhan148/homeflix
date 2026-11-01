@@ -18,6 +18,17 @@ Cần server ở Việt Nam hoặc trình duyệt TV; môi trường dev (IP ngo
 8. **Cast khi đang ở mode HomeTV** (phone cast phim lên TV đang xem kênh): hộp thoại cast phải nằm trên player, phim phát thì rời mode HomeTV.
 9. **Máy thật với nhiều nguồn:** nguồn 500+ kênh, hiệu năng lưới, thời gian một lượt kiểm toàn bộ (tối đa 4 `ffprobe` song song).
 
+## A2. Bố cục HomeTV mới (bổ sung 2026-11-01, cần test máy thật)
+
+Nhánh `feat/hometv-layout`: HomeTV dùng bố cục và trang play giống HomeFlix, thêm lọc Alive và chấm trạng thái. Spec: `docs/superpowers/specs/2026-10-31-hometv-layout-design.md`.
+
+1. **Trên TV thật bằng remote.** Mũi tên đi qua hàng "Kênh xem gần đây", hàng nút Tất cả/Alive, nút Nhóm, rồi lưới. Trong trang play: Lên/Xuống đổi kênh, Phải sang dòng đang phát trong danh sách, Lên/Xuống đi giữa các dòng, Trái về khung video, Esc đóng. Kiểm tra vòng focus có mượt và đủ lớn khi nhìn từ xa không.
+2. **Danh sách phát 10 dòng với danh sách dài.** Thử vài trăm kênh: cuộn có giật không (mỗi lần đổi kênh danh sách dựng lại toàn bộ), dòng đang phát có nằm giữa bảng không.
+3. **Hàng "Kênh xem gần đây" trên điện thoại.** Ba thẻ hiển thị đúng, logo (không phải poster) không bị cắt xấu, chạm là phát.
+4. **Chấm trạng thái và lọc Alive sau khi bộ kiểm chạy trên VPS Việt Nam.** Xanh, đỏ, xám khớp với "Xem stream chết" trong Cài đặt; lọc Alive chỉ còn kênh có stream vừa kiểm sống; máy chủ ngoài Việt Nam thì không thấy nút Alive và chấm.
+5. **Hai thanh tab.** Thanh header (TV, máy tính): Home, Tủ kênh, Tìm kiếm; thanh dưới (điện thoại): Home, Tìm kiếm, Tủ kênh; rời HomeTV thì nhãn về Home, Tủ phim, Nhập link.
+6. **Cast khi đang xem kênh.** Phát phim từ cast lúc ở trang play HomeTV phải thoát mode sạch (không để lại header ẩn).
+
 ## B. Review còn thiếu
 
 - Review toàn nhánh gói 4 bị bỏ qua theo ý chủ dự án. Các hướng đáng soi nếu làm lại: `hometv/health.py` (chọn variant, hạn tải, kill `ffprobe`, đóng response), `hometv/health_scheduler.py` (khóa host kết hợp semaphore, cờ `checking` khi huỷ), `hometv/geo.py` (trạng thái auto/on/off, quá hạn 24 giờ), SQL ẩn kênh và sắp thứ tự trong `hometv/catalog.py`, `ALTER TABLE` trên DB production, `queuedChecks` trong `static/settings-hometv.js`.

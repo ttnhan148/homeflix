@@ -3431,36 +3431,6 @@ body.mode-hometv #player-tab {
     background: var(--surface);
 }
 
-.tv-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 20px;
-}
-
-.tv-search {
-    width: 100%;
-    min-height: var(--tap);
-    padding: 0 16px;
-    border: 0;
-    border-radius: var(--pill);
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-}
-
-.tv-chips {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-}
-
-.tv-chips .filter-option {
-    flex: none;
-    border-radius: var(--pill);
-    background: var(--surface);
-}
-
 .tv-empty {
     padding: 48px 0;
     text-align: center;
