@@ -320,7 +320,8 @@ body.device-mobile .status-shield {
     background: rgba(0, 0, 0, 0.55); /* trên nền đen lúc chưa cuộn thì hoà vào nền */
 }
 
-body.player-active .status-shield {
+body.player-active .status-shield,
+body.tv-player-active .status-shield {
     display: none;
 }
 
@@ -2071,7 +2072,8 @@ body.device-mobile .float-tabbar {
     border-top: 1px solid var(--glass-line);
 }
 
-body.device-mobile.player-active .float-tabbar {
+body.device-mobile.player-active .float-tabbar,
+body.device-mobile.tv-player-active .float-tabbar {
     display: none;
 }
 
@@ -2112,7 +2114,8 @@ body.device-mobile.player-active .float-tabbar {
     box-shadow: none;
 }
 
-body.player-active #playerHeader {
+body.player-active #playerHeader,
+body.tv-player-active #tvPlayerHeader {
     padding: max(8px, var(--safe-top)) max(16px, var(--safe-right)) 8px max(16px, var(--safe-left)) !important;
 }
 
