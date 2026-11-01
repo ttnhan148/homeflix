@@ -299,3 +299,29 @@ def test_library_redraws_after_favorite_toggled_in_home(app_module, open_app):
     page.wait_for_function("document.querySelector('#tvGrid .tv-card[data-id=\"3\"] .tv-star').getAttribute('aria-pressed') === 'true'")
     go(page, "fabTabLibrary")
     assert grid_titles(page, "#tvFavGrid") == ["Kênh 003"] and page.is_hidden("#tvLibraryEmpty")
+
+
+def test_settings_back_from_hometv_lands_on_homeflix_home(app_module, open_app):
+    seed(2)
+    page = enter(open_app)
+    page.wait_for_selector("#tvGrid .tv-card")
+    tap(page, "#settingsBtn")
+    page.wait_for_selector("#settings-tab", state="visible")
+    tap(page, "#settingsBack")
+    page.wait_for_selector("#search-tab", state="visible")
+    assert page.evaluate("document.body.classList.contains('mode-hometv')") is False
+    assert page.is_hidden("#hometv-root")
+
+
+def test_home_stars_resync_after_unstar_in_library(app_module, open_app):
+    seed(3)
+    page = enter(open_app)
+    page.wait_for_selector("#tvGrid .tv-card")
+    star = '#tvGrid .tv-card[data-id="2"] .tv-star'
+    tap(page, star)
+    page.wait_for_function("document.querySelector('%s').getAttribute('aria-pressed') === 'true'" % star)
+    go(page, "fabTabLibrary")
+    tap(page, '#tvFavGrid .tv-card[data-id="2"] .tv-star')
+    page.wait_for_function("document.querySelectorAll('#tvFavGrid .tv-card').length === 0")
+    go(page, "fabTabExplore")
+    assert page.get_attribute(star, "aria-pressed") == "false"

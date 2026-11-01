@@ -320,3 +320,53 @@ def test_tv_up_down_in_playlist_moves_between_rows_without_switching(app_module,
     page.wait_for_function("window.__hlsSource === '/api/hometv/play/3/index.m3u8'")
     page.keyboard.press("ArrowLeft")  # về khung player: Lên/Xuống lại đổi kênh
     assert page.evaluate("document.activeElement.id") == "tvPlayer"
+
+
+def test_tv_remote_can_pick_group_option(app_module, open_app):
+    from tests.ui.test_hometv_ui import CATS, seed as seed_ui
+    seed_ui(6)
+    page = open_tv(open_app, tv=True)
+    page.focus("#filterBtn-group")
+    page.keyboard.press("Enter")
+    assert page.evaluate("document.getElementById('filterMenu-group').classList.contains('open')") is True
+    page.keyboard.press("ArrowDown")
+    focus_text = "document.activeElement.classList.contains('filter-option') && document.activeElement.textContent"
+    assert page.evaluate(focus_text) == "Tất cả"
+    page.keyboard.press("ArrowDown")
+    page.keyboard.press("ArrowDown")
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate(focus_text) == "Thể thao"
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.querySelectorAll('#tvGrid .tv-card').length === 2")
+    assert page.evaluate("document.activeElement.id") == "filterBtn-group"
+    assert page.evaluate("document.getElementById('filterMenu-group').classList.contains('open')") is False
+
+
+def in_view(page):
+    return page.evaluate("""() => { const r = document.activeElement.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= innerHeight; }""")
+
+
+def test_close_player_restores_scroll_and_focus_on_the_opening_card(app_module, open_app):
+    seed(channels=130, streams=1)
+    page = open_tv(open_app)
+    page.evaluate("document.querySelector('#tvGrid .tv-card[data-id=\"55\"]').scrollIntoView({block: 'center'})")
+    before = page.evaluate("scrollY")
+    assert before > 300
+    tap(page, '#tvGrid .tv-card[data-id="55"]')
+    page.wait_for_function("window.__hlsSource !== undefined")
+    tap(page, "#tvPlayerClose")
+    assert abs(page.evaluate("scrollY") - before) <= 4
+    assert page.evaluate("document.activeElement.dataset.id") == "55" and in_view(page)
+
+
+def test_close_player_opened_from_recent_row_focuses_recent_card(app_module, open_app):
+    from tests.ui.test_hometv_ui import seed as seed_ui
+    seed_ui(5)
+    hometv.db.conn().execute("INSERT INTO recents(channel_id, viewed_at) VALUES (3, 9.0)")
+    page = open_tv(open_app)
+    tap(page, '#tvRecentList .home-cont[data-id="3"]')
+    page.wait_for_function("window.__hlsSource !== undefined")
+    tap(page, "#tvPlayerClose")
+    got = page.evaluate("[document.activeElement.classList.contains('home-cont'), document.activeElement.dataset.id]")
+    assert got == [True, "3"]

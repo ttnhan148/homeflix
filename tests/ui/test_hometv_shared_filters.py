@@ -46,3 +46,13 @@ def test_macro_markup_ids_unchanged(app_module, open_app):
                 "#filterBtn-country", "#filterMenu-country", "#filterBtn-year", "#filterMenu-year"):
         assert page.locator(sel).count() == 1, sel
     assert page.locator("#filterBar .filter-dropdown").count() == 3
+
+
+def test_mobile_chip_row_scrolls_sideways_in_both_filter_bars(app_module, open_app):
+    page = open_app()
+    page.goto(URL)
+    got = page.evaluate("""() => ['filterBar', 'tvFilterBar'].map((id) => {
+        const cs = getComputedStyle(document.querySelector('#' + id + ' .filter-bar'));
+        return [cs.flexWrap, cs.overflowX];
+    })""")
+    assert got == [["nowrap", "auto"], ["nowrap", "auto"]]

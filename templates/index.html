@@ -3486,6 +3486,7 @@ document.addEventListener('visibilitychange', () => {
 
         function switchTab(tabId) {
             if (window.HFTV && HFTV.active && HFTV.active()) tabId = HFTV.tab(tabId); // mode HomeTV: nút tab dẫn sang tab kênh
+            else if (tabId.startsWith('tv-')) tabId = { 'tv-saved-tab': 'saved-tab', 'tv-search-tab': 'player-tab' }[tabId] || 'search-tab'; // ngoài mode HomeTV (vd. Cài đặt → quay lại) tab kênh về tab phim tương ứng
             const prevTab = document.querySelector('.tab-content.active');
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');

@@ -1057,9 +1057,8 @@ body.device-mobile #tvFilterBar .grid-tab-btn {
 }
 
 /* iPhone: hàng chip cuộn ngang trong khung của nó, không đẩy trang tràn ngang.
-Tờ chọn ở đây là position: fixed nên không bị overflow cắt. */
+   Tờ chọn ở đây là position: fixed nên không bị overflow cắt. */
 body.device-mobile #filterBar .filter-bar,
-Tờ chọn ở đây là position: fixed nên không bị overflow cắt. */
 body.device-mobile #tvFilterBar .filter-bar {
     flex-wrap: nowrap;
     overflow-x: auto;

@@ -171,7 +171,7 @@
   filterProviders.group = () => ({
     options: U.groupOptions(state.channels),
     current: state.group,
-    onPick: (value) => { state.group = value; root.closeAllFilterDropdowns(); refilter(); },
+    onPick: (value) => { state.group = value; root.closeAllFilterDropdowns(); refilter(); $('filterBtn-group').focus({ preventScroll: true }); },
   });
 
   function showMessage(text, retry) {
@@ -237,7 +237,7 @@
   const STALL_MS = 8000;
   const SWITCH_DEBOUNCE_MS = 400;
   const play = { token: 0, hls: null, timer: null, streams: [], index: 0, channelId: null, recentSent: false,
-    pendingId: null, switchTimer: null, list: null, returnTab: null };
+    pendingId: null, switchTimer: null, list: null, returnTab: null, scrollY: 0, openerBox: null };
 
   function channelById(id) {
     return state.channels.find((c) => c.id === id) || null;
@@ -362,6 +362,9 @@
     $('tvPlayerTitle').textContent = c ? c.name : '';
     if ($('tvPlayer').hidden) {  // mở trang play: ẩn header và các tab như HomeFlix, nhớ tab để quay lại
       play.returnTab = activeTabId();
+      play.scrollY = root.scrollY;
+      const from = document.activeElement && document.activeElement.closest ? document.activeElement.closest('[id]:not(#hometv-root):not(.tab-content)') : null;
+      play.openerBox = from && from.id ? from.id : null;  // vùng chứa thẻ vừa bấm (lưới hay hàng Xem gần đây)
       $('stickyHeader').style.display = 'none';
       document.querySelectorAll('.tab-content').forEach((el) => { el.style.display = 'none'; });
       document.body.classList.add('tv-player-active');
@@ -397,10 +400,16 @@
     $('stickyHeader').style.display = 'flex';
     if (restoreTab !== false) root.switchTab(play.returnTab || 'tv-home-tab');
     play.list = null;
+    if (restoreTab === false) return;
+    root.scrollTo(0, play.scrollY);  // theatre thu trang lại; trả đúng chỗ đang xem trong lưới
     const active = document.querySelector('#hometv-root .tab-content.active');
-    const card = active && (active.querySelector('.tv-card[data-id="' + play.channelId + '"]')
-      || active.querySelector('.home-cont[data-id="' + play.channelId + '"]'));
-    if (card) card.focus({ preventScroll: true });
+    const box = (play.openerBox && document.getElementById(play.openerBox)) || active;
+    const sel = '[data-id="' + play.channelId + '"]';
+    const card = (box && box.querySelector(sel)) || (active && (active.querySelector('.tv-card' + sel) || active.querySelector('.home-cont' + sel)));
+    if (card) {
+      card.focus({ preventScroll: true });
+      card.scrollIntoView({ block: 'nearest' });  // kênh đã đổi trong lúc xem có thể nằm ngoài tầm nhìn
+    }
   }
 
   // Đổi kênh: gom các lần bấm nhanh (phím Lên/Xuống, bấm dòng danh sách) thành một lần mở kênh cuối
@@ -430,6 +439,10 @@
       [...document.querySelectorAll('[data-tvfilter]')].filter((b) => !b.hidden),
       [$('filterBtn-group'), $('tvClearBtn')].filter((b) => b && b.style.display !== 'none'),
     ];
+    // Menu Nhóm đang mở: mỗi lựa chọn là một hàng ngay dưới nút, để remote đi xuống chọn được
+    if ($('filterMenu-group').classList.contains('open')) {
+      document.querySelectorAll('#filterMenu-group .filter-option').forEach((b) => rows.push([b]));
+    }
     let top = null;
     for (const card of document.querySelectorAll('#tvGrid .tv-card')) {
       if (top === null || Math.abs(card.offsetTop - top) > 4) { rows.push([]); top = card.offsetTop; }
@@ -504,9 +517,18 @@
     return TAB_MAP[tabId] || tabId;
   }
 
+  // Sao yêu thích của lưới Home có thể đã đổi ở tab khác: cập nhật tại chỗ để không mất vị trí cuộn của lưới
+  function syncStars() {
+    document.querySelectorAll('#tvGrid .tv-card').forEach((card) => {
+      const c = channelById(Number(card.dataset.id));
+      const star = card.querySelector('.tv-star');
+      if (c && star) star.setAttribute('aria-pressed', String(c.favorite));
+    });
+  }
+
   function onTab(tabId) {
     if (!state.loaded) return;
-    if (tabId === 'tv-home-tab') renderRecent();
+    if (tabId === 'tv-home-tab') { renderRecent(); syncStars(); }
     else if (tabId === 'tv-search-tab') renderSearch();
     else if (tabId === 'tv-saved-tab') renderLibrary();
   }

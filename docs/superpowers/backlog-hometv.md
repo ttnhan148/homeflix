@@ -36,13 +36,19 @@ Nhánh `feat/hometv-layout`: HomeTV dùng bố cục và trang play giống Home
 
 ## C. Việc nhỏ của gói 3 (minor, hoãn)
 
-1. Esc ngay sau ↓ khi đang đổi kênh để lại `pendingId` cũ (lần đổi kênh sau đi sai).
-2. Bỏ yêu thích trên TV (chip "Yêu thích") làm mất focus.
-3. Chip "Xem gần đây" không hiện sau khi xem, phải tải lại.
+1. ~~Esc ngay sau ↓ để lại `pendingId` cũ~~ (đã xử lý ở bố cục mới: `closePlayer` xoá `pendingId`).
+2. Bỏ yêu thích trong Tủ kênh làm mất focus khi thẻ không còn trong lưới (chip "Yêu thích" đã bỏ, vấn đề còn ở tab Tủ kênh).
+3. ~~Chip "Xem gần đây"~~ (không còn chip; hàng Xem gần đây và Tủ kênh vẽ lại khi vào tab).
 4. Stream `direct` (`.ts`, `.mp4`) chưa bị ngắt khi đóng player (cần `video.load()` sau `removeAttribute('src')`).
 5. Trình duyệt không có `IntersectionObserver` chỉ thấy 60 kênh đầu.
 6. LL-HLS: `EXT-X-PART`, `PRELOAD-HINT`, rendition report, `SESSION-KEY` chưa được viết lại URI.
 7. 503 có thể kẹt người dùng trong mode HomeTV (hiện chưa xảy ra vì server không còn trả 503).
+8. (Review bố cục 2026-11-01) Phím Phải từ khung video sang dòng đang phát có thể nằm ngoài màn hình TV 1080p vì video cao tới 85vh; cần `scrollIntoView({block:'nearest'})` sau khi focus.
+9. `#tvPlaylist` đệm phải đang dùng `--safe-left` thay vì `--safe-right`.
+10. Cast lúc đang ở tab Tìm kiếm của HomeTV: thoát player phim rơi vào "Nhập link" (nút `tabBtnPlayer` vẫn active).
+11. Mã chết: `HFHomeTV.buildChips` và nhánh `chip` của `filterChannels` không còn dùng.
+12. `load()` lỗi hoặc trả 0 kênh vẫn để thẻ cũ ở hàng Xem gần đây.
+13. Tab Tìm kiếm và Tủ kênh chưa có điều hướng mũi tên riêng cho remote (dựa vào điều hướng mặc định); hàng Xem gần đây và thanh tab chưa vào được bằng `onKey`.
 
 ## D. Gia cố và bảo mật (đã hoãn, làm một lượt)
 
