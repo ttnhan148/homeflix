@@ -1,0 +1,2 @@
+# Bỏ qua khi build knowledge graph (cú pháp giống .gitignore)
+tests/
