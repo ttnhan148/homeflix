@@ -49,3 +49,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# graphify (knowledge graph, build lại bằng: graphify update .)
+graphify-out/
