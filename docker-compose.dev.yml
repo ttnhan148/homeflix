@@ -1,0 +1,31 @@
+services:
+  homeflix:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: homeflix-dev
+    restart: unless-stopped
+    ports:
+      - "6969:6969"
+    volumes:
+      # Mount thư mục mã nguồn để hot-reload khi chỉnh sửa code
+      - .:/app
+      - homeflix_cache_dev:/app/cache
+      - homeflix_downloads_dev:/app/downloads
+      - homeflix_db_dev:/app/data
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - ENV=development
+    # Bật reload cho FastAPI uvicorn trong môi trường dev
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6969", "--reload"]
+    networks:
+      - docker-dev
+
+volumes:
+  homeflix_cache_dev:
+  homeflix_downloads_dev:
+  homeflix_db_dev:
+
+networks:
+  docker-dev:
+    external: true
