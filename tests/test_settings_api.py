@@ -40,7 +40,7 @@ def test_cache_status_uses_setting(pw, admin_client):
 def test_cleanup_uses_max_age_setting(app_module, pw, admin_client):
     d = os.path.join(app_module.CACHE_DIR, "s1"); os.makedirs(d)
     old = time.time() - 2 * 3600; os.utime(d, (old, old))
-    app_module._cleanup_disk(); assert os.path.exists(d)          # mặc định 6 giờ
+    app_module._cleanup_disk(); assert os.path.exists(d)          # default 6 hours
     admin_client.patch("/api/settings", json={"cache.max_age_hours": 1})
     app_module._cleanup_disk(); assert not os.path.exists(d)
 

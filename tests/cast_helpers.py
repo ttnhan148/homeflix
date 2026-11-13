@@ -2,10 +2,10 @@ import asyncio
 
 
 async def asgi_stream(app, path, *, headers=None, cookies=None, until=lambda chunks: True, timeout=2.0):
-    """GET một luồng (SSE) thẳng qua ASGI, không mở cổng mạng.
+    """GET a stream (SSE) directly through ASGI, without opening a network port.
 
-    Thu các phần thân tới khi `until(chunks)` đúng rồi gửi http.disconnect.
-    Trả (status, headers_thường, chunks, finished); finished False nếu app không kết thúc sau khi ngắt."""
+    Collect body chunks until `until(chunks)` is true, then send http.disconnect.
+    Return (status, lowercased_headers, chunks, finished); finished is False if the app does not finish after the disconnect."""
     raw_headers = [(b"host", b"homeflix.test"), (b"user-agent", b"pytest")]
     for k, v in (headers or {}).items():
         raw_headers.append((k.lower().encode(), v.encode()))
@@ -50,6 +50,6 @@ async def asgi_stream(app, path, *, headers=None, cookies=None, until=lambda chu
 
 
 def real_id(client):
-    """Id thật của thiết bị = cookie hf_device (API không còn trả về)."""
+    """The device's real id = the hf_device cookie (the API no longer returns it)."""
     client.get("/api/device")
     return client.cookies["hf_device"]

@@ -1,44 +1,31 @@
-"""Lưu và truy vấn sức khỏe stream (bảng stream_health) cùng lịch kiểm của nguồn."""
-import json
-
+"""Store and query stream health (stream_health table) and per-source check schedules."""
 from hometv import catalog, db, scoring
 from hometv.health import HealthResult
 
-CHECK_EVERY = 6 * 3600
-FAIL_HIDE = catalog.FAIL_HIDE
+CHECK_EVERY = 12 * 3600  # twice a day
 
-# Nguồn đang có lượt kiểm chạy (scheduler thêm/bớt; chỉ để hiển thị cờ "Đang kiểm tra…")
+# Sources with a check in progress (scheduler adds/removes; only for showing the "Đang kiểm tra…" flag)
 checking: set[str] = set()
 
 
 def eligible(source_id: str) -> bool:
-    """Nguồn còn được phép kiểm: tồn tại, đang bật, đã duyệt."""
-    with db.lock:
-        r = db.conn().execute("SELECT 1 FROM sources WHERE id=? AND enabled=1 AND rights_status='approved'",
-                              (source_id,)).fetchone()
-    return r is not None
+    """Source still eligible for checks: exists, enabled, approved."""
+    return db.read_one("SELECT 1 FROM sources WHERE id=? AND enabled=1 AND rights_status='approved'",
+                       (source_id,)) is not None
 
 
 def streams_to_check(source_id: str) -> list[dict]:
-    with db.lock:
-        rows = db.conn().execute(
-            "SELECT id, url, http_headers FROM streams WHERE source_id=? AND active=1 AND drm_hint=0 ORDER BY id",
-            (source_id,)).fetchall()
-    out = []
-    for r in rows:
-        try:
-            headers = json.loads(r["http_headers"]) if r["http_headers"] else {}
-        except ValueError:
-            headers = {}
-        out.append({"id": r["id"], "url": r["url"], "http_headers": headers if isinstance(headers, dict) else {},
-                    "https": r["url"].lower().startswith("https:")})
-    return out
+    rows = db.read(
+        "SELECT id, url, http_headers FROM streams WHERE source_id=? AND active=1 AND drm_hint=0 ORDER BY id",
+        (source_id,))
+    return [{"id": r["id"], "url": r["url"], "http_headers": catalog.parse_headers(r["http_headers"]),
+             "https": r["url"].lower().startswith("https:")} for r in rows]
 
 
 def record(stream_id: int, result: HealthResult, https: bool, now: float) -> None:
     with db.tx() as c:
         if c.execute("SELECT 1 FROM streams WHERE id=?", (stream_id,)).fetchone() is None:
-            return  # stream bị xoá giữa lúc kiểm
+            return  # stream deleted mid-check
         prev = c.execute("SELECT fail_streak FROM stream_health WHERE stream_id=?", (stream_id,)).fetchone()
         streak = 0 if result.ok else (prev["fail_streak"] if prev else 0) + 1
         c.execute(
@@ -54,10 +41,9 @@ def record(stream_id: int, result: HealthResult, https: bool, now: float) -> Non
 
 
 def due_sources(now: float) -> list[str]:
-    with db.lock:
-        rows = db.conn().execute(
-            "SELECT id FROM sources WHERE enabled=1 AND rights_status='approved' "
-            "AND (next_check_at IS NULL OR next_check_at <= ?) ORDER BY priority, name", (now,)).fetchall()
+    rows = db.read(
+        "SELECT id FROM sources WHERE enabled=1 AND rights_status='approved' "
+        "AND (next_check_at IS NULL OR next_check_at <= ?) ORDER BY priority, name", (now,))
     return [r["id"] for r in rows]
 
 
@@ -91,11 +77,10 @@ def source_health(now: float) -> dict[str, dict]:
 
 def dead_streams(source_id: str, status: str, limit: int) -> list[dict]:
     where = "AND h.ok = 0" if status == "dead" else ""
-    with db.lock:
-        rows = db.conn().execute(
+    rows = db.read(
             "SELECT s.id AS stream_id, COALESCE(NULLIF(s.display_name, ''), ch.display_name, ch.normalized_name, '') "
             "AS channel_name, h.ok, h.error, h.fail_streak, h.width, h.height, h.score "
             "FROM stream_health h JOIN streams s ON s.id = h.stream_id JOIN channels ch ON ch.id = s.channel_id "
             f"WHERE s.source_id = ? AND s.active = 1 AND s.drm_hint = 0 {where} "
-            "ORDER BY h.fail_streak DESC, s.id LIMIT ?", (source_id, limit)).fetchall()
+            "ORDER BY h.fail_streak DESC, s.id LIMIT ?", (source_id, limit))
     return [{**dict(r), "ok": bool(r["ok"])} for r in rows]

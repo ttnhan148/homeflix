@@ -1,8 +1,8 @@
-// Logic thuần cho tự qua tập và bỏ qua mở đầu: không đụng DOM, chạy được trong trình duyệt lẫn Node.
+// Pure logic for auto-next episode and intro skip: no DOM access, runs in both the browser and Node.
 (function (root) {
   const KEY = 'hf_player_prefs';
   const DEFAULT_PREFS = { autoNext: true, autoIntro: false, introSeconds: 85 };
-  const INTRO_WINDOW = 90; // nút chỉ hiện trong 90 giây đầu của tập
+  const INTRO_WINDOW = 90; // button only shows during the first 90 seconds of an episode
 
   function normalize(raw) {
     const r = raw && typeof raw === 'object' ? raw : {};
@@ -20,7 +20,7 @@
 
   function savePrefs(storage, prefs) {
     const clean = normalize(prefs);
-    try { storage.setItem(KEY, JSON.stringify(clean)); } catch (e) { /* storage bị chặn: giữ trong bộ nhớ */ }
+    try { storage.setItem(KEY, JSON.stringify(clean)); } catch (e) { /* storage blocked: keep in memory */ }
     return clean;
   }
 
@@ -41,8 +41,8 @@
     return 'Tập kế sau ' + secondsLeft + ' giây';
   }
 
-  // Nguồn video: mặc định qua proxy (có cache, tải trước). Khi proxy không lấy được nguồn
-  // (CDN chặn IP máy chủ ngoài Việt Nam), thiết bị nhớ phát thẳng link gốc trong 12 giờ.
+  // Video source: proxied by default (cached, prefetched). When the proxy can't fetch the source
+  // (CDN blocks server IPs outside Vietnam), the device remembers to play the original link directly for 12 hours.
   const DIRECT_KEY = 'hf_direct_stream_until';
   const DIRECT_TTL_MS = 12 * 3600 * 1000;
 
@@ -61,10 +61,10 @@
   }
 
   function rememberDirect(storage, now) {
-    try { storage.setItem(DIRECT_KEY, String(now + DIRECT_TTL_MS)); } catch (e) { /* storage bị chặn */ }
+    try { storage.setItem(DIRECT_KEY, String(now + DIRECT_TTL_MS)); } catch (e) { /* storage blocked */ }
   }
 
-  // Cấu hình hls.js dùng chung cho phim và HomeTV
+  // Shared hls.js config for movies and HomeTV
   function hlsConfig(isTV, proxied) {
     return {
       maxBufferLength: isTV ? 20 : 30,

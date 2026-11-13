@@ -9,7 +9,7 @@ SIZES = [(430, 932, False), (440, 956, False), (1920, 1080, True)]
 
 def test_service_worker_caches_shell_and_versioned_assets_by_full_url():
     sw = (ROOT / "static" / "sw.js").read_text()
-    assert "homeflix-shell-v" in sw  # phiên bản cache do các gói sau tăng
+    assert "homeflix-shell-v" in sw  # cache version bumped by later packages
     assert "'/'" in sw and "caches.match(event.request)" in sw
 
 

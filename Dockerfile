@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Cài đặt ffmpeg và các gói cần thiết cho video processing
+# Install ffmpeg and packages needed for video processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
@@ -8,18 +8,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy requirements và cài đặt python packages
+# Copy requirements and install python packages
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy mã nguồn ứng dụng
+# Copy application source
 COPY . .
 
-# Tạo các thư mục lưu dữ liệu & cache
+# Create data & cache directories
 RUN mkdir -p /app/cache /app/downloads
 
-# Expose port mặc định 6969
+# Expose default port 6969
 EXPOSE 6969
 
-# Khởi chạy HomeFlix
+# Start HomeFlix
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6969"]

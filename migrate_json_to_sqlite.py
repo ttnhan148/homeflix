@@ -75,7 +75,7 @@ def migrate():
     conn.close()
     print(f"Đã di chuyển thành công {count} bộ phim.")
 
-    # Đổi tên file để backup
+    # Rename the file as a backup
     bak_file = JSON_FILE + ".bak"
     try:
         os.rename(JSON_FILE, bak_file)

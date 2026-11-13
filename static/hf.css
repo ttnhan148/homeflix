@@ -1,9 +1,9 @@
-/* HomeFlix — nền đen tuyệt đối, phân lớp bằng độ sáng (#000, #111, #2a2a2a), không bóng, không gradient.
-   Màu đỏ chỉ dùng cho tiến độ xem. Kính chỉ đặt ở thanh nổi trên nội dung đang trượt.
-   Nạp sau CSS inline trong index.html, nên luật cùng độ ưu tiên ở đây thắng. */
+/* HomeFlix — pure black background, layered by brightness (#000, #111, #2a2a2a), no shadows, no gradients.
+   Red is used only for watch progress. Glass is only used on bars floating over scrolling content.
+   Loaded after the inline CSS in index.html, so rules of equal specificity here win. */
 
 :root {
-    /* Vùng an toàn: iPhone có Dynamic Island và thanh Home. Test ghi đè các biến này. */
+    /* Safe areas: iPhone has the Dynamic Island and Home indicator. Tests override these variables. */
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-right: env(safe-area-inset-right, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -31,7 +31,7 @@
     --edge: 16px;
     --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 
-    /* Biến cũ mà CSS inline còn dùng */
+    /* Legacy variables still used by the inline CSS */
     --bg-color: #000;
     --card-bg: #111;
     --surface-elevated: #1c1c1e;
@@ -55,21 +55,21 @@
     backdrop-filter: var(--glass-blur);
 }
 
-/* Trình duyệt không hỗ trợ backdrop-filter: lùi về nền đặc */
+/* Browsers without backdrop-filter support: fall back to a solid background */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .glass {
         background: rgba(17, 17, 17, 0.96);
     }
 }
 
-/* TV thường yếu: bỏ blur, dùng nền đặc */
+/* TVs are usually underpowered: drop blur, use a solid background */
 body.device-tv .glass {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: rgba(20, 20, 22, 0.95);
 }
 
-/* ---------- Nền tảng ---------- */
+/* ---------- Base ---------- */
 body, input, button, textarea, select {
     font-family: var(--font);
 }
@@ -86,7 +86,7 @@ button {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* Tên phim dài không khoảng trắng không được đẩy trang tràn ngang (iOS sẽ thu nhỏ cả trang) */
+/* Long titles without spaces must not cause horizontal overflow (iOS would shrink the whole page) */
 .detail-hero-title,
 .detail-hero-subtitle,
 .detail-overview,
@@ -128,7 +128,7 @@ body.device-tv .container {
     gap: 36px;
 }
 
-/* ---------- Header: logo, điều hướng (TV/máy tính), nút TV ---------- */
+/* ---------- Header: logo, navigation (TV/desktop), TV button ---------- */
 .sticky-header {
     position: sticky;
     top: 0;
@@ -141,7 +141,7 @@ body.device-tv .container {
     border: 0;
 }
 
-/* Máy tính: nền đen tràn hết bề ngang cửa sổ (không tạo cuộn ngang), nội dung vẫn thẳng mép cột */
+/* Desktop: black background spans the full window width (no horizontal scroll), content stays aligned to the column */
 body.device-desktop .sticky-header {
     background: var(--ground);
     box-shadow: 0 0 0 100vmax var(--ground);
@@ -155,7 +155,7 @@ body.device-tv .sticky-header {
     padding: 28px 0 8px;
 }
 
-/* iPhone: header nằm trong luồng, ngay dưới Dynamic Island */
+/* iPhone: header is in normal flow, right below the Dynamic Island */
 body.device-mobile .sticky-header {
     position: relative;
     top: auto;
@@ -202,11 +202,6 @@ body.device-mobile .app-header h1 {
 body.device-tv .app-header h1 {
     font-size: 30px;
     line-height: 38px;
-}
-
-body.device-tv .brand-mark {
-    width: 40px;
-    height: 40px;
 }
 
 .tabs-nav,
@@ -303,7 +298,7 @@ body.device-tv .settings-btn svg {
     box-shadow: 0 0 0 2px var(--ground);
 }
 
-/* Dải kính sau thanh trạng thái iPhone (PWA black-translucent) */
+/* Glass strip behind the iPhone status bar (PWA black-translucent) */
 .status-shield {
     display: none;
 }
@@ -317,7 +312,7 @@ body.device-mobile .status-shield {
     height: var(--safe-top);
     z-index: 880;
     pointer-events: none;
-    background: rgba(0, 0, 0, 0.55); /* trên nền đen lúc chưa cuộn thì hoà vào nền */
+    background: rgba(0, 0, 0, 0.55); /* blends into the black background before scrolling */
 }
 
 body.player-active .status-shield,
@@ -325,7 +320,7 @@ body.tv-player-active .status-shield {
     display: none;
 }
 
-/* ---------- Ô tìm kiếm (TV, máy tính) ---------- */
+/* ---------- Search box (TV, desktop) ---------- */
 .search-container {
     gap: 28px;
 }
@@ -358,7 +353,7 @@ body.device-mobile .search-bar {
     display: none;
 }
 
-/* Tab Tìm kiếm của HomeTV là trang riêng, nên ô tìm luôn hiện (kể cả điện thoại) */
+/* HomeTV's Search tab is a separate page, so the search box is always shown (phones included) */
 body.device-mobile .search-bar.tv-search-bar {
     display: flex;
 }
@@ -368,7 +363,7 @@ body.device-tv .search-bar input {
     font-size: 20px;
 }
 
-/* Nút chính: trắng, chữ đen, không gradient, không glow */
+/* Primary button: white, black text, no gradient, no glow */
 .btn-main,
 body.device-tv .btn-main {
     height: 48px;
@@ -449,7 +444,7 @@ body.device-tv .sec-link {
     font-size: 20px;
 }
 
-/* --- Xem tiếp: thẻ đầu nổi bật, các dòng sau gọn --- */
+/* --- Continue watching: first card is prominent, following rows are compact --- */
 .home-continue,
 .continue-row {
     display: flex;
@@ -465,7 +460,7 @@ body.device-tv .sec-link {
     width: 100%;
     padding: 10px 0;
     border: 0;
-    background: var(--ground); /* nền đặc: khi vuốt, thẻ che lớp hành động bên dưới */
+    background: var(--ground); /* solid background: while swiping, the card covers the action layer below */
     color: inherit;
     text-align: left;
     cursor: pointer;
@@ -574,7 +569,7 @@ body.device-tv .sec-link {
     height: 4px;
 }
 
-/* Vuốt ngang (điện thoại): thẻ chạy theo ngón tay, lộ lớp "Xem tiếp" bên trái hoặc "Bỏ" bên phải */
+/* Horizontal swipe (phone): card follows the finger, revealing the "Xem tiếp" layer on the left or "Bỏ" on the right */
 .swipe-row {
     position: relative;
     overflow: hidden;
@@ -634,7 +629,7 @@ body.device-tv .sec-link {
     opacity: 1;
 }
 
-/* Quá ngưỡng: buông tay là chạy */
+/* Past the threshold: releasing triggers the action */
 .swipe-row.is-armed .swipe-act-play {
     background: #fff;
     color: #000;
@@ -712,7 +707,7 @@ body.device-tv .sec-link {
     }
 }
 
-/* Máy tính, TV: Xem tiếp là hàng thẻ */
+/* Desktop, TV: Continue watching is a row of cards */
 body:not(.device-mobile) .home-continue,
 body:not(.device-mobile) .continue-row {
     display: grid;
@@ -720,7 +715,7 @@ body:not(.device-mobile) .continue-row {
     gap: 16px;
 }
 
-/* Không vuốt: hàng bọc biến mất khỏi bố cục, thẻ là ô lưới như cũ */
+/* No swipe: the wrapper row drops out of layout, the card is a regular grid cell */
 body:not(.device-mobile) .swipe-row {
     display: contents;
 }
@@ -774,7 +769,7 @@ body.device-tv .continue-progress {
     margin-top: 12px;
 }
 
-/* --- Đang chiếu rạp: hàng thẻ ngang cuộn --- */
+/* --- Now in theaters: horizontally scrolling card row --- */
 .hero {
     position: static;
     width: 100%;
@@ -792,6 +787,19 @@ body.device-tv .continue-progress {
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
     overscroll-behavior-x: contain;
+}
+
+/* Auto-slide drives scrollLeft frame by frame: snapping off meanwhile so the two don't fight */
+.hero-track {
+    transition: opacity 200ms ease;
+}
+
+.hero-track.is-animating {
+    scroll-snap-type: none;
+}
+
+.hero-track.is-fading {
+    opacity: 0;
 }
 
 .hero-track::-webkit-scrollbar {
@@ -920,6 +928,21 @@ body.device-tv .hero-track {
     animation: hf-spin 0.8s linear infinite;
 }
 
+/* HomeTV: channel logos sit whole on a dark plate instead of filling the frame like a movie still */
+.tv-hero .hero-bg {
+    object-fit: contain;
+    padding: 12% 18%;
+    box-sizing: border-box;
+}
+
+.tv-hero .hero-media .tv-initial {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .hero-dots {
     display: none !important;
 }
@@ -945,7 +968,7 @@ body.device-tv .hero-btn-save {
     to { transform: rotate(360deg); }
 }
 
-/* ---------- Thanh lọc: loại phim (gạch chân) + chip ---------- */
+/* ---------- Filter bar: movie type (underlined) + chips ---------- */
 .grid-tabs-section {
     gap: 0;
 }
@@ -968,7 +991,7 @@ body.device-mobile #tvFilterBar {
     padding: 4px max(var(--edge), var(--safe-right)) 12px max(var(--edge), var(--safe-left));
 }
 
-/* Kính nằm ở phần tử giả để tờ chọn (position: fixed) không bị kẹt trong backdrop-filter */
+/* Glass lives on a pseudo-element so the picker sheet (position: fixed) is not trapped by backdrop-filter */
 body.device-mobile #filterBar::before,
 body.device-mobile #tvFilterBar::before {
     content: "";
@@ -1056,8 +1079,8 @@ body.device-mobile #tvFilterBar .grid-tab-btn {
     margin: 0;
 }
 
-/* iPhone: hàng chip cuộn ngang trong khung của nó, không đẩy trang tràn ngang.
-   Tờ chọn ở đây là position: fixed nên không bị overflow cắt. */
+/* iPhone: the chip row scrolls horizontally within its box without overflowing the page.
+   The picker sheet here is position: fixed, so overflow does not clip it. */
 body.device-mobile #filterBar .filter-bar,
 body.device-mobile #tvFilterBar .filter-bar {
     flex-wrap: nowrap;
@@ -1165,7 +1188,7 @@ body.device-mobile #tvFilterBar .filter-btn {
     color: var(--text);
 }
 
-/* iPhone: tờ chọn nổi phía trên tab bar */
+/* iPhone: picker sheet floats above the tab bar */
 body.device-mobile .filter-menu {
     position: fixed;
     left: 12px;
@@ -1228,7 +1251,7 @@ body.device-tv .filter-option {
     font-size: 20px;
 }
 
-/* ---------- Lưới phim ---------- */
+/* ---------- Movie grid ---------- */
 .grid-tab-content,
 .movies-grid {
     display: grid;
@@ -1353,7 +1376,7 @@ body.device-tv .movie-card:focus-visible {
     outline-offset: 4px;
 }
 
-/* Chỗ chờ: khối xám phẳng đúng kích thước thật, không shimmer */
+/* Placeholder: flat gray block at the real size, no shimmer */
 .skeleton-card,
 body.device-mobile .skeleton-card,
 body.device-tv .skeleton-card {
@@ -1394,7 +1417,7 @@ body.device-tv .skeleton-card {
     50% { opacity: 0.55; }
 }
 
-/* Cuộn vô hạn: dòng "Đang tải thêm" ở cuối lưới */
+/* Infinite scroll: "Đang tải thêm" line at the end of the grid */
 .grid-load-more {
     grid-column: 1 / -1;
     display: flex;
@@ -1430,7 +1453,7 @@ body.device-tv .grid-load-more {
     font-size: 15px;
 }
 
-/* ---------- Lớp tìm kiếm ---------- */
+/* ---------- Search overlay ---------- */
 .search-overlay {
     background: var(--ground);
     -webkit-backdrop-filter: none;
@@ -1450,7 +1473,7 @@ body.device-mobile .search-overlay {
     color: var(--text);
 }
 
-/* ---------- Trang chi tiết ---------- */
+/* ---------- Detail page ---------- */
 .detail-loading {
     padding: 48px 0;
     text-align: center;
@@ -1637,7 +1660,7 @@ body.device-tv .detail-action-side {
     font-size: 20px;
 }
 
-/* iPhone: nút Phát nằm cố định trong tầm ngón cái, trên tab bar */
+/* iPhone: Play button is fixed within thumb reach, above the tab bar */
 body.device-mobile .detail-actions {
     position: fixed;
     left: max(var(--edge), var(--safe-left));
@@ -1712,7 +1735,7 @@ body.device-mobile .detail-episodes {
     backdrop-filter: none;
 }
 
-/* ---------- Dải tập ---------- */
+/* ---------- Episode strip ---------- */
 .ep-list {
     display: flex;
     flex-direction: column;
@@ -1803,7 +1826,7 @@ body.device-tv .ep-item {
     white-space: nowrap;
 }
 
-/* Danh sách một cột cao đúng `--ep-rows` dòng rồi cuộn bên trong (danh sách phát kênh HomeTV) */
+/* Single-column list exactly `--ep-rows` rows tall, scrolling internally (HomeTV channel playlist) */
 body .ep-list-rows .ep-list-grid {
     --row-h: 52px;
     --row-gap: 8px;
@@ -1824,7 +1847,7 @@ body .ep-list-rows .ep-item {
     padding: 0 12px;
 }
 
-/* Trạng thái tập: thêm body để thắng các luật theo thiết bị ở trên */
+/* Episode state: prefixed with body to beat the per-device rules above */
 body .ep-list .ep-item.is-watched,
 body .ep-list .ep-item.is-watched:hover {
     background: var(--surface);
@@ -1917,7 +1940,7 @@ body.device-tv .ep-item {
     font-size: 13px;
 }
 
-/* ---------- Tủ phim ---------- */
+/* ---------- Library ---------- */
 #saved-tab .search-container,
 #tv-saved-tab .search-container {
     display: flex;
@@ -1933,7 +1956,7 @@ body.device-tv .ep-item {
 }
 
 body.device-mobile .library-heading {
-    display: none; /* tab bar đã nói đây là Tủ phim; header giữ tên app */
+    display: none; /* the tab bar already says this is the Library; header keeps the app name */
 }
 
 body.device-tv .library-heading {
@@ -2048,7 +2071,7 @@ body.device-tv .saved-movie-row .movie-title {
 .saved-remove::after {
     content: "";
     position: absolute;
-    inset: -6px; /* vùng chạm 44pt */
+    inset: -6px; /* 44pt touch target */
 }
 
 .saved-remove .btn-label:empty {
@@ -2071,7 +2094,7 @@ body.device-mobile .manual-url-link {
     font-size: 14px;
 }
 
-/* Nhập link (tab ẩn trên iPhone, mở từ Tủ phim) */
+/* Enter link (hidden tab on iPhone, opened from the Library) */
 .input-card {
     border: 0;
     border-radius: 20px;
@@ -2093,7 +2116,7 @@ textarea {
     color: var(--text);
 }
 
-/* ---------- Tab bar iPhone: thanh kính sát đáy, nút nằm trên thanh Home ---------- */
+/* ---------- iPhone tab bar: glass bar at the bottom, buttons sit above the Home indicator ---------- */
 .float-tabbar {
     display: none;
 }
@@ -2144,7 +2167,7 @@ body.device-mobile.tv-player-active .float-tabbar {
     color: var(--text);
 }
 
-/* ---------- Trình phát ---------- */
+/* ---------- Player ---------- */
 .player-wrapper {
     background: #000;
     border: 0;
@@ -2219,10 +2242,41 @@ body.player-active #episodesDrawerEl {
 }
 
 .episodes-drawer {
+    --drawer-toggle-h: 48px;
     border: 0;
     border-radius: 0;
     background: none;
     box-shadow: none;
+}
+
+/* Collapsed = exactly the toggle (a fixed 44px clipped the bottom of the 48px toggle) */
+.episodes-drawer.collapsed {
+    max-height: var(--drawer-toggle-h);
+}
+
+/* Progressive enhancement: animate to the real content height, so a 3-episode list does not
+   "wait" while max-height runs up to 480px. Unsupported browsers keep the max-height transition. */
+@supports (block-size: calc-size(auto, size)) {
+    .episodes-drawer {
+        transition: block-size 0.35s ease;   /* calc-size() opts this property into keyword interpolation */
+    }
+    .episodes-drawer.expanded,
+    .episodes-drawer.collapsed {
+        max-height: none;   /* the cap moves into block-size so both directions animate */
+    }
+    .episodes-drawer.expanded {
+        block-size: calc-size(auto, min(size, 480px));   /* content height, at most 480px; the grid scrolls past that */
+    }
+    .episodes-drawer.collapsed {
+        block-size: var(--drawer-toggle-h);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .episodes-drawer,
+    .episodes-drawer-toggle .drawer-arrow {
+        transition: none;
+    }
 }
 
 .episodes-drawer-toggle {
@@ -2230,7 +2284,7 @@ body.player-active #episodesDrawerEl {
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    min-height: 48px;
+    min-height: var(--drawer-toggle-h);
     padding: 0 16px;
     border: 0;
     border-radius: 14px;
@@ -2264,7 +2318,7 @@ body.player-active #episodesDrawerEl {
     color: var(--text);
 }
 
-/* Tự qua tập: lớp đếm ngược nằm dưới video, ngoài vùng an toàn */
+/* Auto-next: countdown layer below the video, outside the safe area */
 .auto-next {
     position: absolute;
     left: 12px;
@@ -2293,7 +2347,7 @@ body.player-active #episodesDrawerEl {
     min-width: 96px;
 }
 
-/* Bỏ qua mở đầu: góc dưới phải, tầm ngón cái, trên thanh điều khiển video */
+/* Skip intro: bottom-right corner, within thumb reach, above the video controls */
 .skip-intro {
     position: absolute;
     right: calc(12px + var(--safe-right, 0px));
@@ -2317,7 +2371,7 @@ body.device-tv .auto-next-text {
     font-size: 20px;
 }
 
-/* ---------- Cast: bên nhận (TV, máy tính) ---------- */
+/* ---------- Cast: receiver side (TV, desktop) ---------- */
 .cast-label {
     position: fixed;
     top: calc(var(--safe-top) + 16px);
@@ -2427,7 +2481,7 @@ body.device-tv .cast-switch {
     text-align: center;
 }
 
-/* ---------- Cast: bên điều khiển (iPhone) ---------- */
+/* ---------- Cast: controller side (iPhone) ---------- */
 .cast-scrim {
     position: fixed;
     inset: 0;
@@ -2702,7 +2756,7 @@ body.device-tv .cast-switch {
     color: var(--danger);
 }
 
-/* ---------- Cài đặt: nhóm là khối --surface bo 20px, dòng cách nhau bằng đường kẻ --line ---------- */
+/* ---------- Settings: groups are --surface blocks with 20px radius, rows separated by --line dividers ---------- */
 .settings-page {
     width: 100%;
     max-width: 640px;
@@ -2716,7 +2770,7 @@ body.device-tv .cast-switch {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-left: -10px; /* mũi tên thẳng mép chữ bên dưới */
+    margin-left: -10px; /* arrow aligns with the text edge below */
 }
 
 .settings-head h2 {
@@ -2793,7 +2847,7 @@ body.device-tv .cast-switch {
     opacity: 0.5;
 }
 
-/* Công tắc: tắt nền xám, bật nền trắng núm đen. Vùng chạm nới ra 44px bằng ::before */
+/* Switch: off is gray, on is white with a black knob. Touch target expanded to 44px via ::before */
 .set-switch {
     position: relative;
     flex: none;
@@ -2834,7 +2888,7 @@ body.device-tv .cast-switch {
     transform: translateX(20px);
 }
 
-/* Bước số: (−) giá trị (+), không có ô nhập */
+/* Stepper: (−) value (+), no input field */
 .set-stepper {
     flex: none;
     display: flex;
@@ -2871,7 +2925,7 @@ body.device-tv .cast-switch {
     font-variant-numeric: tabular-nums;
 }
 
-/* Tên máy: chạm để sửa ngay trong dòng */
+/* Device name: tap to edit inline */
 .set-text {
     flex: 0 1 auto;
     min-width: 0;
@@ -2910,11 +2964,11 @@ body.device-tv .cast-switch {
     border-radius: 12px;
     background: var(--raised);
     color: var(--text);
-    font-size: 16px; /* dưới 16px iOS tự phóng to trang */
+    font-size: 16px; /* below 16px iOS auto-zooms the page */
     outline: none;
 }
 
-/* Dòng thao tác: cả dòng là một nút */
+/* Action row: the whole row is a button */
 .set-row-action {
     padding: 0;
 }
@@ -2940,7 +2994,7 @@ body.device-tv .cast-switch {
     color: var(--accent);
 }
 
-/* Dòng thao tác không có padding: lỗi và chữ phụ tự lùi vào thẳng mép chữ */
+/* Action row has no padding: errors and secondary text indent themselves to align with the text */
 .set-row-action .set-error,
 .set-row-action .set-note {
     padding: 0 16px 10px;
@@ -2959,7 +3013,7 @@ body.device-tv .cast-switch {
     opacity: 0.5;
 }
 
-/* Nút viên: Từ chối / Cho phép, thao tác với một máy */
+/* Pill buttons: Deny / Allow, actions on a single device */
 .set-pill {
     flex: none;
     min-height: var(--tap);
@@ -2985,7 +3039,7 @@ body.device-tv .cast-switch {
     color: var(--accent);
 }
 
-/* Ô mật khẩu admin ngay trong dòng */
+/* Inline admin password field */
 .set-form {
     flex: 1 1 100%;
     display: flex;
@@ -2999,7 +3053,7 @@ body.device-tv .cast-switch {
     flex: 1 1 auto;
 }
 
-/* Mã xin duyệt: to, dễ đọc từ xa */
+/* Approval code: large, readable from a distance */
 .set-code {
     font-size: 22px;
     font-weight: 700;
@@ -3012,7 +3066,7 @@ body.device-tv .cast-switch {
     font-variant-numeric: tabular-nums;
 }
 
-/* Thiết bị và yêu cầu chờ: tên trên, chữ phụ dưới */
+/* Devices and pending requests: name on top, secondary text below */
 .set-main {
     flex: 1 1 0;
     min-width: 0;
@@ -3063,7 +3117,7 @@ body.device-tv .cast-switch {
     padding: 0 16px 12px;
 }
 
-/* Khối nổi --raised trong dòng máy: Đổi tên, Cấp/Thu quyền admin, Xoá thiết bị */
+/* Raised --raised block in a device row: Rename, Grant/Revoke admin, Remove device */
 .set-subactions {
     display: flex;
     flex-direction: column;
@@ -3107,7 +3161,7 @@ body.device-tv .cast-switch {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    /* Chừa đúng 10 dòng (cộng 9 đường kẻ giữa các dòng) rồi cuộn bên trong */
+    /* Reserve exactly 10 rows (plus 9 dividers between them), then scroll internally */
     max-height: calc(10 * var(--row-h) + 9px);
     overflow-y: auto;
 }
@@ -3122,7 +3176,7 @@ body.device-tv .set-households {
     font-size: 13px;
 }
 
-/* Thanh dung lượng cache: nền --raised, phần đã dùng màu trắng */
+/* Cache usage bar: --raised background, used portion in white */
 .set-meter-text {
     flex: none;
     color: var(--muted);
@@ -3145,7 +3199,7 @@ body.device-tv .set-households {
     background: #fff;
 }
 
-/* Nguồn IPTV (nhóm HomeTV): dòng như dòng thiết bị; lỗi tải màu --danger, nguồn tắt thì mờ */
+/* IPTV sources (HomeTV group): rows like device rows; load errors in --danger, disabled sources dimmed */
 .set-source-error {
     color: var(--danger);
     font-size: 13px;
@@ -3156,12 +3210,12 @@ body.device-tv .set-households {
     opacity: 0.5;
 }
 
-/* URL dài trong khối Sửa không được nới khối thao tác ra ngoài màn hình (cắt bằng dấu …) */
+/* Long URLs in the Edit block must not push the action block off-screen (truncated with …) */
 .set-source-actions {
     min-width: 0;
 }
 
-/* Khối Sửa nằm trong khối thao tác --raised, giữa Sửa và Xoá */
+/* The Edit block sits inside the --raised action block, between Edit and Delete */
 .hometv-edit {
     border-top: 1px solid var(--surface);
 }
@@ -3184,7 +3238,7 @@ body.device-tv .set-households {
     border-top-right-radius: 0;
 }
 
-/* Form thêm nguồn: Tên, URL xếp dọc, nút Thêm ở cuối */
+/* Add-source form: Name and URL stacked, Add button at the end */
 .hometv-form {
     flex-direction: column;
     align-items: stretch;
@@ -3239,7 +3293,7 @@ body.device-tv .set-action {
     padding: 10px 24px;
 }
 
-/* Dòng rộng hết khối: vòng focus vẽ phía trong, không phóng to */
+/* Full-width rows: focus ring drawn inside, no scaling */
 body.device-tv .set-action:focus {
     outline-offset: -4px !important;
     transform: none;
@@ -3273,7 +3327,7 @@ body.device-tv .set-switch[aria-checked="true"]::after {
 }
 
 body.device-tv .set-stepper {
-    gap: 12px; /* vòng focus của (−)(+) không đè lên giá trị */
+    gap: 12px; /* the (−)(+) focus rings do not overlap the value */
 }
 
 body.device-tv .set-step {
@@ -3327,7 +3381,7 @@ body.device-tv .set-form {
     gap: 16px;
 }
 
-/* Ô nhập trong dòng: vòng focus không phóng to (đè lên nút bên cạnh) */
+/* Inline inputs: focus ring does not scale (would overlap the adjacent button) */
 body.device-tv .set-input:focus {
     transform: none;
 }
@@ -3359,7 +3413,7 @@ body.device-tv .set-subaction {
     font-size: 22px;
 }
 
-/* Dòng rộng hết khối: vòng focus vẽ phía trong, không phóng to */
+/* Full-width rows: focus ring drawn inside, no scaling */
 body.device-tv .set-subaction:focus {
     outline-offset: -4px !important;
     transform: none;
@@ -3378,7 +3432,7 @@ body.device-tv .hometv-field .set-error {
     padding: 8px 4px 0;
 }
 
-/* Dòng chỉ-đọc nhận focus để điều khiển từ xa tới được */
+/* Read-only rows are focusable so a remote can reach them */
 .set-row[tabindex="0"]:focus {
     outline: none;
 }
@@ -3388,7 +3442,7 @@ body.device-tv .set-row[tabindex="0"]:focus-visible {
     outline-offset: -4px;
 }
 
-/* ---------- HomeTV: lưới kênh, dùng lại kiểu lưới phim ---------- */
+/* ---------- HomeTV: channel grid, reusing the movie grid styles ---------- */
 .hometv-toggle {
     flex: none;
     display: inline-flex;
@@ -3402,35 +3456,25 @@ body.device-tv .set-row[tabindex="0"]:focus-visible {
     color: var(--muted);
 }
 
-.hometv-toggle[aria-pressed="true"] {
-    color: var(--accent);
+.brand .hometv-toggle {
+    margin-left: -6px;
 }
 
-/* Trong mode HomeTV chỉ các tab kênh (tv-*) được hiện; tab phim nằm ngoài */
+/* TV: the focus ring is drawn around the button, keep it clear of the name */
+body.device-tv .brand .hometv-toggle {
+    margin-left: 4px;
+}
+
+.hometv-toggle:hover,
+.hometv-toggle:focus-visible {
+    color: var(--text);
+}
+
+/* In HomeTV mode only the channel tabs (tv-*) are shown; movie tabs are hidden */
 body.mode-hometv #search-tab,
 body.mode-hometv #saved-tab,
 body.mode-hometv #player-tab {
     display: none !important;
-}
-
-/* Chấm trạng thái kênh: góc trên trái poster */
-.tv-dot {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--faint);
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55);
-}
-
-.tv-dot[data-status="alive"] {
-    background: #3ecf8e;
-}
-
-.tv-dot[data-status="dead"] {
-    background: var(--danger);
 }
 
 #tvRecentList .continue-poster {
@@ -3486,7 +3530,7 @@ body.device-mobile #tvGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* HomeTV: trang play kiểu theatre (khung lấy từ player_shell), danh sách phát nằm dưới video */
+/* HomeTV: theatre-style play page (frame from player_shell), playlist below the video */
 .tv-player {
     display: flex;
     flex-direction: column;
@@ -3523,13 +3567,7 @@ body.device-mobile #tvGrid {
     object-fit: contain;
 }
 
-.tv-dot.tv-dot-inline {
-    position: static;
-    flex: none;
-    margin-left: auto;
-}
-
-/* HomeTV (Cài đặt): trạng thái bộ kiểm stream và danh sách stream chết */
+/* HomeTV (Settings): stream checker status and dead stream list */
 .hometv-health-status {
     padding: 8px var(--edge);
 }

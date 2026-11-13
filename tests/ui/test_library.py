@@ -53,9 +53,9 @@ def test_playing_unsaved_movie_creates_history_but_not_saved(open_app):
 
 def test_library_splits_continue_and_saved(open_app):
     page = _open(open_app)
-    save(page, "phim-le-2")                                   # chỉ lưu
-    save(page, "phim-le-1"); progress(page, "phim-le-1", pos=50, dur=200)   # lưu và đã xem
-    progress(page, "phim-bo-1", pos=10, dur=200, meta=True)   # chỉ lịch sử
+    save(page, "phim-le-2")                                   # saved only
+    save(page, "phim-le-1"); progress(page, "phim-le-1", pos=50, dur=200)   # saved and watched
+    progress(page, "phim-bo-1", pos=10, dur=200, meta=True)   # history only
     tap(page, "#fabTabLibrary")
     page.wait_for_selector(".continue-card")
     assert slugs(page, ".continue-card") == ["phim-bo-1", "phim-le-1"]

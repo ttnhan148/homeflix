@@ -1,4 +1,4 @@
-"""Route admin cho nguồn IPTV; require_admin được truyền vào để tránh import vòng với app.py."""
+"""Admin routes for IPTV sources; require_admin is passed in to avoid a circular import with app.py."""
 import asyncio
 import re
 import time
@@ -18,7 +18,7 @@ def _not_found() -> JSONResponse:
 
 
 async def _body(request: Request):
-    """Trả dict JSON hoặc None nếu không phải object."""
+    """Return the JSON dict, or None if it is not an object."""
     try:
         data = await request.json()
     except ValueError:
@@ -27,9 +27,9 @@ async def _body(request: Request):
 
 
 async def _run(fn, *args):
-    """Chạy hàm DB ngoài event loop; DB chưa mở thì 503, lỗi nghiệp vụ đổi sang JSON."""
+    """Run a DB function off the event loop; 503 if the DB is not open, business errors become JSON."""
     try:
-        db.conn()  # RuntimeError nếu hometv.db chưa mở
+        db.conn()  # RuntimeError if hometv.db is not open
         return await asyncio.to_thread(fn, *args)
     except RuntimeError:
         return JSONResponse({"detail": "HomeTV chưa sẵn sàng"}, status_code=503)

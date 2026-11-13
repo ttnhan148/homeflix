@@ -65,7 +65,8 @@ def test_check_409_when_disabled(admin_client, app_module, monkeypatch):
 
 def test_check_404_unknown_or_unapproved(admin_client, app_module, monkeypatch):
     enabled(monkeypatch)
-    assert admin_client.post(f"{BASE}/sources/iptv-org-vn/check", json={}).status_code == 404   # chờ duyệt
+    hometv.db.conn().execute("UPDATE sources SET enabled=0 WHERE id='iptv-org-vn'")
+    assert admin_client.post(f"{BASE}/sources/iptv-org-vn/check", json={}).status_code == 404   # source disabled
     r = admin_client.post(f"{BASE}/sources/nope/check", json={})
     assert r.status_code == 404 and r.json()["detail"] == "Nguồn chưa duyệt hoặc đang tắt"
     assert admin_client.post(f"{BASE}/sources/BAD ID/check", json={}).status_code == 404

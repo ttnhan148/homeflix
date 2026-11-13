@@ -1,4 +1,4 @@
-// Logic thuần cho HomeTV: không đụng DOM, chạy được trong trình duyệt lẫn Node.
+// Pure logic for HomeTV: no DOM access, runs in both the browser and Node.
 (function (root) {
   const CATEGORY_ORDER = ['National TV', 'News', 'Sports', 'Kids', 'Movies', 'Music', 'Entertainment',
     'International', 'Local TV', 'General', 'Unknown'];
@@ -8,14 +8,14 @@
     General: 'Tổng hợp', Unknown: 'Khác',
   };
 
-  // Chữ thường, bỏ dấu tiếng Việt (đ thành d), gộp khoảng trắng
+  // Lowercase, strip Vietnamese diacritics (đ becomes d), collapse whitespace
   function fold(text) {
     return String(text == null ? '' : text).normalize('NFKC').toLowerCase()
       .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
       .replace(/\s+/g, ' ').trim();
   }
 
-  // Nhóm lạ gộp vào Unknown
+  // Unknown groups are merged into Unknown
   function groupOf(channel) {
     return CATEGORY_ORDER.includes(channel.category) ? channel.category : 'Unknown';
   }
@@ -34,9 +34,8 @@
     const q = fold(opts && opts.query);
     let list = channels;
     if (chip === 'favorites') list = list.filter((c) => c.favorite);
-    else if (chip === 'recent') list = list.filter((c) => c.recent_at != null).sort((a, b) => b.recent_at - a.recent_at);
+    else if (chip === 'recent') list = recentChannels(list, Infinity);
     else if (chip && chip !== 'all') list = list.filter((c) => groupOf(c) === chip);
-    if (opts && opts.alive) list = list.filter((c) => c.status === 'alive');
     if (opts && opts.group) list = list.filter((c) => groupOf(c) === opts.group);
     if (q) list = list.filter((c) => fold(c.name).includes(q));
     return list;
@@ -55,12 +54,14 @@
     return channels.filter((c) => c.favorite);
   }
 
-  const STATUS_LABELS = { alive: 'Đang sống', dead: 'Đã chết', unchecked: 'Chưa kiểm' };
-  function statusLabel(status) {
-    return STATUS_LABELS[status] || '';
+  // Big card row on HomeTV Home: favorites when there are any, otherwise the first max channels that have a logo
+  function heroChannels(channels, max) {
+    const favs = favoriteChannels(channels);
+    if (favs.length) return { title: 'Kênh yêu thích', items: favs.slice(0, max) };
+    return { title: 'Kênh nổi bật', items: channels.filter((c) => c.logo).slice(0, max) };
   }
 
-  // Kênh kế/trước trong danh sách, quay vòng; null nếu id không có trong danh sách
+  // Next/previous channel in the list, wrapping around; null if the id isn't in the list
   function stepChannel(list, currentId, dir) {
     const i = list.findIndex((c) => c.id === currentId);
     if (i < 0) return null;
@@ -72,8 +73,8 @@
     return t ? t.charAt(0).toLocaleUpperCase('vi') : '?';
   }
 
-  const api = { CATEGORY_ORDER, CATEGORY_LABELS, fold, buildChips, filterChannels, groupOptions, recentChannels,
-    favoriteChannels, statusLabel, stepChannel, initial };
+  const api = { CATEGORY_ORDER, CATEGORY_LABELS, fold, groupOf, buildChips, filterChannels, groupOptions, recentChannels,
+    favoriteChannels, heroChannels, stepChannel, initial };
   root.HFHomeTV = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -1,4 +1,4 @@
-"""Trang Cài đặt, nhóm HomeTV: quản lý nguồn IPTV (admin)."""
+"""Settings page, HomeTV group: managing IPTV sources (admin)."""
 import json
 import time
 
@@ -15,7 +15,7 @@ DANGER = "rgb(255, 107, 107)"
 
 
 def hometv_page(open_app, **kw):
-    """Admin mở Cài đặt; nhóm HomeTV tải danh sách nguồn sau khi trang dựng xong."""
+    """Admin opens Settings; the HomeTV group loads the source list after the page finishes rendering."""
     page = admin_page(open_app, **kw)
     page.wait_for_selector('[data-key="hometv.add"]')
     return page
@@ -39,7 +39,7 @@ def source_ids(page):
 
 
 def acts(page, sid):
-    """Các thao tác đang hiện của một nguồn: [data-act, chữ]."""
+    """Actions currently shown for a source: [data-act, text]."""
     return page.evaluate("(s) => [...document.querySelectorAll(`.set-source[data-id=\"${s}\"] [data-act]`)]"
                          ".filter(b => b.getClientRects().length).map(b => [b.dataset.act, b.textContent])", sid)
 
@@ -58,7 +58,7 @@ def server_source(page, sid):
 
 
 def finish_fetch(sid, channels):
-    """Vòng lặp nền tải xong một nguồn (TestClient không chạy lifespan nên ghi thẳng vào DB)."""
+    """The background loop finishes fetching a source (TestClient doesn't run lifespan, so write straight to the DB)."""
     now = time.time()
     with hometv.db.tx() as c:
         c.execute("UPDATE sources SET last_fetch_at=?, last_success_at=?, channel_count=? WHERE id=?",
@@ -80,15 +80,15 @@ def patch_bodies(page):
 def test_hometv_lists_default_sources(pw, open_app):
     page = hometv_page(open_app)
     assert page.locator(f"{GROUP} .set-source").count() == 4
-    assert source_ids(page) == DEFAULT_IDS   # theo ưu tiên
-    assert "Chờ duyệt" in page.locator(src("iptv-org-vn")).inner_text()
+    assert source_ids(page) == DEFAULT_IDS   # by priority
+    assert "duyệt" not in page.locator(GROUP).inner_text()   # default sources need no approval
     assert page.locator(f"{src('iptv-org-vn')} .set-source-name").inner_text() == "IPTV Org Vietnam"
-    assert meta(page, "iptv-org-vn") == "Chờ duyệt · 0 kênh"   # chưa tải lần nào: không ghi giờ
+    assert meta(page, "iptv-org-vn") == "0 kênh"   # never fetched: no time shown
     keys = page.evaluate(f"[...document.querySelectorAll('{GROUP} .set-row')].map(r => r.dataset.key || r.dataset.id)")
     assert keys == DEFAULT_IDS + ["hometv.add"]
     assert page.locator('[data-key="hometv.add"]').inner_text().strip() == "+ Thêm nguồn"
     assert page.locator('[data-key="hometv.iptv"]').count() == 0
-    assert page.locator(f"{GROUP} .set-source-actions").count() == 0   # thao tác chỉ mở khi chạm
+    assert page.locator(f"{GROUP} .set-source-actions").count() == 0   # actions only open on tap
     assert page.console_errors == []
 
 
@@ -99,7 +99,7 @@ def test_add_source(pw, open_app, public_dns):
     assert page.evaluate("document.activeElement.id") == "hometvName"
     add = page.locator('[data-key="hometv.add"] button[type="submit"]')
     assert add.inner_text() == "Thêm"
-    # 422: lỗi hiện dưới đúng ô
+    # 422: error shown under the right field
     page.fill("#hometvName", "Nguồn thử")
     page.fill("#hometvUrl", "ftp://iptv.example/list.m3u")
     tap(page, '[data-key="hometv.add"] button[type="submit"]')
@@ -110,54 +110,59 @@ def test_add_source(pw, open_app, public_dns):
     assert page.locator('[data-key="hometv.add"] .hometv-field:has(#hometvName) .set-error').count() == 0
     assert page.eval_on_selector(url_error, "e => getComputedStyle(e).color") == DANGER
     assert page.locator(f"{GROUP} .set-source").count() == 4
-    # sửa URL rồi thêm lại
+    # fix the URL and add again
     page.fill("#hometvUrl", "https://iptv.example/list.m3u")
     tap(page, '[data-key="hometv.add"] button[type="submit"]')
     wait_request(page, f"POST {PATH}", count=2)
     page.wait_for_selector(src("nguon-thu"))
-    assert meta(page, "nguon-thu") == "Chờ duyệt · 0 kênh"
+    assert meta(page, "nguon-thu") == "0 kênh"   # new sources are approved right away
+    assert server_source(page, "nguon-thu")["rights_status"] == "approved"
     assert page.locator(f"{src('nguon-thu')} .set-source-name").inner_text() == "Nguồn thử"
-    assert page.locator("#hometvName").count() == 0   # form thu lại thành nút
+    assert page.locator("#hometvName").count() == 0   # form collapses back into a button
     assert page.locator('[data-key="hometv.add"]').inner_text().strip() == "+ Thêm nguồn"
     assert "nguon-thu" in [s["id"] for s in server_json(page, PATH)]
     assert page.console_errors == []
 
 
-def test_approve_and_disable(pw, open_app):
+def test_actions_and_disable(pw, open_app):
     page = hometv_page(open_app)
     sid = "iptv-org-vn"
     open_source(page, sid)
-    assert acts(page, sid) == [["approve", "Duyệt"], ["reject", "Từ chối"], ["disable", "Tắt"],
-                               ["refresh", "Làm mới ngay"], ["edit", "Sửa"], ["delete", "Xoá"]]
-    # màu đỏ chỉ cho Xoá
+    assert acts(page, sid) == [["disable", "Tắt"], ["refresh", "Làm mới ngay"], ["dead", "Xem stream chết"],
+                               ["edit", "Sửa"], ["delete", "Xoá"]]   # no Approve/Reject
+    # red only for Delete
     reds = page.evaluate("[...document.querySelectorAll('.set-source .set-danger')].map(b => b.dataset.act)")
     assert reds == ["delete"]
     assert page.eval_on_selector(f'{src(sid)} [data-act="delete"]', "b => getComputedStyle(b).color") == ACCENT
-    do(page, sid, "approve")
-    wait_request(page, f"PATCH {PATH}/{sid}")
-    wait_meta(page, sid, "Đã duyệt")
-    assert server_source(page, sid)["rights_status"] == "approved"
-    assert acts(page, sid)[0] == ["unapprove", "Bỏ duyệt"]
-    do(page, sid, "unapprove")
-    wait_request(page, f"PATCH {PATH}/{sid}", count=2)
-    wait_meta(page, sid, "Chờ duyệt")
-    assert server_source(page, sid)["rights_status"] == "pending_review"
-    assert acts(page, sid)[0] == ["approve", "Duyệt"]
-    # Tắt: dòng mờ, ghi "Đã tắt"
+    # Disable: row dimmed, shows "Đã tắt"
     do(page, sid, "disable")
     page.wait_for_function("(s) => document.querySelector(`.set-source[data-id=\"${s}\"]`).textContent.includes('Đã tắt')", arg=sid)
     assert float(page.eval_on_selector(f"{src(sid)} .set-main", "e => getComputedStyle(e).opacity")) < 1
     assert server_source(page, sid)["enabled"] is False
     assert ["enable", "Bật"] in acts(page, sid)
-    assert "refresh" not in [a for a, _ in acts(page, sid)]   # nguồn tắt không được tải
-    # thao tác chỉ đổi dòng, không làm mờ các nút
+    assert "refresh" not in [a for a, _ in acts(page, sid)]   # disabled sources are not fetched
+    # actions only change the row, they don't dim the buttons
     assert page.eval_on_selector(f'{src(sid)} [data-act="enable"]', "b => getComputedStyle(b).opacity") == "1"
-    # Bật lại
+    # Re-enable
     do(page, sid, "enable")
     page.wait_for_function("(s) => !document.querySelector(`.set-source[data-id=\"${s}\"]`).textContent.includes('Đã tắt')", arg=sid)
     assert server_source(page, sid)["enabled"] is True
     assert page.eval_on_selector(f"{src(sid)} .set-main", "e => getComputedStyle(e).opacity") == "1"
     assert page.console_errors == []
+
+
+def test_leftover_pending_source_can_be_approved(pw, open_app):
+    sid = "iptv-org-vn"
+    set_source(sid, rights_status="pending_review")
+    page = hometv_page(open_app)
+    assert meta(page, sid) == "Chờ duyệt · 0 kênh"
+    open_source(page, sid)
+    assert acts(page, sid)[0] == ["approve", "Duyệt"]
+    do(page, sid, "approve")
+    wait_request(page, f"PATCH {PATH}/{sid}")
+    wait_meta(page, sid, "Chờ duyệt", present=False)
+    assert server_source(page, sid)["rights_status"] == "approved"
+    assert "approve" not in [a for a, _ in acts(page, sid)]
 
 
 def test_refresh_polls_until_done(pw, open_app):
@@ -167,29 +172,29 @@ def test_refresh_polls_until_done(pw, open_app):
     n = page.requests.count(entry)
     page.clock.fast_forward(6100)
     page.wait_for_timeout(300)
-    assert page.requests.count(entry) == n   # không có nguồn đang tải: không tự tải lại
+    assert page.requests.count(entry) == n   # no source fetching: no auto-reload
     open_source(page, sid)
-    # bấm Làm mới ngay: server chỉ xếp lượt (vòng lặp nền nhận trong ≤ 60 giây), chưa có job nào chạy
+    # tap Refresh now: the server only queues a run (the background loop picks it up within ≤ 60 seconds), no job running yet
     do(page, sid, "refresh")
     wait_request(page, f"POST {PATH}/{sid}/refresh")
     wait_meta(page, sid, "Đang tải…")
-    assert meta(page, sid) == "Chờ duyệt · 0 kênh · Đang tải…"
-    wait_request(page, entry, count=n + 1)   # tải lại sau khi bấm
+    assert meta(page, sid) == "0 kênh · Đang tải…"
+    wait_request(page, entry, count=n + 1)   # reloads after the tap
     n = page.requests.count(entry)
     page.clock.fast_forward(3100)
-    wait_request(page, entry, count=n + 1)   # chưa tải xong: 3 giây tải lại một lần
-    assert meta(page, sid) == "Chờ duyệt · 0 kênh · Đang tải…"
+    wait_request(page, entry, count=n + 1)   # not done fetching: reload once every 3 seconds
+    assert meta(page, sid) == "0 kênh · Đang tải…"
     finish_fetch(sid, channels=12)
     page.clock.fast_forward(3100)
     wait_meta(page, sid, "Đang tải…", present=False)
-    assert meta(page, sid) == "Chờ duyệt · 12 kênh · vừa xong"
-    # thao tác vẫn mở, focus còn trên nút Làm mới ngay
+    assert meta(page, sid) == "12 kênh · vừa xong"
+    # actions stay open, focus still on the Refresh now button
     assert page.evaluate("document.activeElement.dataset.act") == "refresh"
     n = page.requests.count(entry)
     page.clock.fast_forward(10000)
     page.wait_for_timeout(300)
-    assert page.requests.count(entry) == n   # hết nguồn đang tải: thôi tải lại
-    # vòng lặp nền không nhận lượt: sau 90 giây thôi chờ, về dòng phụ thường và thôi tải lại
+    assert page.requests.count(entry) == n   # no sources fetching anymore: stop reloading
+    # background loop doesn't pick up the run: after 90 seconds stop waiting, go back to the normal subtitle and stop reloading
     do(page, sid, "refresh")
     wait_meta(page, sid, "Đang tải…")
     page.clock.fast_forward(91000)
@@ -244,7 +249,7 @@ def test_edit_priority_and_interval(pw, open_app):
     do(page, sid, "edit")
     page.wait_for_selector(f'{src(sid)} [data-key="hometv.priority"]')
     assert page.get_attribute(f'{src(sid)} [data-act="edit"]', "aria-expanded") == "true"
-    assert page.evaluate("window.innerWidth") == 430   # URL dài trong khối Sửa không nới trang (điện thoại thu nhỏ)
+    assert page.evaluate("window.innerWidth") == 430   # a long URL in the Edit block doesn't widen the page (narrow phone)
     assert page.locator(f'{src(sid)} [data-key="hometv.priority"] .set-value').inner_text() == "20"
     assert page.locator(f'{src(sid)} [data-key="hometv.refresh_hours"] .set-value').inner_text() == "6 giờ"
     assert page.locator(f'{src(sid)} [data-key="hometv.name"] .set-text-value').inner_text() == "IPTV Org Vietnam"
@@ -255,7 +260,7 @@ def test_edit_priority_and_interval(pw, open_app):
     assert sorted(bodies, key=json.dumps) == [{"priority": 21}, {"refresh_hours": 7}]
     s = server_source(page, sid)
     assert (s["priority"], s["refresh_hours"]) == (21, 7)
-    # tên sửa ngay trong dòng
+    # name edited inline in the row
     tap(page, f'{src(sid)} [data-key="hometv.name"] .set-text')
     page.fill(f'{src(sid)} [data-key="hometv.name"] input', "  IPTV Org VN  ")
     page.press(f'{src(sid)} [data-key="hometv.name"] input', "Enter")
@@ -264,7 +269,7 @@ def test_edit_priority_and_interval(pw, open_app):
                            ".textContent === 'IPTV Org VN'", arg=sid)
     assert bodies[-1] == {"name": "IPTV Org VN"}
     assert page.locator(f'{src(sid)} [data-key="hometv.name"] .set-text-value').inner_text() == "IPTV Org VN"
-    # URL sai: 422 hiện dưới dòng URL, giữ URL cũ
+    # bad URL: 422 shown under the URL row, old URL kept
     tap(page, f'{src(sid)} [data-key="hometv.url"] .set-text')
     page.fill(f'{src(sid)} [data-key="hometv.url"] input', "ftp://x.example/a.m3u")
     page.press(f'{src(sid)} [data-key="hometv.url"] input', "Enter")
@@ -273,13 +278,13 @@ def test_edit_priority_and_interval(pw, open_app):
     assert page.locator(f'{src(sid)} [data-key="hometv.url"] .set-text-value').inner_text() == \
         "https://iptv-org.github.io/iptv/countries/vn.m3u"
     assert server_source(page, sid)["url"] == "https://iptv-org.github.io/iptv/countries/vn.m3u"
-    # Sửa lần nữa: thu khối sửa lại
+    # Edit again: collapses the edit block
     do(page, sid, "edit")
     assert page.locator(f'{src(sid)} [data-key="hometv.priority"]').count() == 0
     assert page.console_errors == []
 
 
-# --- Sức khỏe stream (gói 4) ---
+# --- Stream health (package 4) ---
 import pytest  # noqa: E402
 
 from hometv import geo, health_store  # noqa: E402
@@ -319,7 +324,7 @@ def test_status_row(pw, open_app, monkeypatch, enabled, country, text):
     page = hometv_page(open_app)
     page.wait_for_selector(STATUS)
     assert page.locator(STATUS).inner_text() == text
-    assert page.locator(f"{GROUP} .set-row").count() == 5   # hàng trạng thái không phải .set-row (không lẫn danh sách nguồn)
+    assert page.locator(f"{GROUP} .set-row").count() == 5   # the status row is not a .set-row (doesn't mix into the source list)
 
 
 def test_meta_shows_alive_over_checked(pw, open_app, monkeypatch):
@@ -328,7 +333,7 @@ def test_meta_shows_alive_over_checked(pw, open_app, monkeypatch):
     seed_health(alive=2)
     page = hometv_page(open_app)
     wait_meta(page, "doubo-vn", "2/3 sống")
-    assert meta(page, "doubo-vn") == "Đã duyệt · 0 kênh · 2/3 sống"
+    assert meta(page, "doubo-vn") == "0 kênh · 2/3 sống"
     assert "sống" not in meta(page, "iptv-org-vn")
 
 
@@ -350,7 +355,8 @@ def test_meta_shows_checking_and_polls_until_done(pw, open_app, monkeypatch):
 def test_check_now_visibility(pw, open_app, monkeypatch):
     geo_is(monkeypatch, True)
     approve()
-    set_source("dangdvd-iptv", rights_status="approved", enabled=0)
+    set_source("iptv-org-vn", rights_status="pending_review")   # leftover non-approved source
+    set_source("dangdvd-iptv", enabled=0)
     page = hometv_page(open_app)
     for sid, shown in (("doubo-vn", True), ("iptv-org-vn", False), ("dangdvd-iptv", False)):
         open_source(page, sid)
@@ -369,14 +375,14 @@ def test_check_now_posts_and_shows_checking(pw, open_app, monkeypatch):
     do(page, "doubo-vn", "check")
     wait_request(page, f"POST {PATH}/doubo-vn/check")
     wait_meta(page, "doubo-vn", "Đang kiểm tra…")
-    health_store.checking.add("doubo-vn")   # vòng nền nhận lượt
+    health_store.checking.add("doubo-vn")   # background loop picks up the run
     try:
         page.clock.fast_forward(3100)
         page.wait_for_timeout(200)
         assert "Đang kiểm tra…" in meta(page, "doubo-vn")
     finally:
         health_store.checking.discard("doubo-vn")
-    # đã thấy bật rồi tắt thì hết ngay; lượt nhanh hơn chu kỳ tải lại thì hết sau QUEUED_MAX_MS
+    # once seen on then off, it clears immediately; if the run is faster than the reload cycle, it clears after QUEUED_MAX_MS
     page.clock.fast_forward(3100)
     page.clock.fast_forward(91000)
     wait_meta(page, "doubo-vn", "Đang kiểm tra…", present=False)

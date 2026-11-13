@@ -1,4 +1,4 @@
-"""Route admin cho sức khỏe stream; require_admin được truyền vào để tránh import vòng với app.py."""
+"""Admin routes for stream health; require_admin is passed in to avoid a circular import with app.py."""
 import time
 from typing import Callable
 

@@ -22,7 +22,7 @@ def count(what):
 
 @pytest.fixture
 def fake_check(monkeypatch):
-    """Thay check_stream: ghi lại các URL đã kiểm và trả OK (hoặc kết quả/exception do test đặt)."""
+    """Replaces check_stream: records the checked URLs and returns OK (or a result/exception set by the test)."""
     calls = SimpleNamespace(urls=[], result=OK, hook=None, active=0, peak=0, delay=0.0)
 
     async def fake(client, url, headers, *, probe=None):
@@ -157,7 +157,7 @@ def test_loop_runs_when_enabled(monkeypatch):
 def test_loop_stops_cleanly_when_ffprobe_missing(monkeypatch):
     ran = patch_loop(monkeypatch, enabled=True, due=FfprobeMissing())
     run(asyncio.wait_for(health_scheduler.hometv_health_checker(tick=0.01), 2))
-    assert len(ran) == 1   # trả về, không ném lỗi
+    assert len(ran) == 1   # returns, does not raise
 
 
 def test_loop_cancellation_clears_checking(db, fake_check, monkeypatch):
@@ -184,11 +184,11 @@ def test_loop_cancellation_clears_checking(db, fake_check, monkeypatch):
 
 def test_approving_source_makes_it_due_now(db, public_dns):
     src = sources.create("A", "https://a.example/a.m3u", 1.0)
-    db.execute("UPDATE sources SET next_check_at=9999 WHERE id=?", (src["id"],))
+    db.execute("UPDATE sources SET next_check_at=9999, rights_status='pending_review' WHERE id=?", (src["id"],))
     sources.update(src["id"], {"rights_status": "approved"}, 50.0)
     assert db.execute("SELECT next_check_at FROM sources WHERE id=?", (src["id"],)).fetchone()[0] == 50.0
     db.execute("UPDATE sources SET next_check_at=9999 WHERE id=?", (src["id"],))
-    sources.update(src["id"], {"rights_status": "approved", "priority": 5}, 60.0)   # đã duyệt sẵn: không đổi lịch
+    sources.update(src["id"], {"rights_status": "approved", "priority": 5}, 60.0)   # already approved: schedule unchanged
     assert db.execute("SELECT next_check_at FROM sources WHERE id=?", (src["id"],)).fetchone()[0] == 9999
 
 

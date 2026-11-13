@@ -327,9 +327,10 @@ Tên file được làm sạch bằng `clean_filename()` (bỏ dấu tiếng Vi�
 
 ## 🔑 Thiết lập quyền admin (chủ nhà)
 
-- Đặt `HOMEFLIX_ADMIN_PASSWORD` trong `deploy/.env` (file này bị git bỏ qua; chạy `chmod 600 deploy/.env`). Dùng mật khẩu ASCII ngẫu nhiên, dài từ 16 ký tự trở lên.
-- Không đặt (hoặc để rỗng) thì mọi tính năng admin tắt, Cài đặt chỉ hiện nhóm "Thiết bị này"; app ghi cảnh báo lúc khởi động.
-- Sau khi tạo/đổi `deploy/.env`, chạy `deploy/deploy.sh --force` (nếu không, script báo "up to date" khi `main` chưa đổi).
+- **Lần chạy đầu** (DB mới, chưa đặt `HOMEFLIX_ADMIN_PASSWORD`): app tự tạo mật khẩu admin ngẫu nhiên và in **một lần** ra log, ví dụ `docker logs homeflix 2>&1 | grep -A1 "Mật khẩu admin"` hoặc `sudo journalctl -u homeflix | grep -A1 "Mật khẩu admin"`. Chỉ hash scrypt được lưu trong DB.
+- Đăng nhập trong **Cài đặt › Quản trị**, rồi đổi mật khẩu ở mục **"Đổi mật khẩu admin"** (cần mật khẩu hiện tại; nhập sai tính vào giới hạn khoá đăng nhập).
+- **Quên mật khẩu:** `docker exec homeflix python app.py reset-admin-password` (cài trực tiếp: `python app.py reset-admin-password` trong thư mục app) in ra mật khẩu mới.
+- Muốn quản lý bằng biến môi trường: đặt `HOMEFLIX_ADMIN_PASSWORD` trong `deploy/.env` (file này bị git bỏ qua; chạy `chmod 600 deploy/.env`). Biến này **thắng** mật khẩu trong DB, và Cài đặt sẽ ẩn mục đổi mật khẩu. Sau khi tạo/đổi `deploy/.env`, chạy `deploy/deploy.sh --force` (nếu không, script báo "up to date" khi `main` chưa đổi).
 - `TRUSTED_PROXIES` phải là IP của nginx mà app thấy (peer), để app đọc đúng IP thật của client. Nếu sai, mọi client đều giống nginx và giới hạn khoá đăng nhập sai thành khoá toàn cục.
 - TV không gõ mật khẩu được: chọn "Xin duyệt từ máy admin" rồi duyệt mã 6 số trên điện thoại đã đăng nhập admin.
 

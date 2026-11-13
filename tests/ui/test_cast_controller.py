@@ -10,14 +10,14 @@ EVIL = '<img src=x onerror="window.__pwn=1">'
 
 
 class Tv:
-    """TV cùng nhà với trang iPhone của Playwright (cầu nối dùng client ('testclient', 50000))."""
+    """A TV in the same home as the Playwright iPhone page (the bridge uses client ('testclient', 50000))."""
 
     def __init__(self, m, make_client, name=None):
         self.m = m
         self.client = make_client(ip="testclient")
         self.client.get("/api/device")
         self.real_id = self.client.cookies["hf_device"]
-        self.id = m._cast_public_id(self.real_id)        # id công khai: cái iPhone nhìn thấy và dùng trong route
+        self.id = m._cast_public_id(self.real_id)        # public id: what the iPhone sees and uses in routes
         self.client.post("/api/devices/heartbeat", json={"kind": "tv"})
         if name:
             self.client.patch("/api/device", json={"name": name})
@@ -45,7 +45,7 @@ def open_phone(open_app, init=None, **kw):
 
 
 def approve(page, tv):
-    """TV cho phép iPhone này (qua server) và dọn sự kiện."""
+    """The TV allows this iPhone (via the server) and clears events."""
     api(page, "POST", f"/api/cast/{tv.id}/connect")
     tv.answer(page.phone_id, True)
     page.evaluate("HFCast.linked = null")
@@ -146,7 +146,7 @@ def test_play_buttons_say_phat_len_tv_when_linked_and_send_play_command(app_modu
         page.wait_for_timeout(50)
     assert events == [("command", {"type": "play", "slug": "phim-chieu-rap-1", "episode_url": None, "position": None})]
     assert not page.evaluate("document.body.classList.contains('player-active')")
-    # trang chi tiết và chạm một tập
+    # detail page, then tap an episode
     page.evaluate("showMovieDetailBySlug('phim-le-1')")
     page.wait_for_selector("#detailEpisodeList .ep-item")
     assert "Phát lên TV" in page.locator(".detail-action-play").inner_text()
@@ -170,7 +170,7 @@ def test_play_buttons_say_phat_len_tv_when_linked_and_send_play_command(app_modu
 def test_unreachable_tv_reverts_play_to_local_with_message(app_module, make_client, open_app):
     page, tv = link_phone(app_module, make_client, open_app)
     tap(page, "#castSheetClose")
-    app_module.cast_hub.unsubscribe(tv.sub)                    # TV mất kết nối SSE
+    app_module.cast_hub.unsubscribe(tv.sub)                    # TV loses its SSE connection
     tap(page, ".hero-btn-play")
     page.wait_for_selector("#castToast:not([hidden])")
     assert "TV không phản hồi" in page.locator("#castToast").inner_text()
@@ -178,7 +178,7 @@ def test_unreachable_tv_reverts_play_to_local_with_message(app_module, make_clie
     assert page.locator(".hero-btn-play").first.inner_text() == "Phát"
     assert page.locator("#castDot").is_hidden()
     assert not page.evaluate("document.body.classList.contains('player-active')")
-    tap(page, ".hero-btn-play")                                # chạm lại thì phát trên iPhone
+    tap(page, ".hero-btn-play")                                # tapping again plays on the iPhone
     assert page.evaluate("document.body.classList.contains('player-active')")
 
 

@@ -108,14 +108,16 @@ def _health(c, sid, ok, streak=0):
     c.execute("INSERT INTO stream_health(stream_id, ok, fail_streak, score) VALUES (?,?,?,50)", (sid, int(ok), streak))
 
 
-def test_list_channels_status_alive_dead_unchecked(db):
+def test_list_channels_with_health_only_alive(db):
     seed_source(db, "ok")
-    for i in (1, 2, 3):
+    for i in (1, 2, 3, 4):
         seed_channel(db, i); seed_stream(db, i, i, "ok", "https://s/%d" % i)
+    seed_stream(db, 5, 4, "ok", "https://s/5")   # channel 4: one dead stream, one alive
     _health(db, 1, True)
-    _health(db, 2, False, streak=1)
-    got = catalog.list_channels(1.0, True)
-    assert [(c["id"], c["status"]) for c in got] == [(1, "alive"), (2, "dead"), (3, "unchecked")]
+    _health(db, 2, False, streak=1)              # dead on the last check: hidden right away
+    _health(db, 4, False, streak=5); _health(db, 5, True)
+    got = catalog.list_channels(1.0, True)       # 3 never checked: hidden too
+    assert [(c["id"], c["status"]) for c in got] == [(1, "alive"), (4, "alive")]
 
 
 def test_list_channels_status_none_without_health(db):

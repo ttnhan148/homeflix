@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Kiểm tra quyền root
+# Check for root
 if [ "$EUID" -ne 0 ]; then 
   echo "Vui lòng chạy script với quyền root (sudo ./install.sh)"
   exit 1
@@ -10,12 +10,12 @@ echo "======================================="
 echo "      CÀI ĐẶT HOMEFLIX PROXY PLAYER    "
 echo "======================================="
 
-# Đường dẫn cài đặt chuẩn
+# Standard install path
 INSTALL_DIR="/var/www/homeflix"
 SERVICE_NAME="homeflix"
 PORT="6969"  #
 
-# 1. Phát hiện hệ điều hành và trình quản lý gói
+# 1. Detect the OS and package manager
 echo "[1/6] Đang kiểm tra hệ điều hành và cài đặt dependencies..."
 
 if command -v apt-get >/dev/null; then
@@ -36,10 +36,10 @@ else
     exit 1
 fi
 
-# 2. Tạo thư mục và phân quyền
+# 2. Create directories and set permissions
 echo "[2/6] Khởi tạo thư mục $INSTALL_DIR và cache..."
 
-# Dừng và gỡ bỏ service m3u8player cũ nếu tồn tại
+# Stop and remove the old m3u8player service if it exists
 OLD_SERVICE_NAME="m3u8player"
 OLD_INSTALL_DIR="/var/www/m3u8player"
 if systemctl is-active --quiet "$OLD_SERVICE_NAME"; then
@@ -59,25 +59,25 @@ mkdir -p "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/templates"
 mkdir -p "$INSTALL_DIR/cache"
 
-# Sao chép mã nguồn
+# Copy source code
 echo "[3/6] Đang copy mã nguồn..."
 cp -r app.py requirements.txt "$INSTALL_DIR/" 2>/dev/null || cp app.py requirements.txt "$INSTALL_DIR/"
 cp -r templates/index.html "$INSTALL_DIR/templates/" 2>/dev/null || cp templates/index.html "$INSTALL_DIR/templates/"
 cp -r static "$INSTALL_DIR/" 2>/dev/null || cp -r static "$INSTALL_DIR/"
 
-# Set quyền cho thư mục cache để app có thể ghi
+# Set permissions on the cache directory so the app can write
 chown -R root:root "$INSTALL_DIR"
 chmod -R 755 "$INSTALL_DIR"
 chmod -R 777 "$INSTALL_DIR/cache"
 
-# 3. Môi trường ảo Python
+# 3. Python virtual environment
 echo "[4/6] Đang thiết lập Virtual Environment..."
 cd "$INSTALL_DIR" || exit
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
 
-# 4. Cấu hình Systemd
+# 4. Configure Systemd
 echo "[5/6] Cấu hình Systemd Service..."
 cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service
 [Unit]
@@ -101,7 +101,7 @@ systemctl daemon-reload
 systemctl enable ${SERVICE_NAME}
 systemctl restart ${SERVICE_NAME}
 
-# 5. Tường lửa
+# 5. Firewall
 echo "[6/6] Mở cổng ${PORT}..."
 if command -v ufw > /dev/null; then
     ufw allow ${PORT}/tcp
@@ -110,7 +110,7 @@ elif command -v firewall-cmd > /dev/null; then
     firewall-cmd --reload
 fi
 
-# Hoàn tất
+# Done
 IP_ADDR=$(curl -s ifconfig.me || echo "IP_CUA_SERVER")
 
 echo "======================================="

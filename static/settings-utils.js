@@ -1,17 +1,17 @@
-// Logic thuần cho trang cài đặt: không đụng DOM, chạy được trong trình duyệt lẫn Node.
+// Pure logic for the settings page: no DOM access, runs in both the browser and Node.
 (function (root) {
-  // "10 GB", "6 giờ"; không có đơn vị thì chỉ số
+  // "10 GB", "6 giờ"; without a unit, just the number
   function formatValue(item) {
     return item.unit ? item.value + ' ' + item.unit : String(item.value);
   }
 
-  // Cộng/trừ một bước rồi kẹp trong [min, max]
+  // Add/subtract one step then clamp to [min, max]
   function stepValue(item, value, dir) {
     const next = value + item.step * (dir < 0 ? -1 : 1);
     return Math.min(item.max, Math.max(item.min, next));
   }
 
-  // Gom máy theo nhà, giữ thứ tự xuất hiện; nhà của máy này đứng đầu
+  // Group devices by home, preserving order of appearance; this device's home comes first
   function groupDevices(devices) {
     const groups = [];
     const byHousehold = new Map();
@@ -29,7 +29,7 @@
     return groups;
   }
 
-  // Thời điểm thấy gần nhất (giây epoch) thành chữ ngắn
+  // Last-seen time (epoch seconds) as short text
   function lastSeenText(lastSeen, now) {
     const s = Math.max(0, Math.floor(now - lastSeen));
     if (s < 60) return 'vừa xong';
@@ -38,13 +38,13 @@
     return Math.floor(s / 86400) + ' ngày trước';
   }
 
-  // Đếm ngược "m:ss", không âm
+  // Countdown "m:ss", never negative
   function countdownText(expiresAt, now) {
     const s = Math.max(0, Math.floor(expiresAt - now));
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  // Di chuyển trong lưới bằng phím mũi tên; cột kẹp theo độ dài dòng
+  // Arrow-key navigation in a grid; column clamped to the row length
   function gridMove(lengths, row, col, key) {
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
     if (key === 'ArrowDown' || key === 'ArrowUp') {

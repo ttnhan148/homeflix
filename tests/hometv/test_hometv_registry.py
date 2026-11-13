@@ -91,7 +91,7 @@ def test_missing_stream_deactivated_not_deleted(db):
     s = registry.ingest("a", PL(E("VTV1", "https://a/1")), 2.0)
     assert s.deactivated == 1 and count("streams") == 2 and count("streams WHERE active=1") == 1
     assert (s.channels, s.streams, s.new_streams) == (1, 1, 0)
-    # liệt kê lại thì active=1, id giữ nguyên
+    # listed again: active=1, id unchanged
     ids = [r[0] for r in hdb.conn().execute("SELECT id FROM streams ORDER BY id")]
     registry.ingest("a", PL(E("VTV1", "https://a/1"), E("VTV2", "https://a/2")), 3.0)
     assert count("streams WHERE active=1") == 2
@@ -184,7 +184,7 @@ def test_prune_orphan_channels(db):
 
 
 def test_stream_stays_in_channel_when_key_unchanged(db):
-    # a tạo kênh theo tên; b gộp theo tên (kênh nhận tvg-id); b đổi tên nhưng giữ tvg-id; a nhập lại
+    # a creates a channel by name; b merges by name (channel gets the tvg-id); b renames but keeps tvg-id; a re-imports
     seed_source("a", 10); seed_source("b", 20)
     registry.ingest("a", PL(E("VTV1", "https://a/1")), 1.0)
     registry.ingest("b", PL(E("VTV 1", "https://b/1", "vtv1")), 2.0)
@@ -199,7 +199,7 @@ def test_stream_moves_when_its_key_changes(db):
     registry.ingest("a", PL(E("VTV1", "https://a/1"), E("VTV3", "https://a/2")), 2.0)
     chans = hdb.conn().execute("SELECT channel_id FROM streams").fetchall()
     assert len({r[0] for r in chans}) == 2
-    assert count("channels") == 2  # kênh VTV2 cũ trống nên bị xoá, VTV3 mới
+    assert count("channels") == 2  # old VTV2 channel is empty so it is deleted, VTV3 is new
     assert hdb.conn().execute("SELECT normalized_name FROM channels ORDER BY id").fetchall()[1][0] == "vtv3"
 
 

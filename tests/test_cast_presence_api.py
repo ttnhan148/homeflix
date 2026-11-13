@@ -44,9 +44,9 @@ def test_nearby_lists_only_same_household_tv_or_desktop_online(app_module, make_
     me.post("/api/devices/heartbeat", json={"kind": "phone"})
     _, tv_id = make_tv(make_client)
     _, desk_id = make_tv(make_client, kind="desktop")
-    make_tv(make_client, ip=OTHER_IP)                       # TV nhà khác
-    phone2 = make_client(); phone2.post("/api/devices/heartbeat", json={"kind": "phone"})   # điện thoại cùng nhà
-    silent = make_client(); device_id(silent)               # TV cùng nhà nhưng chưa heartbeat
+    make_tv(make_client, ip=OTHER_IP)                       # TV in another home
+    phone2 = make_client(); phone2.post("/api/devices/heartbeat", json={"kind": "phone"})   # phone in the same home
+    silent = make_client(); device_id(silent)               # TV in the same home but no heartbeat yet
     silent.patch("/api/device", json={"kind": "tv"})
     ids = sorted(d["id"] for d in me.get("/api/devices/nearby").json())
     assert ids == sorted(app_module._cast_public_id(i) for i in (tv_id, desk_id))

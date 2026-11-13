@@ -1,23 +1,23 @@
-// Nhóm "HomeTV" của trang Cài đặt: quản lý nguồn IPTV (chỉ admin).
-// Dùng lại các hàm dựng dòng của static/settings.js qua `ui` (xem settings.js: const ui).
-// Chữ từ server (tên, URL, lỗi) chỉ đi qua textContent.
+// "HomeTV" group of the Settings page: manages IPTV sources (admin only).
+// Reuses the row builders from static/settings.js via `ui` (see settings.js: const ui).
+// Text from the server (name, URL, errors) only goes through textContent.
 (function (root) {
   const PATH = '/api/admin/hometv/sources';
   const STATUS_PATH = '/api/admin/hometv/health/status';
-  const POLL_MS = 3000;   // có nguồn đang tải: tải lại danh sách
-  const QUEUED_MAX_MS = 90000;   // vòng lặp nền nhận lượt trong ≤ 60 giây; quá hạn này thì thôi chờ
+  const POLL_MS = 3000;   // a source is loading: reload the list
+  const QUEUED_MAX_MS = 90000;   // background loop picks it up within ≤ 60 seconds; past this limit stop waiting
   const RIGHTS = { pending_review: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
   const PRIORITY = { key: 'hometv.priority', label: 'Ưu tiên', min: 1, max: 100, step: 1 };
   const HOURS = { key: 'hometv.refresh_hours', label: 'Chu kỳ tải', min: 1, max: 168, step: 1, unit: 'giờ' };
 
-  // Giữ qua các lượt dựng lại (như máy đang mở ở "Thiết bị trong nhà")
-  let openId = null;   // nguồn đang mở thao tác
-  let editId = null;   // nguồn đang mở khối Sửa
-  // Nguồn vừa bấm "Làm mới ngay" hoặc vừa đổi URL: server chỉ đặt next_fetch_at = now, vòng lặp nền
-  // nhận lượt sau (fetching chưa bật ngay). id -> { lastFetch: last_fetch_at lúc bấm, at: Date.now() }
+  // Kept across rebuilds (like the open device in "Thiết bị trong nhà")
+  let openId = null;   // source whose actions are open
+  let editId = null;   // source whose Edit block is open
+  // Source just hit "Làm mới ngay" or had its URL changed: server only sets next_fetch_at = now, the background loop
+  // picks it up next round (fetching isn't on yet). id -> { lastFetch: last_fetch_at at press time, at: Date.now() }
   const queued = new Map();
-  // Nguồn vừa bấm "Kiểm tra ngay": server chỉ đặt next_check_at = now, vòng lặp nền nhận lượt sau (≤ 60 giây).
-  // id -> { at, seen }: seen = đã thấy health.checking bật; thôi chờ khi bật rồi tắt, hoặc quá QUEUED_MAX_MS
+  // Source just hit "Kiểm tra ngay": server only sets next_check_at = now, the background loop picks it up next round (≤ 60 seconds).
+  // id -> { at, seen }: seen = health.checking was seen on; stop waiting once it turns on then off, or after QUEUED_MAX_MS
   const queuedChecks = new Map();
 
   function pruneChecks(items) {
@@ -35,7 +35,7 @@
     queued.set(d.id, { lastFetch: d.last_fetch_at, at: Date.now() });
   }
 
-  // Bỏ lượt chờ khi nguồn đã tải xong (không còn fetching, last_fetch_at đổi), đã bị xoá, hoặc quá QUEUED_MAX_MS
+  // Drop the wait once the source finished loading (no longer fetching, last_fetch_at changed), was deleted, or after QUEUED_MAX_MS
   function pruneQueued(items) {
     const byId = new Map(items.map((d) => [d.id, d]));
     const now = Date.now();
@@ -47,7 +47,7 @@
 
   const sourcePath = (id) => PATH + '/' + encodeURIComponent(id);
 
-  // 422 {"errors": {field: lý do}} -> lý do đầu tiên; 503 -> HomeTV chưa sẵn sàng
+  // 422 {"errors": {field: reason}} -> first reason; 503 -> HomeTV not ready
   function errorText(err) {
     if (err && err.status === 503) return 'HomeTV chưa sẵn sàng';
     if (err && err.status === 409 && err.data && typeof err.data.detail === 'string') return err.data.detail;
@@ -62,9 +62,9 @@
     const list = el('div', 'set-list');
     section.appendChild(list);
     const addRow = addSourceRow();
-    let health = { enabled: false, country: null };   // trạng thái bộ kiểm stream của máy chủ
+    let health = { enabled: false, country: null };   // status of the server's stream checker
     const statusRow = el('div', 'set-note hometv-health-status');
-    statusRow.tabIndex = 0;   // chỉ-đọc nhưng điều khiển từ xa phải tới được
+    statusRow.tabIndex = 0;   // read-only but must be reachable by remote control
     section.insertBefore(statusRow, list);
 
     function paintStatus() {
@@ -78,22 +78,24 @@
     let poll = null;
 
     function metaText(d) {
-      const parts = [RIGHTS[d.rights_status] || RIGHTS.pending_review, (d.channel_count || 0) + ' kênh'];
+      // Sources are approved by default; only a leftover non-approved state is shown
+      const parts = [(d.channel_count || 0) + ' kênh'];
+      if (d.rights_status !== 'approved') parts.unshift(RIGHTS[d.rights_status] || RIGHTS.pending_review);
       const h = d.health;
       if (d.rights_status === 'approved' && h && h.checked > 0) parts.push(h.alive + '/' + h.checked + ' sống');
       if (d.fetching || queued.has(d.id)) parts.push('Đang tải…');
-      else if (d.last_success_at) parts.push(ui.lastSeenText(d.last_success_at));   // chưa tải được lần nào: không ghi giờ
+      else if (d.last_success_at) parts.push(ui.lastSeenText(d.last_success_at));   // never loaded: show no time
       if ((h && h.checking) || queuedChecks.has(d.id)) parts.push('Đang kiểm tra…');
       return parts.join(' · ');
     }
 
-    // --- Tải danh sách ---
+    // --- Load list ---
     async function reload() {
       const seq = ++loadSeq;
       loading++;
       let items = null;
       let failure = null;
-      const statusReq = ui.api('GET', STATUS_PATH).catch(() => null);   // lỗi trạng thái không làm hỏng danh sách
+      const statusReq = ui.api('GET', STATUS_PATH).catch(() => null);   // status error doesn't break the list
       try {
         items = await ui.api('GET', PATH);
       } catch (err) {
@@ -101,12 +103,12 @@
       } finally {
         loading--;
       }
-      if (seq !== loadSeq || !section.isConnected) return;   // đã có lượt tải mới hơn hoặc trang đã dựng lại
+      if (seq !== loadSeq || !section.isConnected) return;   // a newer load started or the page was rebuilt
       if (failure) {
-        if (failure.status === 403 || failure.status === 404) { ui.render(); return; }   // mất quyền hoặc admin bị tắt
+        if (failure.status === 403 || failure.status === 404) { ui.render(); return; }   // rights lost or admin disabled
         if (failure.status === 503) { info('hometv.unavailable', 'HomeTV chưa sẵn sàng'); schedule(false); return; }
         if (!loaded) info('hometv.error', 'Không tải được danh sách');
-        return;   // lỗi mạng lúc đang có danh sách: giữ nguyên, lượt sau thử lại
+        return;   // network error while a list is shown: keep it, retry next round
       }
       loaded = true;
       const st = await statusReq;
@@ -115,7 +117,7 @@
       fill(Array.isArray(items) ? items : []);
     }
 
-    // Có nguồn đang tải hoặc đang chờ tải thì tải lại mỗi POLL_MS; chỉ khi trang đang mở. close() dừng mọi bộ đếm
+    // While a source is loading or queued, reload every POLL_MS; only while the page is open. close() stops all timers
     function schedule(fetching) {
       if (fetching && poll === null && ui.isOpen()) {
         poll = ui.every(POLL_MS, () => { if (!loading) reload(); });
@@ -125,14 +127,14 @@
       }
     }
 
-    // Dòng thông tin thay cho danh sách (HomeTV chưa sẵn sàng / lỗi tải)
+    // Info row in place of the list (HomeTV not ready / load error)
     function info(key, text) {
       const row = ui.baseRow(key, text);
-      row.tabIndex = 0;   // chỉ-đọc nhưng điều khiển từ xa phải tới được
+      row.tabIndex = 0;   // read-only but must be reachable by remote control
       list.replaceChildren(row);
     }
 
-    // Cập nhật theo id: dòng cũ giữ nguyên (không mất focus, khối Sửa còn nguyên), dòng mới thêm vào
+    // Update by id: existing rows stay (focus kept, Edit block intact), new rows are appended
     function fill(items) {
       if (!addRow.isConnected) list.replaceChildren(addRow);
       const ids = items.map((d) => d.id);
@@ -154,7 +156,7 @@
         const row = r || sourceRow(d);
         if (list.children[i] !== row) list.insertBefore(row, list.children[i] || addRow);
       });
-      // đổi thứ tự (vd. vừa sửa ưu tiên) làm rơi focus: đặt lại; dòng đang focus bị xoá: sang dòng kế
+      // reordering (e.g. priority just edited) drops focus: restore it; focused row deleted: move to the next row
       if (active && active.isConnected && document.activeElement !== active && list.contains(active)) {
         active.focus({ preventScroll: true });
       } else if (lostAt >= 0) {
@@ -169,7 +171,7 @@
       list.querySelectorAll(':scope > .set-source').forEach((r) => r.hfUpdate());
     }
 
-    // --- Một nguồn: chạm để mở thao tác, xếp dọc như dòng thiết bị ---
+    // --- A source: tap to open actions, stacked vertically like device rows ---
     function sourceRow(d) {
       const row = el('div', 'set-row set-row-action set-source');
       row.dataset.id = d.id;
@@ -187,9 +189,9 @@
       let cur = d;
       let panel = null;    // .set-source-actions
       let items = null;    // .set-subactions trong panel
-      let editor = null;   // khối Sửa
-      let deadBox = null;  // danh sách stream chết
-      const slots = {};    // nút theo chỗ: Duyệt/Bỏ duyệt cùng một nút để focus trên TV không rơi
+      let editor = null;   // Edit block
+      let deadBox = null;  // dead stream list
+      const slots = {};    // button by position: Enable/Disable share one button so focus on TV doesn't drop
 
       function paint() {
         name.textContent = cur.name;
@@ -239,10 +241,9 @@
         if (!editing) editor = null;
         if (editor) editor.hfSet(cur);
         const want = [
-          approved ? slot('rights', 'unapprove', 'Bỏ duyệt') : slot('rights', 'approve', 'Duyệt'),
-          cur.rights_status !== 'rejected' && slot('reject', 'reject', 'Từ chối'),
+          !approved && slot('rights', 'approve', 'Duyệt'),   // only for a leftover non-approved source
           cur.enabled ? slot('power', 'disable', 'Tắt') : slot('power', 'enable', 'Bật'),
-          cur.enabled && slot('refresh', 'refresh', 'Làm mới ngay'),   // nguồn tắt không được tải
+          cur.enabled && slot('refresh', 'refresh', 'Làm mới ngay'),   // disabled sources aren't loaded
           approved && cur.enabled && health.enabled && slot('check', 'check', 'Kiểm tra ngay'),
           approved && slot('dead', 'dead', 'Xem stream chết'),
           deadBox,
@@ -251,7 +252,7 @@
           slot('delete', 'delete', 'Xoá', true),
         ].filter(Boolean);
         slots.edit.setAttribute('aria-expanded', editing ? 'true' : 'false');
-        // đổi tại chỗ: nút đang focus không bị gỡ ra rồi gắn lại
+        // change in place: the focused button isn't removed and reattached
         const active = document.activeElement;
         const at = [...items.children].findIndex((n) => n.contains(active));
         [...items.children].forEach((n) => { if (!want.includes(n)) n.remove(); });
@@ -267,7 +268,7 @@
         paint();
       }
 
-      // Ghi rồi tải lại danh sách (thứ tự, trạng thái đang tải). 404: nguồn vừa bị xoá ở máy khác
+      // Write then reload the list (order, loading state). 404: source was just deleted on another device
       function write(work) {
         return ui.act(row, async () => {
           try {
@@ -281,7 +282,7 @@
 
       const patch = (body) => write(async () => apply(await ui.api('PATCH', sourcePath(cur.id), body)));
 
-      // Danh sách stream chết ngay trong dòng (tối đa 50); chữ chỉ đi qua textContent
+      // Inline dead stream list (up to 50); text only via textContent
       async function toggleDead() {
         if (deadBox) { deadBox.remove(); deadBox = null; paintActions(); return; }
         deadBox = el('div', 'set-note hometv-dead');
@@ -294,7 +295,7 @@
         } catch (err) {
           list = null;
         }
-        if (deadBox !== mine) return;   // đã đóng hoặc dựng lại trong lúc chờ
+        if (deadBox !== mine) return;   // closed or rebuilt while waiting
         mine.replaceChildren();
         if (!Array.isArray(list)) mine.appendChild(el('div', 'hometv-dead-empty', 'Không tải được'));
         else if (list.length === 0) mine.appendChild(el('div', 'hometv-dead-empty', 'Không có stream chết'));
@@ -304,21 +305,19 @@
 
       function run(act) {
         if (act === 'approve') patch({ rights_status: 'approved' });
-        else if (act === 'unapprove') patch({ rights_status: 'pending_review' });
-        else if (act === 'reject') patch({ rights_status: 'rejected' });
         else if (act === 'enable') patch({ enabled: true });
         else if (act === 'disable') patch({ enabled: false });
         else if (act === 'refresh') {
           write(async () => {
             await ui.api('POST', sourcePath(cur.id) + '/refresh', {});
-            queue(cur);   // hiện "Đang tải…" ngay, tải lại cho tới khi vòng lặp nền tải xong
+            queue(cur);   // show "Đang tải…" immediately, keep reloading until the background loop finishes
             paint();
           });
         }
         else if (act === 'check') {
           write(async () => {
             await ui.api('POST', sourcePath(cur.id) + '/check', {});
-            queuedChecks.set(cur.id, { at: Date.now(), seen: false });   // hiện "Đang kiểm tra…" ngay
+            queuedChecks.set(cur.id, { at: Date.now(), seen: false });   // show "Đang kiểm tra…" immediately
             paint();
           });
         }
@@ -330,10 +329,10 @@
         }
       }
 
-      // Khối Sửa: tên và URL sửa ngay trong dòng; ưu tiên và chu kỳ dùng (−)(+)
+      // Edit block: name and URL are edited inline; priority and interval use (−)(+)
       function editBlock() {
         const box = el('div', 'hometv-edit');
-        // lưu một trường; lỗi do hàm dựng dòng tự báo dưới đúng dòng
+        // save one field; errors are shown by the row builder under the right row
         const save = async (body) => {
           const prevUrl = cur.url;
           let next;
@@ -343,7 +342,7 @@
             if (err && err.status === 404) { await reload(); return; }
             throw err;
           }
-          // đổi URL: server đặt next_fetch_at = now; nguồn tắt thì vòng lặp nền không tải
+          // URL change: server sets next_fetch_at = now; disabled sources aren't loaded by the background loop
           if (next && next.url !== prevUrl && next.enabled) queue(next);
           apply(next);
           await reload();
@@ -365,14 +364,14 @@
       head.addEventListener('click', () => {
         openId = openId === cur.id ? null : cur.id;
         if (editId !== openId) editId = null;
-        repaintAll();   // mở nguồn này thì đóng nguồn khác
+        repaintAll();   // opening this source closes the others
       });
       row.hfUpdate = (next) => { if (next) cur = next; paint(); };
       paint();
       return row;
     }
 
-    // Chữ sửa ngay trong dòng (tên, URL): chạm để sửa, Enter hoặc rời ô thì lưu, Esc thì thôi
+    // Inline-edited text (name, URL): tap to edit, Enter or blur saves, Esc cancels
     function textRow(key, label, value, maxLength, save) {
       const row = ui.baseRow(key, label);
       const btn = el('button', 'set-text');
@@ -385,7 +384,7 @@
       const paint = () => { text.textContent = current; };
       paint();
 
-      // hiện chữ mới ngay; lỗi thì trả chữ cũ và báo dưới dòng
+      // show the new text immediately; on error restore the old text and report under the row
       async function commit(next) {
         if (next === current) return;
         const prev = current;
@@ -398,7 +397,7 @@
         } catch (err) {
           current = prev;
           paint();
-          ui.saveFailed(row, err, errorText);   // vd. 422 "URL không hợp lệ"
+          ui.saveFailed(row, err, errorText);   // e.g. 422 "URL không hợp lệ"
         } finally {
           busy = false;
           ui.setSaving(row, false);
@@ -409,12 +408,12 @@
         ui.clearError(row);
         ui.editInline(btn, current, label, commit, null, maxLength);
       });
-      // đang sửa (nút nhường chỗ cho ô nhập) hoặc đang lưu: không ghi đè
+      // editing (button gave way to the input) or saving: don't overwrite
       row.hfSet = (v) => { if (!busy && btn.isConnected && typeof v === 'string') { current = v; paint(); } };
       return row;
     }
 
-    // --- "+ Thêm nguồn": mở form ngay trong dòng (Tên, URL, Thêm); lỗi 422 hiện dưới đúng ô ---
+    // --- "+ Thêm nguồn": opens an inline form (Name, URL, Add); 422 errors show under the right field ---
     function addSourceRow() {
       const row = ui.actionRow('hometv.add', '+ Thêm nguồn', () => openForm());
       const btn = row.querySelector('.set-action');
@@ -438,7 +437,7 @@
       function openForm() {
         ui.clearError(row);
         const form = el('form', 'set-form hometv-form');
-        form.noValidate = true;   // URL do server kiểm tra (netguard), báo lỗi dưới ô
+        form.noValidate = true;   // URL is validated by the server (netguard), error shown under the field
         const nameF = field('hometvName', 'Tên nguồn', 'text', 60, 'Tên');
         const urlF = field('hometvUrl', 'URL playlist', 'url', 2048, 'https://…');
         nameF.input.enterKeyHint = 'next';
@@ -454,7 +453,7 @@
         let closed = false;
         const closeForm = (refocus) => {
           if (closed) return;
-          closed = true;   // gỡ ô đang focus sẽ bắn focusout ngay giữa chừng: không đóng lần hai
+          closed = true;   // removing the focused input fires focusout midway: don't close twice
           form.replaceWith(btn);
           if (refocus) btn.focus();
         };
@@ -471,7 +470,7 @@
             closeForm(true);
             await reload();
           } catch (err) {
-            if (err && (err.status === 403 || err.status === 404)) { ui.render(); return; }   // mất quyền, admin bị tắt
+            if (err && (err.status === 403 || err.status === 404)) { ui.render(); return; }   // rights lost, admin disabled
             const errors = (err && err.status === 422 && err.data && err.data.errors) || {};
             let shown = false;
             Object.keys(fields).forEach((k) => {
@@ -490,11 +489,15 @@
         form.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeForm(true); }
         });
-        // Enter ở ô Tên sang ô URL (đúng phím "next" trên bàn phím điện thoại), Enter ở ô URL mới gửi
+        // Enter in Name moves to URL (matches the "next" key on phone keyboards), Enter in URL submits
         nameF.input.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') { e.preventDefault(); urlF.input.focus(); }
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (e.isComposing || e.keyCode === 229) return;   // Enter confirming an IME word, not "next field"
+            urlF.input.focus();
+          }
         });
-        // rời form khi chưa gõ gì: thu lại thành nút
+        // leaving the form before typing anything: collapse back into the button
         form.addEventListener('focusout', (e) => {
           if (!busy && !nameF.input.value && !urlF.input.value && !form.contains(e.relatedTarget)) closeForm(false);
         });

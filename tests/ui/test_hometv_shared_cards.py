@@ -1,4 +1,4 @@
-"""buildPosterCard và buildContinueCard dùng chung giữa HomeFlix và HomeTV."""
+"""buildPosterCard and buildContinueCard shared between HomeFlix and HomeTV."""
 URL = "http://homeflix.test/"
 
 

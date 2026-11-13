@@ -1,4 +1,4 @@
-"""Lịch tải nguồn IPTV: khóa job, một lượt tải, chạy các nguồn đến hạn, dọn dẹp, vòng nền."""
+"""IPTV source fetch scheduler: job locking, a single fetch run, running due sources, cleanup, background loop."""
 import asyncio
 import hashlib
 import logging
@@ -19,7 +19,7 @@ INGEST_ERROR = "Lỗi nhập dữ liệu"
 
 
 def acquire_job(source_id: str, now: float) -> int | None:
-    """Tạo job running; None nếu nguồn đang có lượt chạy còn trẻ."""
+    """Create a running job; None if the source already has a recent run in progress."""
     with db.tx() as c:
         for r in c.execute("SELECT id, started_at FROM jobs WHERE source_id=? AND status='running'",
                            (source_id,)).fetchall():
@@ -40,7 +40,7 @@ def finish_job(job_id: int, *, status: str, now: float, records: int = 0, skippe
 
 
 def _process(source_id: str, body: bytes, now: float, rand: float):
-    """Phân tích, kiểm tra bản tốt, nhập. Trả (kết quả, thông báo lỗi, số bản ghi, số dòng bỏ)."""
+    """Parse, check against the last good version, ingest. Return (result, error message, record count, skipped line count)."""
     src = sources.internal(source_id)
     if src is None:
         return "gone", None, 0, 0
@@ -49,10 +49,10 @@ def _process(source_id: str, body: bytes, now: float, rand: float):
         sources.record_unchanged(source_id, now=now)
         return "unchanged", None, 0, 0
     playlist = m3u.parse(m3u.decode(body))
-    forced = source_id in sources._force_next  # làm mới tay: bỏ qua kiểm tra mất kênh
+    forced = source_id in sources._force_next  # manual refresh: skip the channel-loss check
     sources._force_next.discard(source_id)
     reason = sources.check_version(None if forced else sources.last_good_entry_count(source_id), playlist)
-    if reason:  # giữ bản tốt, không nhập
+    if reason:  # keep the good version, do not ingest
         sources.record_failure(source_id, now=now, message=reason, retryable=True, rand=rand)
         return "error", reason, 0, playlist.skipped_lines
     stats = registry.ingest(source_id, playlist, now)
@@ -62,10 +62,10 @@ def _process(source_id: str, body: bytes, now: float, rand: float):
 
 
 async def refresh_source(client, source_id: str, *, now: float, rand: float) -> str:
-    """Một lượt tải: ok | unchanged | error | skipped | gone.
+    """One fetch run: ok | unchanged | error | skipped | gone.
 
-    Mọi chạm DB đi qua to_thread: db.lock có thể đang bị ingest của nguồn khác giữ,
-    gọi thẳng trên event loop sẽ làm đứng cả HomeFlix."""
+    All DB access goes through to_thread: db.lock may be held by another source's ingest,
+    calling it directly on the event loop would stall all of HomeFlix."""
     job = await asyncio.to_thread(acquire_job, source_id, now)
     if job is None:
         return "skipped"
@@ -103,14 +103,14 @@ async def refresh_source(client, source_id: str, *, now: float, rand: float) -> 
         result, status, error = "error", "error", INGEST_ERROR
         return result
     finally:
-        # đóng job dù bị hủy; thời điểm kết thúc = now + thời gian thực đã trôi
+        # close the job even if cancelled; end time = now + real elapsed time
         done = now + (time.monotonic() - t0)
         fin = asyncio.ensure_future(asyncio.to_thread(
             lambda: finish_job(job, status=status, now=done, records=records, skipped=skipped, error=error)))
         try:
             await asyncio.shield(fin)
         except asyncio.CancelledError:
-            await fin  # job đã đóng xong rồi mới cho hủy lan tiếp
+            await fin  # let the cancellation propagate only after the job is closed
             raise
 
 
@@ -119,26 +119,26 @@ def _fail(source_id: str, now: float, message: str, retryable: bool, rand: float
 
 
 async def run_due(client, now: float) -> list[str]:
-    """Chạy các nguồn đến hạn: tối đa MAX_PARALLEL lượt, mỗi host một lượt."""
+    """Run due sources: at most MAX_PARALLEL runs, one at a time per host."""
     due = await asyncio.to_thread(sources.due, now)
     sem = asyncio.Semaphore(MAX_PARALLEL)
     host_locks: dict[str, asyncio.Lock] = {}
 
     async def one(src: dict) -> str:
         host = urlsplit(src["url"]).hostname or ""
-        async with host_locks.setdefault(host, asyncio.Lock()):  # khóa host trước, khỏi chiếm chỗ vô ích
+        async with host_locks.setdefault(host, asyncio.Lock()):  # take the host lock first so we do not hold a slot needlessly
             async with sem:
                 try:
                     return await refresh_source(client, src["id"], now=now, rand=random.random())
                 except Exception:
                     logger.exception("HomeTV: lượt tải %s hỏng", src["id"])
                     return "error"
-    # return_exceptions: đợi mọi lượt đóng job xong rồi mới trả (kể cả khi bị hủy)
+    # return_exceptions: wait for every run to close its job before returning (even when cancelled)
     return list(await asyncio.gather(*(one(s) for s in due), return_exceptions=True))
 
 
 def cleanup(now: float) -> None:
-    """Xoá job cũ hơn 30 ngày, mỗi nguồn giữ tối đa KEEP_VERSIONS bản."""
+    """Delete jobs older than 30 days; keep at most KEEP_VERSIONS versions per source."""
     with db.tx() as c:
         c.execute("DELETE FROM jobs WHERE started_at < ? AND status != 'running'", (now - JOB_KEEP,))
         c.execute("DELETE FROM source_versions WHERE id NOT IN (SELECT id FROM (SELECT id, ROW_NUMBER() "
@@ -147,7 +147,7 @@ def cleanup(now: float) -> None:
 
 
 async def hometv_refresher(tick: float = TICK) -> None:
-    """Vòng nền: lỗi chỉ log, không dừng; đóng client khi bị hủy."""
+    """Background loop: errors are only logged, never stop it; closes the client on cancel."""
     client = fetcher.make_client()
     last_cleanup = 0.0
     try:

@@ -9,7 +9,7 @@ OVERLAY = "#autoNextOverlay"
 
 
 def open_player(open_app, prefs=None, episodes=None, init=None):
-    """TV đang phát phim-le-1 tập 1 (3 tập). `episodes` rút gọn danh sách tập để thử phim lẻ/tập cuối."""
+    """TV playing phim-le-1 episode 1 (3 episodes). `episodes` trims the episode list to test single movies / the last episode."""
     page = open_app(tv=True)
     page.add_init_script(FAST + CFG)
     if init:
@@ -47,7 +47,7 @@ def test_cancel_stops_next(open_app):
     page.wait_for_selector(OVERLAY + ":not([hidden])")
     tap(page, "#autoNextCancel")
     assert page.locator(OVERLAY).is_hidden()
-    page.wait_for_timeout(400)  # 10 tick x 20ms đã qua rất nhiều lần
+    page.wait_for_timeout(400)  # 10 ticks x 20ms have passed many times over
     assert index(page) == 0
 
 
@@ -150,7 +150,7 @@ def test_short_video_hides_button(open_app):
 
 def test_button_hides_when_no_metadata(open_app):
     page = open_player(open_app)
-    page.evaluate("video.dispatchEvent(new Event('timeupdate'))")  # duration chưa có (NaN)
+    page.evaluate("video.dispatchEvent(new Event('timeupdate'))")  # duration not available yet (NaN)
     assert page.locator(SKIP).is_hidden()
 
 
@@ -158,7 +158,7 @@ def test_auto_intro_skips_once_per_episode(open_app):
     page = open_player(open_app, prefs={"autoIntro": True})
     set_time(page, 3)
     assert page.evaluate("video.currentTime") == 85
-    set_time(page, 5)                                    # tua lùi: không nhảy lần hai
+    set_time(page, 5)                                    # seek back: no second jump
     assert page.evaluate("video.currentTime") == 5
     page.evaluate("play(playbackEpisodes[1].link_m3u8, playbackEpisodes[1].name, 1)")
     set_time(page, 3)

@@ -50,5 +50,5 @@ Thumbs.db
 *.swp
 *.swo
 
-# graphify (knowledge graph, build lại bằng: graphify update .)
+# graphify (knowledge graph, rebuild with: graphify update .)
 graphify-out/

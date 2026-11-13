@@ -37,6 +37,6 @@ def test_tv_font_and_focus_ring(open_app):
     assert page.evaluate("getComputedStyle(document.body).fontSize") == "20px"
     page.focus(".movie-card")
     assert page.evaluate("document.activeElement.matches(':focus-visible')")
-    page.wait_for_timeout(400)  # thẻ có transition 0.2s trên mọi thuộc tính
+    page.wait_for_timeout(400)  # cards have a 0.2s transition on all properties
     style = page.evaluate("(() => { const s = getComputedStyle(document.activeElement); return [s.outlineWidth, s.outlineColor]; })()")
     assert style == ["4px", "rgb(255, 255, 255)"]

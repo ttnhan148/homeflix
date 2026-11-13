@@ -7,7 +7,7 @@ DEVICE = '.set-group[data-group="device"]'
 
 
 def _settings(open_app, **kw):
-    """Mở app, chạm bánh răng, đợi nhóm "Thiết bị này"."""
+    """Open the app, tap the gear, wait for the "Thiết bị này" group."""
     page = open_app(**kw)
     page.goto(URL)
     tap(page, "#settingsBtn")
@@ -51,9 +51,9 @@ def test_gear_opens_settings_on_phone_and_tv(open_app, tv):
     assert page.locator(DEVICE + " .set-group-title").inner_text() == "Thiết bị này"
     keys = page.evaluate(f"[...document.querySelectorAll('{DEVICE} .set-row')].map(r => r.dataset.key)")
     assert keys == ["device.name", "cast.allow_control", "player.autoNext", "player.autoIntro", "player.introSeconds"]
-    # tab bar và nav header không tô nút nào khi đang ở Cài đặt
+    # tab bar and nav header highlight no button while in Settings
     assert page.evaluate("document.querySelectorAll('.fab-tab.active, .tab-btn.active').length") == 0
-    # mọi dòng cao ít nhất var(--tap)
+    # every row is at least var(--tap) tall
     heights = page.evaluate("[...document.querySelectorAll('#settingsBody .set-row')].map(r => r.getBoundingClientRect().height)")
     assert min(heights) >= 44
     assert page.console_errors == []
@@ -131,7 +131,7 @@ def test_switch_save_error_reverts(open_app):
     tap(page, '[data-key="cast.allow_control"] .set-switch')
     page.wait_for_selector('[data-key="cast.allow_control"] .set-error')
     assert checked(page, "cast.allow_control") == "true"
-    tap(page, '[data-key="cast.allow_control"] .set-error')   # chạm dòng lỗi: không bật/tắt
+    tap(page, '[data-key="cast.allow_control"] .set-error')   # tapping the error row does not toggle
     page.wait_for_timeout(200)
     assert checked(page, "cast.allow_control") == "true"
     assert len(patches) == 1
@@ -149,7 +149,7 @@ def test_player_prefs_shared_with_player_panel(open_app):
     assert checked(page, "player.autoNext") == "true" and checked(page, "player.autoIntro") == "false"
     tap(page, '[data-key="player.autoNext"] .set-switch')
     assert page.evaluate("HFPlayerAuto.getPrefs().autoNext") is False
-    assert page.evaluate("document.getElementById('prefAutoNext').checked") is False   # panel trong trình phát
+    assert page.evaluate("document.getElementById('prefAutoNext').checked") is False   # the in-player panel
     page.evaluate("HFPlayerAuto.setPrefs({introSeconds: 120})")
     assert page.locator('[data-key="player.introSeconds"] .set-value').inner_text() == "120 giây"
     page.evaluate("HFPlayerAuto.setPrefs({autoIntro: true})")
@@ -168,7 +168,7 @@ def test_stepper_saves_once_after_400ms(open_app):
     assert page.evaluate("window.__prefsEvents") == 1
     assert page.evaluate("HFPlayerAuto.getPrefs().introSeconds") == 100
     assert page.locator(value).inner_text() == "100 giây"
-    assert not any("/api/" in r and r.startswith("PATCH") for r in page.requests)   # chỉ lưu trên máy
+    assert not any("/api/" in r and r.startswith("PATCH") for r in page.requests)   # saved on the device only
 
 
 def test_stepper_clamps_at_min(open_app):
@@ -182,7 +182,7 @@ def test_stepper_clamps_at_min(open_app):
     tap(page, minus)
     assert page.locator('[data-key="player.introSeconds"] .set-value').inner_text() == "10 giây"
     assert page.get_attribute(minus, "aria-disabled") == "true"
-    page.dispatch_event(minus, "click")   # vẫn bấm được trên remote, nhưng kẹp ở min
+    page.dispatch_event(minus, "click")   # still clickable via remote, but clamped at min
     assert page.locator('[data-key="player.introSeconds"] .set-value').inner_text() == "10 giây"
     page.wait_for_timeout(600)
     assert page.evaluate("HFPlayerAuto.getPrefs().introSeconds") == 10
@@ -222,7 +222,7 @@ def test_no_horizontal_scroll(pw, open_app, tv):
     page = open_app(tv=tv)
     page.goto(URL)
     page.evaluate("fetch('/api/device', {method: 'PATCH', headers: {'Content-Type': 'application/json'},"
-                  " body: JSON.stringify({name: 'W'.repeat(40)})})")   # tên dài nhất, không có khoảng trắng
+                  " body: JSON.stringify({name: 'W'.repeat(40)})})")   # longest name, no whitespace
     tap(page, "#settingsBtn")
     page.wait_for_selector(DEVICE)
     assert page.locator('[data-key="device.name"] button').inner_text() == "W" * 40

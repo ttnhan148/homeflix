@@ -44,7 +44,7 @@ def test_play_command_is_normalised_and_delivered(app_module, make_client):
 def test_command_requires_allowance(app_module, make_client):
     r = Rig(app_module, make_client)
     assert command(r, {"type": "pause"}).status_code == 403
-    r.connect()                                  # mới xin, TV chưa cho phép
+    r.connect()                                  # just requested, TV has not allowed yet
     assert command(r, {"type": "pause"}).status_code == 403
     assert [e for e, _ in r.tv_events()] == ["connect_request"]
 
@@ -69,13 +69,13 @@ def test_command_to_offline_tv_is_409(app_module, make_client):
 
 def test_command_auto_links_after_server_memory_reset(app_module, make_client):
     r = approved(app_module, make_client)
-    app_module.cast_hub = CastHub()                       # server khởi động lại: bộ nhớ trống, DB còn quyền
+    app_module.cast_hub = CastHub()                       # server restarted: memory empty, DB still has the permission
     tv_sub = app_module.cast_hub.subscribe(r.tv_id)
     phone_sub = app_module.cast_hub.subscribe(r.phone_id)
-    r.phone.post("/api/devices/heartbeat", json={"kind": "phone"})   # nhịp tim kế tiếp của iPhone sau khi server khởi động lại
+    r.phone.post("/api/devices/heartbeat", json={"kind": "phone"})   # the iPhone's next heartbeat after the server restart
     assert app_module.cast_hub.linked_target(r.phone_id) is None
     assert command(r, {"type": "resume"}).json() == {"status": "sent"}
-    # TV được báo controller vừa được lập lại liên kết, nên sẽ báo trạng thái trở lại
+    # TV is told the controller was just re-linked, so it will report its state again
     assert tv_sub.drain() == [("controller_joined", {"controller_id": r.phone_pid, "name": "iPhone"}),
                               ("command", {"type": "resume"})]
     assert r.tv.post("/api/cast/state", json={"slug": None, "playing": False}).status_code == 200
@@ -113,7 +113,7 @@ def test_state_fans_out_to_linked_controllers_only(app_module, make_client):
     r = approved(app_module, make_client)
     other = make_client()
     other_id = real_id(other)
-    other_sub = app_module.cast_hub.subscribe(other_id)          # cùng nhà nhưng chưa liên kết
+    other_sub = app_module.cast_hub.subscribe(other_id)          # same home but not linked
     assert r.tv.post("/api/cast/state", json=STATE).json() == {"status": "ok"}
     assert r.phone_events() == [("state", {**STATE, "position": 10.0, "duration": 100.0, "target_id": r.tv_pid})]
     assert other_sub.drain() == []
@@ -125,7 +125,7 @@ def test_state_rejects_bad_payload_and_non_tv_caller(app_module, make_client):
     assert r.tv.post("/api/cast/state", json={**STATE, "playing": "yes"}).status_code == 422
     nan = r.tv.post("/api/cast/state", content='{"slug": "a", "position": NaN, "playing": true}', headers={"content-type": "application/json"})
     assert nan.status_code == 422
-    assert r.phone.post("/api/cast/state", json=STATE).status_code == 403     # iPhone không phải TV
+    assert r.phone.post("/api/cast/state", json=STATE).status_code == 403     # the iPhone is not a TV
     assert r.phone_events() == []
 
 

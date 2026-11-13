@@ -25,11 +25,11 @@ def test_stranger_cannot_impersonate_tv_with_nearby_id(app_module, make_client):
     r.tv.post("/api/saved", json={"slug": "secret-movie", "name": "Secret", "poster_url": "", "year": "2026", "episodes": EPS})
     stranger = make_client()
     (item,) = stranger.get("/api/devices/nearby").json()
-    stranger.cookies.set("hf_device", item["id"])           # thử dùng id lấy từ danh sách làm cookie
+    stranger.cookies.set("hf_device", item["id"])           # try using an id taken from the list as the cookie
     assert stranger.get("/api/saved").json() == []
     stranger.get("/api/device")
-    assert r.tv_id not in [c.value for c in stranger.cookies.jar]   # server không gán id của TV cho stranger
-    # đồng thời id thật của TV không lọt vào bất kỳ thứ gì stranger nhìn thấy
+    assert r.tv_id not in [c.value for c in stranger.cookies.jar]   # server does not assign the TV's id to the stranger
+    # and the TV's real id does not leak into anything the stranger sees
     assert r.tv_id not in json.dumps(stranger.get("/api/devices/nearby").json())
 
 
@@ -58,12 +58,12 @@ def test_switch_off_notifies_controllers_and_clears_pending(app_module, make_cli
     other_id = real_id(other)
     other.post("/api/devices/heartbeat", json={"kind": "phone"})
     r.connect(); r.answer(True); r.tv_events(); r.phone_events()
-    other.post(f"/api/cast/{r.tv_pid}/connect")             # một yêu cầu khác đang chờ
+    other.post(f"/api/cast/{r.tv_pid}/connect")             # another request is pending
     r.tv_events()
     r.tv.patch("/api/cast/settings", json={"allow_control": False})
     assert ("unlinked", {"target_id": r.tv_pid}) in r.phone_events()
     r.tv.patch("/api/cast/settings", json={"allow_control": True})
-    assert r.answer(True, controller_id=app_module._cast_public_id(other_id)).status_code == 403   # yêu cầu cũ đã bị xóa
+    assert r.answer(True, controller_id=app_module._cast_public_id(other_id)).status_code == 403   # the old request has been deleted
 
 
 def test_command_reaches_newest_tab_only(app_module, make_client):
@@ -98,8 +98,8 @@ def test_stale_controller_is_swept_on_tv_heartbeat(app_module, make_client):
     r.connect(); r.answer(True); r.tv_events()
     t[0] += 30
     r.tv.post("/api/devices/heartbeat", json={"kind": "tv"})
-    assert app_module.cast_hub.linked_target(r.phone_id) == r.tv_id          # iPhone còn trong cửa sổ 40 giây
-    t[0] += 20                                                             # iPhone im lặng 50 giây
+    assert app_module.cast_hub.linked_target(r.phone_id) == r.tv_id          # iPhone still within the 40-second window
+    t[0] += 20                                                             # iPhone silent for 50 seconds
     r.tv.post("/api/devices/heartbeat", json={"kind": "tv"})
     assert app_module.cast_hub.linked_target(r.phone_id) is None
     assert ("controller_left", {"controller_id": r.phone_pid}) in r.tv_events()
@@ -112,7 +112,7 @@ def test_connect_is_republished_to_tv_after_retry_interval(app_module, make_clie
     r.connect(); r.tv_events()
     t[0] += 5
     r.connect()
-    assert r.tv_events() == []                       # quá sớm: không phát lại
+    assert r.tv_events() == []                       # too soon: no re-broadcast
     t[0] += 6
     assert r.connect().status_code == 202
     assert [e for e, _ in r.tv_events()] == ["connect_request"]

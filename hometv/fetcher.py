@@ -1,4 +1,4 @@
-"""Tải một playlist: giới hạn dung lượng/thời gian/chuyển hướng, kiểm tra SSRF ở MỌI bước."""
+"""Fetch a playlist: limit size/time/redirects, SSRF check at EVERY step."""
 import asyncio
 import zlib
 
@@ -18,39 +18,39 @@ class FetchError(Exception):
 
 
 def make_client(transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:
-    # trust_env=False: biến HTTP(S)_PROXY không được đẩy request qua proxy tự phân giải tên
+    # trust_env=False: HTTP(S)_PROXY vars must not route requests through a proxy that resolves names itself
     return httpx.AsyncClient(follow_redirects=False, trust_env=False,
                              headers={"user-agent": "HomeTV/1.0"}, transport=transport)
 
 
 async def _guard(url: str) -> None:
-    # Kiểm tra cú pháp + DNS trước khi gửi; DNS chạy trong thread để không chặn event loop
+    # Check syntax + DNS before sending; DNS runs in a thread so it does not block the event loop
     try:
         host = netguard.check_url(url)
         await asyncio.to_thread(netguard.check_host, host)
-    except netguard.Unresolvable:  # DNS lỗi tạm thời: thử lại theo lịch, không khóa nguồn
+    except netguard.Unresolvable:  # transient DNS error: retry on schedule, do not lock the source
         raise FetchError("Không kết nối được", retryable=True)
     except netguard.BlockedURL as e:
         raise FetchError(e.reason, retryable=False)
 
 
 def _decoder(encoding: str):
-    """Trả hàm giải nén từng đoạn có giới hạn đầu ra, hoặc None nếu không mã hóa."""
+    """Return a chunked decompressor with bounded output, or None if not encoded."""
     if encoding in ("", "identity"):
         return None
     if encoding not in ("gzip", "deflate"):
-        raise FetchError(BROKEN)  # br, gzip lồng nhau, ...: không giải mã
+        raise FetchError(BROKEN)  # br, nested gzip, ...: not decoded
     wbits = [16 + zlib.MAX_WBITS] if encoding == "gzip" else [zlib.MAX_WBITS, -zlib.MAX_WBITS]
     state = {"d": zlib.decompressobj(wbits[0]), "first": True}
 
     def feed(data: bytes, room: int) -> bytes:
-        """Giải nén data, tối đa room byte đầu ra (ném lỗi nếu vượt)."""
+        """Decompress data, at most room output bytes (raise if exceeded)."""
         out = bytearray()
         while True:
             try:
                 piece = state["d"].decompress(data, room - len(out) + 1)
             except zlib.error:
-                if state["first"] and len(wbits) > 1:  # deflate thô không có header zlib
+                if state["first"] and len(wbits) > 1:  # raw deflate without zlib header
                     state["d"] = zlib.decompressobj(wbits[1])
                     state["first"] = False
                     continue
@@ -99,7 +99,7 @@ async def _get(client: httpx.AsyncClient, url: str, timeout: float, max_bytes: i
             decode = _decoder(resp.headers.get("content-encoding", "").strip().lower())
             raw_total = 0
             body = bytearray()
-            # Đọc byte thô (không để httpx tự giải nén): đếm cả byte thô lẫn byte đã giải nén
+            # Read raw bytes (do not let httpx decompress): count both raw and decompressed bytes
             async for chunk in resp.aiter_raw():
                 raw_total += len(chunk)
                 if raw_total > max_bytes:
@@ -110,19 +110,19 @@ async def _get(client: httpx.AsyncClient, url: str, timeout: float, max_bytes: i
             if decode is not None and not decode.done():
                 raise FetchError(BROKEN)
             return bytes(body), current
-    raise FetchError("Quá nhiều lần chuyển hướng")  # không tới được
+    raise FetchError("Quá nhiều lần chuyển hướng")  # unreachable
 
 
 async def fetch_playlist_url(client: httpx.AsyncClient, url: str, *, timeout: float, max_bytes: int,
                              max_redirects: int = 5,
                              headers: dict[str, str] | None = None) -> tuple[bytes, str]:
-    """Như fetch_playlist, thêm header tuỳ chọn và trả URL cuối sau chuyển hướng."""
+    """Like fetch_playlist, plus optional headers; returns the final URL after redirects."""
     try:
-        async with asyncio.timeout(timeout):  # tổng thời gian cả lượt (mọi bước + body)
+        async with asyncio.timeout(timeout):  # total time for the whole run (all steps + body)
             return await _get(client, url, timeout, max_bytes, max_redirects, headers)
     except (TimeoutError, httpx.TimeoutException):
         raise FetchError("Hết thời gian chờ")
-    except (httpx.InvalidURL, UnicodeError):  # Location hỏng do httpx parse trong stream()
+    except (httpx.InvalidURL, UnicodeError):  # bad Location parsed by httpx inside stream()
         raise FetchError(netguard.INVALID, retryable=False)
     except httpx.RequestError:
         raise FetchError("Không kết nối được")

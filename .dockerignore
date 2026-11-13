@@ -10,6 +10,6 @@ downloads/
 .opencode/
 __pycache__/
 *.pyc
-# Bí mật (mật khẩu admin): chỉ vào container qua env_file, không vào image
+# Secrets (admin password): enter the container only via env_file, never the image
 .env
 **/.env

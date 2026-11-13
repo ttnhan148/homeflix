@@ -80,13 +80,13 @@ def test_connections_are_capped_and_evicted_stream_ends(app_module, make_client)
         tasks = []
         for _ in range(5):
             tasks.append(asyncio.create_task(asgi_stream(app_module.app, "/api/cast/events", cookies=cookies, until=stop, timeout=4)))
-            await asyncio.sleep(0.1)       # kết nối lần lượt để thứ tự đăng ký xác định
+            await asyncio.sleep(0.1)       # connect one at a time so the subscription order is deterministic
         assert len(app_module.cast_hub._subs[dev]) == 4
-        assert tasks[0].done()            # luồng cũ nhất bị đóng và kết thúc
+        assert tasks[0].done()            # the oldest stream is closed and finishes
         app_module.cast_hub.publish(dev, "bye", {})
         results = await asyncio.gather(*tasks)
         return results
 
     results = run(scenario())
-    assert all(r[3] for r in results)     # không luồng nào treo
+    assert all(r[3] for r in results)     # no stream hangs
     assert not app_module.cast_hub.has_subscribers(dev)

@@ -11,7 +11,7 @@ def test_open_creates_schema_wal_fk(tmp_path):
     c = hometv.db.conn()
     assert c.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert c.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 4
     tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"sources", "source_versions", "channels", "streams", "jobs", "schema_version"} <= tables
     idx = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='index'")}
@@ -126,7 +126,7 @@ def test_open_upgrades_v1_db(tmp_path):
     old.close()
     hometv.db.open(p)
     c = hometv.db.conn()
-    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 4
     tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"favorites", "recents"} <= tables
     hometv.db.close()
@@ -161,7 +161,31 @@ def test_open_upgrades_v2_db_adds_columns(tmp_path):
     c = hometv.db.conn()
     cols = {r[1] for r in c.execute("PRAGMA table_info(sources)")}
     assert {"next_check_at", "last_check_at"} <= cols
-    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 4
     assert "stream_health" in {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert c.execute("SELECT name FROM sources WHERE id='keep'").fetchone()[0] == "Giữ"
     hometv.db.close()
+
+
+def test_open_upgrades_v3_db_approves_pending_sources(tmp_path):
+    p = str(tmp_path / "v3.db")
+    hometv.db.open(p)
+    c = hometv.db.conn()
+    c.execute("INSERT INTO sources(id, name, url, rights_status) VALUES ('p', 'p', 'https://x/p', 'pending_review')")
+    c.execute("INSERT INTO sources(id, name, url, rights_status) VALUES ('r', 'r', 'https://x/r', 'rejected')")
+    c.execute("UPDATE schema_version SET version = 3")
+    hometv.db.close()
+    hometv.db.open(p)
+    c = hometv.db.conn()
+    assert dict(c.execute("SELECT id, rights_status FROM sources").fetchall()) == {"p": "approved", "r": "rejected"}
+    assert c.execute("SELECT version FROM schema_version").fetchone()[0] == 4
+    c.execute("UPDATE sources SET rights_status='pending_review' WHERE id='p'")
+    hometv.db.close()
+    hometv.db.open(p)   # already v4: migration does not run again
+    assert hometv.db.conn().execute("SELECT rights_status FROM sources WHERE id='p'").fetchone()[0] == "pending_review"
+    hometv.db.close()
+
+
+def test_new_source_defaults_to_approved(db):
+    db.execute("INSERT INTO sources(id, name, url) VALUES ('a', 'a', 'https://x/a')")
+    assert db.execute("SELECT rights_status FROM sources").fetchone()[0] == "approved"

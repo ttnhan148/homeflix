@@ -103,10 +103,10 @@ test('swipeAction: kéo đủ xa sang phải là phát, sang trái là bỏ', ()
 });
 
 test('swipeAction: ngưỡng theo bề rộng, giữ trong 72..120px', () => {
-  assert.equal(U.swipeAction(100, 300), 'play');   // 30% của 300 = 90
+  assert.equal(U.swipeAction(100, 300), 'play');   // 30% of 300 = 90
   assert.equal(U.swipeAction(85, 300), null);
-  assert.equal(U.swipeAction(75, 200), 'play');    // 30% = 60, nâng lên 72
-  assert.equal(U.swipeAction(-115, 1000), null);   // 30% = 300, hạ xuống 120
+  assert.equal(U.swipeAction(75, 200), 'play');    // 30% = 60, raised to 72
+  assert.equal(U.swipeAction(-115, 1000), null);   // 30% = 300, lowered to 120
   assert.equal(U.swipeAction(-121, 1000), 'remove');
 });
 
@@ -114,14 +114,24 @@ test('swipeAction: vuốt nhanh ngắn vẫn tính, vuốt chậm ngắn thì kh
   assert.equal(U.swipeAction(50, 400, 0.8), 'play');
   assert.equal(U.swipeAction(-50, 400, -0.8), 'remove');
   assert.equal(U.swipeAction(50, 400, 0.2), null);
-  assert.equal(U.swipeAction(20, 400, 1.5), null);   // quá ngắn: là chạm lệch tay
-  assert.equal(U.swipeAction(50, 400, -0.8), null);  // hất ngược chiều kéo
+  assert.equal(U.swipeAction(20, 400, 1.5), null);   // too short: an off-target tap
+  assert.equal(U.swipeAction(50, 400, -0.8), null);  // flick opposite to the drag direction
 });
 
 test('heroNext đi tới thẻ kế, hết hàng thì quay về đầu', () => {
   assert.equal(U.heroNext(0, 10), 1);
   assert.equal(U.heroNext(8, 10), 9);
   assert.equal(U.heroNext(9, 10), 0);
-  assert.equal(U.heroNext(4, 10, true), 0);  // đã cuộn tới cuối (nhiều thẻ hiện cùng lúc)
+  assert.equal(U.heroNext(4, 10, true), 0);  // already scrolled to the end (several cards visible at once)
   assert.equal(U.heroNext(0, 1), 0);
+});
+
+test('heroEase: eases in and out between 0 and 1', () => {
+  const H = createRequire(import.meta.url)('../../static/home-utils.js');
+  assert.equal(H.heroEase(0), 0);
+  assert.equal(H.heroEase(1), 1);
+  assert.equal(H.heroEase(0.5), 0.5);
+  assert.ok(H.heroEase(0.1) < 0.1 && H.heroEase(0.9) > 0.9);
+  assert.equal(H.heroEase(-1), 0);
+  assert.equal(H.heroEase(2), 1);
 });

@@ -3,17 +3,17 @@ OTHER_IP = "198.51.100.9"
 
 
 class Rig:
-    """Một iPhone và một TV cùng nhà; `sub` đóng vai kết nối SSE của TV."""
+    """An iPhone and a TV in the same home; `sub` plays the role of the TV's SSE connection."""
 
     def __init__(self, m, make_client, tv_ip="203.0.113.7", tv_sse=True):
         self.m = m
         self.phone, self.tv = make_client(), make_client(ip=tv_ip)
         self.phone_id = real_id(self.phone)
         self.tv_id = real_id(self.tv)
-        self.tv_pid = m._cast_public_id(self.tv_id)          # id công khai: thứ duy nhất xuất hiện trên đường truyền
+        self.tv_pid = m._cast_public_id(self.tv_id)          # public id: the only thing that appears on the wire
         self.phone_pid = m._cast_public_id(self.phone_id)
         self.tv.post("/api/devices/heartbeat", json={"kind": "tv"})
-        self.phone.post("/api/devices/heartbeat", json={"kind": "phone"})   # controller còn sống (không bị coi là đã rời)
+        self.phone.post("/api/devices/heartbeat", json={"kind": "phone"})   # controller is alive (not considered gone)
         self.sub = m.cast_hub.subscribe(self.tv_id) if tv_sse else None
         self.phone_sub = m.cast_hub.subscribe(self.phone_id)
 
@@ -97,13 +97,13 @@ def test_connect_when_control_switch_off_is_403(app_module, make_client):
 
 def test_answer_without_pending_or_from_other_household_is_403(app_module, make_client):
     r = Rig(app_module, make_client)
-    assert r.answer(True).status_code == 403                    # chưa ai xin
+    assert r.answer(True).status_code == 403                    # nobody has requested yet
     r.connect(); r.tv_events()
     stranger = make_client(ip=OTHER_IP)
     stranger.get("/api/device")
-    assert r.answer(True, client=stranger).status_code == 403   # người lạ không duyệt thay TV
-    assert r.answer("yes").status_code == 422                   # allow phải là bool
-    assert r.answer(True).status_code == 200                    # yêu cầu thật vẫn còn
+    assert r.answer(True, client=stranger).status_code == 403   # a stranger cannot approve on behalf of the TV
+    assert r.answer("yes").status_code == 422                   # allow must be a bool
+    assert r.answer(True).status_code == 200                    # the real request is still there
 
 
 def test_disconnect_unlinks_and_tv_gets_controller_left(app_module, make_client):
@@ -112,5 +112,5 @@ def test_disconnect_unlinks_and_tv_gets_controller_left(app_module, make_client)
     assert r.phone.delete("/api/cast/link").json() == {"status": "ok"}
     assert r.tv_events() == [("controller_left", {"controller_id": r.phone_pid})]
     assert app_module.cast_hub.linked_target(r.phone_id) is None
-    assert r.phone.delete("/api/cast/link").status_code == 200   # không có liên kết vẫn ok
+    assert r.phone.delete("/api/cast/link").status_code == 200   # no link is still ok
     assert r.tv_events() == []

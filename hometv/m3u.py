@@ -1,11 +1,11 @@
-"""Phân tích Extended M3U thành danh sách mục (Entry)."""
+"""Parse Extended M3U into a list of entries (Entry)."""
 import re
 from dataclasses import dataclass, field
 
 MAX_TEXT = 200
 MAX_URL = 2048
 
-# Thuộc tính: giá trị trong nháy kép, nháy đơn hoặc không nháy (không backtrack nặng)
+# Attributes: double-quoted, single-quoted or unquoted values (no heavy backtracking)
 _ATTR = re.compile(r"""([\w-]+)=("[^"]*"|'[^']*'|[^\s,"']*)""")
 
 
@@ -17,8 +17,8 @@ class Entry:
     tvg_name: str = ""
     tvg_logo: str = ""
     group_title: str = ""
-    http_headers: dict[str, str] = field(default_factory=dict)  # khoá: user_agent, referrer
-    drm_hint: bool = False  # chỉ đánh dấu, không lưu key
+    http_headers: dict[str, str] = field(default_factory=dict)  # keys: user_agent, referrer
+    drm_hint: bool = False  # flag only, keys are not stored
 
 
 @dataclass
@@ -29,14 +29,14 @@ class Playlist:
 
 
 def decode(body: bytes) -> str:
-    """Bỏ BOM, giải mã UTF-8 lỗi thì thay ký tự."""
+    """Strip BOM; replace characters on UTF-8 decode errors."""
     if body.startswith(b"\xef\xbb\xbf"):
         body = body[3:]
     return body.decode("utf-8", errors="replace")
 
 
 def _split_extinf(rest: str) -> tuple[str, str]:
-    """Tách (phần thuộc tính, tên) tại dấu phẩy đầu tiên nằm ngoài nháy của giá trị."""
+    """Split (attributes, name) at the first comma outside quoted values."""
     i, n = 0, len(rest)
     while i < n:
         c = rest[i]
@@ -44,7 +44,7 @@ def _split_extinf(rest: str) -> tuple[str, str]:
             return rest[:i], rest[i + 1:].strip()
         if c in "\"'" and i > 0 and rest[i - 1] == "=":
             j = rest.find(c, i + 1)
-            if j == -1:  # nháy không đóng: lấy dấu phẩy đầu tiên
+            if j == -1:  # unclosed quote: use the first comma
                 k = rest.find(",", i)
                 return (rest[:k], rest[k + 1:].strip()) if k != -1 else (rest, "")
             i = j + 1
@@ -67,7 +67,7 @@ def parse(text: str) -> Playlist:
     entries: list[Entry] = []
     skipped = 0
     has_header = False
-    pending: dict | None = None  # mục đang chờ URL
+    pending: dict | None = None  # entry waiting for its URL
 
     for raw in text.splitlines():
         line = raw.strip()
@@ -78,7 +78,7 @@ def parse(text: str) -> Playlist:
             if up.startswith("#EXTM3U"):
                 has_header = True
             elif up.startswith("#EXTINF:"):
-                if pending is not None:  # EXTINF trước đó không có URL
+                if pending is not None:  # previous EXTINF had no URL
                     skipped += 1
                 head, name = _split_extinf(line[8:])
                 a = _attrs(head)
@@ -103,8 +103,8 @@ def parse(text: str) -> Playlist:
                 k = line[10:].partition("=")[0].lower()
                 if "license_key" in k or "license_type" in k:
                     pending["drm_hint"] = True
-            continue  # dòng # khác: bỏ qua
-        # dòng URL
+            continue  # other # lines: skip
+        # URL line
         if pending is None:
             skipped += 1
             continue

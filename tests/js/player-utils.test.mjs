@@ -68,7 +68,7 @@ test('streamSource: proxy by default, direct while the remembered window lasts',
   assert.equal(U.streamSource(s, 'https://cdn.test/a.m3u8', now + 1000), 'https://cdn.test/a.m3u8');
   assert.equal(U.streamSource(s, 'https://cdn.test/a.m3u8', now + U.DIRECT_TTL_MS + 1), '/proxy/m3u8?url=https%3A%2F%2Fcdn.test%2Fa.m3u8');
   assert.equal(U.streamSource(boom, 'https://cdn.test/a.m3u8', now), '/proxy/m3u8?url=https%3A%2F%2Fcdn.test%2Fa.m3u8');
-  U.rememberDirect(boom, now); // storage bị chặn: không ném lỗi
+  U.rememberDirect(boom, now); // storage blocked: does not throw
 });
 
 test('isProxied tells a proxied source from a direct one', () => {

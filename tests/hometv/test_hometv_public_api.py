@@ -5,9 +5,9 @@ from tests.hometv.test_hometv_catalog import seed_channel, seed_stream
 
 
 def seed(app_module):
-    """Một kênh hợp lệ (nguồn doubo-vn đã duyệt) và một kênh thuộc nguồn chờ duyệt."""
+    """One valid channel (source doubo-vn, approved) and one channel from a disabled source."""
     c = hometv.db.conn()
-    c.execute("UPDATE sources SET rights_status='approved' WHERE id='doubo-vn'")
+    c.execute("UPDATE sources SET enabled=0 WHERE id='iptv-org-vn'")
     seed_channel(c, 1, "VTV1", "National TV", "https://l/vtv1.png")
     seed_stream(c, 1, 1, "doubo-vn", "http://cdn/vtv1/index.m3u8", headers={"user_agent": "SECRET-UA"},
                 quality="HD")
@@ -78,7 +78,7 @@ def test_public_api_uses_geo_enabled_for_hiding_but_play_still_works(app_module,
     assert c.get("/api/hometv/channels").json() == {"health": True, "channels": []}
     app_module.hometv_play_client = hometv.fetcher.make_client(
         httpx.MockTransport(lambda r: httpx.Response(200, content=b"#EXTM3U\n#EXTINF:4,\ns.ts\n")))
-    assert c.get("/api/hometv/play/1/index.m3u8").status_code == 200   # đường phát không lọc theo sức khỏe
+    assert c.get("/api/hometv/play/1/index.m3u8").status_code == 200   # the play path does not filter by health
     monkeypatch.setattr(geo, "current", lambda now=None: HealthMode("auto", False, "MY", 1.0))
     body = c.get("/api/hometv/channels").json()
     assert body["health"] is False and len(body["channels"]) == 1

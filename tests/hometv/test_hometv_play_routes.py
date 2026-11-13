@@ -12,7 +12,7 @@ CHAN = "http://cdn.example/live/ch/index.m3u8"
 
 def seed(url=CHAN, headers=None):
     c = hometv.db.conn()
-    c.execute("UPDATE sources SET rights_status='approved' WHERE id='doubo-vn'")
+    c.execute("UPDATE sources SET enabled=0 WHERE id='iptv-org-vn'")
     seed_channel(c, 1, "VTV1")
     seed_stream(c, 1, 1, "doubo-vn", url, headers=headers)
     seed_stream(c, 2, 1, "iptv-org-vn", "http://pending/x.m3u8")
@@ -23,7 +23,7 @@ def upstream(app_module, handler):
 
 
 def streamed(status, content, headers=None):
-    # Như transport thật: body chưa đọc, aiter_raw dùng được
+    # Like the real transport: body not yet read, aiter_raw usable
     return httpx.Response(status, headers=headers, stream=httpx.ByteStream(content))
 
 

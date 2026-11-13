@@ -22,7 +22,7 @@ def run(coro):
 
 
 def answers(ipinfo=None, country_is=None):
-    """ipinfo/country_is: chuỗi (200) hoặc None (503)."""
+    """ipinfo/country_is: a string (200) or None (503)."""
     def handler(request):
         if request.url.host == "ipinfo.io":
             return httpx.Response(200, text=ipinfo) if ipinfo is not None else httpx.Response(503)

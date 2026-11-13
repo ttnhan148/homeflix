@@ -1,4 +1,4 @@
-// Logic thuần cho cast: không đụng DOM, chạy được trong trình duyệt lẫn Node.
+// Pure logic for cast: no DOM access, runs in both the browser and Node.
 (function (root) {
   function backoffMs(attempt, base = 2000, max = 30000) {
     if (!Number.isFinite(attempt) || attempt < 0) return base;

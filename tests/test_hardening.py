@@ -26,7 +26,7 @@ def test_dot_slugs_rejected_and_never_delete_parent_dirs(app_module, tmp_path, m
     assert sentinel.exists() and os.path.exists(app_module.DB_FILE)
 
 def test_delete_never_removes_outside_download_dir(app_module, tmp_path, make_client):
-    # slug hợp lệ về chữ nhưng bị chèn thẳng vào DB: realpath phải chặn rmtree ra ngoài DOWNLOAD_DIR
+    # slug is lexically valid but injected directly into the DB: realpath must block rmtree outside DOWNLOAD_DIR
     c = make_client(); dev = real_id(c)
     app_module._db_upsert_device_movie(dev, {"slug": "a/../..", "name": "x", "episodes": [], "episode_states": {}})
     outside = tmp_path / "keep.txt"; outside.write_text("x")
@@ -61,11 +61,11 @@ def test_save_does_not_overwrite_server_position_with_stale_copy(make_client):
 def test_late_report_for_previous_episode_is_ignored(app_module, make_client):
     c = make_client(); saved(c)
     report(c, U1, 1, 2700)
-    report(c, U2)                       # play(ep2): chuyển tập, chưa có vị trí
+    report(c, U2)                       # play(ep2): episode switch, no position yet
     d = os.path.join(app_module.DOWNLOAD_DIR, "phim-a"); os.makedirs(d)
     open(os.path.join(d, "Tap-2.mp4"), "wb").write(b"x")
     app_module._db_update_download_status("phim-a", "Tập 2", "completed")
-    report(c, U1, 2700, 2700)           # heartbeat/pause của tập 1 đến muộn
+    report(c, U1, 2700, 2700)           # late heartbeat/pause for episode 1
     report(c, U2, 20, 2700)
     m = current(c)
     assert m["last_watched_url"] == U2 and m["position"] == 20
@@ -77,9 +77,9 @@ def test_explicit_play_of_episode_clears_its_scheduled_deletion(app_module, make
     d = os.path.join(app_module.DOWNLOAD_DIR, "phim-a"); os.makedirs(d)
     open(os.path.join(d, "Tap-1.mp4"), "wb").write(b"x")
     app_module._db_update_download_status("phim-a", "Tập 1", "completed")
-    report(c, U2)                        # Tập 1 xong -> lên lịch xóa
+    report(c, U2)                        # Episode 1 done -> deletion scheduled
     assert app_module._db_get_download_status("phim-a", "Tập 1")["delete_at"] is not None
-    report(c, U1)                        # người dùng xem lại tập 1
+    report(c, U1)                        # user rewatches episode 1
     assert app_module._db_get_download_status("phim-a", "Tập 1")["delete_at"] is None
 
 # --- #6 legacy adoption ---
@@ -91,7 +91,7 @@ def _legacy(m, slug):
 
 def test_cookieless_root_fetch_does_not_take_legacy_library(app_module, make_client):
     _legacy(app_module, "cu-1")
-    make_client(ip="198.51.100.1").get("/")           # bot xem trước link / health check
+    make_client(ip="198.51.100.1").get("/")           # link-preview bot / health check
     real = make_client(ip="203.0.113.7")
     assert [m["slug"] for m in real.get("/api/saved").json()] == ["cu-1"]
 

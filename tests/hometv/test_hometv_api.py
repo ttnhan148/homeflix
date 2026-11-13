@@ -18,7 +18,7 @@ def test_non_admin_403(pw, make_client):
 
 
 def test_every_route_protected(app_module, pw, make_client):
-    # Mọi route của router đều phải chặn non-admin
+    # Every route of the router must block non-admins
     c = make_client()
     routes = hometv.api.make_router(app_module.require_admin).routes
     assert len(routes) == 5
@@ -39,7 +39,7 @@ def test_list_has_seeded_defaults(admin_client):
 def test_create_and_validate(admin_client, public_dns):
     r = admin_client.post(BASE, json={"name": "Nguồn Thử", "url": URL})
     assert r.status_code == 201
-    assert r.json()["id"] == "nguon-thu" and r.json()["rights_status"] == "pending_review"
+    assert r.json()["id"] == "nguon-thu" and r.json()["rights_status"] == "approved"
     r = admin_client.post(BASE, json={"name": "", "url": URL})
     assert r.status_code == 422 and "name" in r.json()["errors"]
     r = admin_client.post(BASE, json={"name": "X"})

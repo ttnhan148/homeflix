@@ -1,4 +1,4 @@
-"""renderEpisodeList nhận thêm tuỳ chọn dòng, đơn vị, móc decorate (HomeTV dùng làm danh sách phát)."""
+"""renderEpisodeList accepts extra options for row, unit, and a decorate hook (HomeTV uses it as the playlist)."""
 URL = "http://homeflix.test/"
 
 RENDER = """(opts) => {

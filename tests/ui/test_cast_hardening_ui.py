@@ -22,7 +22,7 @@ def test_resume_does_not_drop_live_session_while_state_refresh_is_in_flight(app_
     push_state(page, tv)
     page.wait_for_selector("#castMiniBar:not([hidden])")
     tv.client.post("/api/cast/state", json=STATE)
-    # mô phỏng iPhone ngủ 10 giây (đồng hồ nhảy), trong khi lần lấy trạng thái sau khi thức còn đang bay
+    # simulate the iPhone sleeping 10 seconds (clock jump) while the post-wake state fetch is still in flight
     page.evaluate("""() => { const real = Date.now.bind(Date); window.__skew = 0; Date.now = () => real() + window.__skew;
         const api = HFCast.api; HFCast.api = (m, p, b) => p.startsWith('/api/cast/state/')
             ? new Promise(r => setTimeout(() => api(m, p, b).then(r), 800)) : api(m, p, b); }""")
@@ -71,7 +71,7 @@ def test_unlinked_event_from_tv_clears_phone_ui(app_module, make_client, open_ap
     page.wait_for_selector("#castMiniBar:not([hidden])")
     page.es_emit("unlinked", {"target_id": "someone-else"})
     page.wait_for_timeout(100)
-    assert page.evaluate("HFCast.linked") is not None                    # của TV khác: bỏ qua
+    assert page.evaluate("HFCast.linked") is not None                    # from another TV: ignored
     page.es_emit("unlinked", {"target_id": tv.id})
     page.wait_for_selector("#castToast:not([hidden])")
     assert "tắt điều khiển" in page.locator("#castToast").inner_text()
@@ -83,7 +83,7 @@ def test_hello_pending_requests_show_dialog_once(open_app):
     page = open_tv(open_app)
     page.es_emit("hello", {"device_id": "tv", "controllers": [], "pending": [{"controller_id": "p1", "controller_name": "iPhone"}]})
     page.wait_for_selector("#castConfirm:not([hidden])")
-    page.es_emit("connect_request", {"controller_id": "p1", "controller_name": "iPhone"})   # trùng: không xếp hàng lần hai
+    page.es_emit("connect_request", {"controller_id": "p1", "controller_name": "iPhone"})   # duplicate: not queued twice
     tap(page, "#castAllow")
     assert posts(page, "/api/cast/requests/p1") == [{"allow": True}]
     assert page.locator("#castConfirm").is_hidden()

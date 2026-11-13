@@ -1,2 +1,2 @@
-# Bỏ qua khi build knowledge graph (cú pháp giống .gitignore)
+# Ignored when building the knowledge graph (same syntax as .gitignore)
 tests/

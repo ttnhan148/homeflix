@@ -19,7 +19,7 @@ def test_seed_defaults_once(db):
     assert sources.delete("doubo-vn") is True
     assert sources.seed_defaults(3.0) == 0
     s = sources.internal("iptv-org-vn")
-    assert s["rights_status"] == "pending_review" and s["enabled"] and s["priority"] == 20
+    assert s["rights_status"] == "approved" and s["enabled"] and s["priority"] == 20
     assert s["refresh_interval"] == 21600 and s["next_fetch_at"] == 1.0
     assert sources.get("iptv-org-vn")["enabled"] is True
     assert [d["priority"] for d in sources.DEFAULT_SOURCES] == [10, 20, 30, 50]
@@ -44,7 +44,7 @@ def test_create_validates(db, public_dns):
 
 def test_create_ok(db, public_dns):
     s = sources.create("Nguồn Thử", URL, 5.0)
-    assert s["id"] == "nguon-thu" and s["rights_status"] == "pending_review"
+    assert s["id"] == "nguon-thu" and s["rights_status"] == "approved"
     assert s["enabled"] is True and s["refresh_hours"] == 6
     assert sources.internal("nguon-thu")["next_fetch_at"] == 5.0
 
@@ -214,7 +214,7 @@ def test_list_sources_fetching_flag(db, public_dns):
     assert set(s) == {"id", "name", "url", "enabled", "priority", "rights_status", "refresh_hours",
                       "last_fetch_at", "last_success_at", "last_error", "channel_count",
                       "stream_count", "fetching"}
-    assert sources.list_sources(1600.0)[0]["fetching"] is False  # 700 giây trước
+    assert sources.list_sources(1600.0)[0]["fetching"] is False  # 700 seconds ago
 
 
 def test_init_seeds(app_module):

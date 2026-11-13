@@ -21,7 +21,7 @@ def app_module(tmp_path, monkeypatch):
     m.init_db()
     hometv.init(str(tmp_path / "hometv.db"))
     yield m
-    m.hometv_play_client = None  # test có thể gán client giả; không để rò sang test khác
+    m.hometv_play_client = None  # tests may assign a fake client; don't let it leak into other tests
     hometv.db.close()
     if m._db_conn is not None:
         m._db_conn.close()
@@ -29,7 +29,7 @@ def app_module(tmp_path, monkeypatch):
 
 @pytest.fixture
 def db(tmp_path):
-    # Chỉ schema, không có nguồn mặc định
+    # Schema only, no default sources
     hometv.db.open(str(tmp_path / "h.db"))
     yield hometv.db.conn()
     hometv.db.close()
@@ -57,6 +57,6 @@ def admin_client(pw, make_client):
 
 @pytest.fixture
 def public_dns(monkeypatch):
-    # DNS giả: mọi host phân giải về IP công khai, không chạm mạng thật
+    # Fake DNS: every host resolves to a public IP, never touching the real network
     import hometv.netguard
     monkeypatch.setattr(hometv.netguard, "resolve", lambda host: ["185.199.108.153"])

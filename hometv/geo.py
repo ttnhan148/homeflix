@@ -1,5 +1,5 @@
-"""Máy chủ có đang ở Việt Nam không: CDN truyền hình VN chặn IP ngoài nước, nên bộ kiểm stream
-chỉ bật khi IP công khai của máy chủ ở VN (tắt tay/bật tay bằng HOMETV_HEALTH)."""
+"""Is the server in Vietnam: VN TV CDNs block foreign IPs, so the stream checker
+is only enabled when the server's public IP is in VN (force off/on with HOMETV_HEALTH)."""
 import dataclasses
 import re
 import time
@@ -41,7 +41,7 @@ def _code(text: str) -> str | None:
 
 
 async def detect_country(client: httpx.AsyncClient) -> str | None:
-    """Mã quốc gia 2 chữ hoa của IP công khai; None nếu không nơi nào trả lời hợp lệ."""
+    """Uppercase 2-letter country code of the public IP; None if no service answered validly."""
     for url, as_json in (("https://ipinfo.io/country", False), ("https://api.country.is", True)):
         try:
             r = await client.get(url, timeout=TIMEOUT)
@@ -66,7 +66,7 @@ async def refresh_mode(client: httpx.AsyncClient, mode: str, now: float) -> Heal
         _state = HealthMode(mode, False, country or prev.country, now)
     elif country is not None:
         _state = HealthMode(mode, country == "VN", country, now)
-    else:  # dò lỗi: giữ kết quả cũ (current() tự tắt khi quá STALE)
+    else:  # lookup failed: keep the old result (current() turns itself off once past STALE)
         _state = HealthMode(mode, prev.enabled if prev.mode == "auto" else False,
                             prev.country if prev.mode == "auto" else None, prev.checked_at)
     return _state

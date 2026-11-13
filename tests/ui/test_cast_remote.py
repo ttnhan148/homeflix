@@ -8,7 +8,7 @@ STATE = {"slug": "phim-a", "title": "Phim A", "episode": "Tập 2", "position": 
 
 def link_phone(app_module, make_client, open_app):
     page, tv = _link_phone(app_module, make_client, open_app)
-    tap(page, "#castSheetClose")        # tờ "Phát lên" vẫn mở sau khi nối: đóng để chạm được thanh nhỏ
+    tap(page, "#castSheetClose")        # the "Phát lên" sheet stays open after connecting: close it to reach the mini bar
     return page, tv
 
 
@@ -32,7 +32,7 @@ def open_remote(page):
 
 def test_mini_bar_shows_state_above_tabbar_and_opens_remote(app_module, make_client, open_app):
     page, tv = link_phone(app_module, make_client, open_app)
-    assert page.locator("#castMiniBar").is_hidden()          # chưa có state
+    assert page.locator("#castMiniBar").is_hidden()          # no state yet
     push_state(page, tv)
     page.wait_for_selector("#castMiniBar:not([hidden])")
     assert page.locator("#castMiniTitle").inner_text() == "Phim A" and "Tập 2" in page.locator("#castMiniEp").inner_text()
@@ -139,7 +139,7 @@ def test_resume_after_sleep_fetches_state_and_drops_dead_link(app_module, make_c
     page.evaluate("HFCast.emit('resume', {})")
     page.wait_for_selector("#castMiniBar:not([hidden])")
     assert page.locator("#castMiniTitle").inner_text() == "Phim A"
-    app_module.cast_hub._state.pop(tv.real_id)                        # TV khởi động lại: không còn trạng thái
+    app_module.cast_hub._state.pop(tv.real_id)                        # TV restarted: no state left
     page.evaluate("HFCast.emit('resume', {})")
     page.wait_for_selector("#castToast:not([hidden])")
     assert page.evaluate("HFCast.linked") is None

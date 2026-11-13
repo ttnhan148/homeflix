@@ -1,4 +1,4 @@
-"""Route công khai của HomeTV: danh sách kênh, stream, yêu thích, gần đây, và đường phát qua proxy."""
+"""HomeTV public routes: channel list, streams, favorites, recents, and proxied playback."""
 import asyncio
 import time
 from typing import Callable
@@ -58,7 +58,7 @@ def make_public_router(get_client: Callable[[], httpx.AsyncClient]) -> APIRouter
         return Response(status_code=204) if ok else _not_found()
 
     async def _play(request: Request, stream_id: int, url: str | None):
-        """Phát một URL của stream: playlist thì viết lại, còn lại stream thẳng về client (không ghi đĩa)."""
+        """Play one stream URL: playlists are rewritten, everything else streams straight to the client (no disk writes)."""
         stream = await _db(catalog.valid_stream, stream_id)
         if stream is None:
             return _not_found("Kênh không còn khả dụng")
@@ -75,7 +75,7 @@ def make_public_router(get_client: Callable[[], httpx.AsyncClient]) -> APIRouter
         chunks = resp.aiter_raw().__aiter__()
         playlist = by_hint
         if not by_hint and not play.is_direct_url(final):
-            # CDN trả playlist với Content-Type lạ hoặc URL không có đuôi: nhận ra qua byte đầu
+            # CDN returns playlists with odd Content-Type or extensionless URLs: detect via leading bytes
             first = await anext(chunks, b"")
             playlist = play.looks_like_playlist(first)
         if playlist:
@@ -87,7 +87,7 @@ def make_public_router(get_client: Callable[[], httpx.AsyncClient]) -> APIRouter
             finally:
                 await resp.aclose()
             return Response(text, media_type=PLAYLIST_TYPE, headers={"Cache-Control": "no-store"})
-        if is_index:  # index.m3u8 của stream mà nội dung không phải playlist: để client thử nguồn khác
+        if is_index:  # stream index.m3u8 whose content is not a playlist: let the client try another source
             await resp.aclose()
             return PlainTextResponse("Không phải playlist HLS", status_code=502, headers={"Cache-Control": "no-store"})
 

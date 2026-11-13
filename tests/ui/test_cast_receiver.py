@@ -178,13 +178,13 @@ def test_state_is_reported_while_playing_with_controller_and_not_without(open_ap
     cast_play(page)
     page.evaluate("Object.defineProperty(video, 'paused', {configurable: true, get: () => false})")
     page.wait_for_timeout(300)
-    assert posts(page, "/api/cast/state") == []                       # chưa có controller: không báo
+    assert posts(page, "/api/cast/state") == []                       # no controller yet: no report
     page.es_emit("controller_joined", {"controller_id": "c1", "name": "iPhone"})
     page.wait_for_timeout(300)
     states = posts(page, "/api/cast/state")
     assert len(states) >= 3 and states[-1]["slug"] == "phim-le-1" and states[-1]["episode"] == "Tập 1" and states[-1]["playing"] is True
     assert states[-1]["title"] == "phim-le-1"
-    assert states[-1]["autoNext"] is True and states[-1]["autoIntro"] is False   # cài đặt thật của TV, để iPhone hiện đúng
+    assert states[-1]["autoNext"] is True and states[-1]["autoIntro"] is False   # the TV's real settings, so the iPhone shows them correctly
     page.es_emit("command", {"type": "stop"})
     page.wait_for_timeout(100)
     assert posts(page, "/api/cast/state")[-1]["slug"] is None and posts(page, "/api/cast/state")[-1]["playing"] is False
@@ -219,4 +219,4 @@ def test_receiver_inactive_on_iphone(open_app):
     page.evaluate("HFCast.emit('command', {type: 'play', slug: 'phim-le-1', episode_url: null, position: null})")
     page.wait_for_timeout(300)
     assert not page.evaluate(PLAYER_ACTIVE)
-    assert page.locator("#castBtn").is_visible()   # iPhone là bên điều khiển: có nút "Phát lên TV"
+    assert page.locator("#castBtn").is_visible()   # the iPhone is the controller: has the "Phát lên TV" button

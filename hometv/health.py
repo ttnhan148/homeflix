@@ -1,6 +1,6 @@
-"""Đo sức khỏe một stream: tải playlist và đoạn đầu bằng Python, ffprobe đọc file tạm.
+"""Measure a stream's health: fetch the playlist and first segment in Python, ffprobe reads a temp file.
 
-Bản gọn: đường tải dùng play.open_upstream (chưa chặn SSRF, chưa giới hạn tài nguyên ngoài các mức dưới đây)."""
+Lite version: fetching uses play.open_upstream (no SSRF blocking yet, no resource limits beyond those below)."""
 import asyncio
 import json
 import os
@@ -47,11 +47,11 @@ class ProbeError(Exception):
 
 
 class _Dead(Exception):
-    """Stream chết với lý do ngắn (đã là chuỗi hiển thị)."""
+    """Dead stream with a short reason (already a display string)."""
 
 
 async def ffprobe(data: bytes) -> dict:
-    """Chạy ffprobe trên byte đã tải (qua file tạm, xoá ngay); trả JSON đã parse."""
+    """Run ffprobe on downloaded bytes (via a temp file, deleted immediately); return parsed JSON."""
     fd, path = tempfile.mkstemp(prefix="hometv-probe-")
     try:
         with os.fdopen(fd, "wb") as f:
@@ -94,26 +94,26 @@ async def _open(client, url, headers):
 
 
 async def _playlist(client, url, headers) -> tuple[str, str, int]:
-    """Trả (nội dung, URL cuối, độ trễ ms tới khi mở được kết nối)."""
+    """Return (content, final URL, latency in ms until the connection opened)."""
     t0 = time.monotonic()
     resp, final = await _open(client, url, headers)
     latency = int((time.monotonic() - t0) * 1000)
     try:
-        body = b""
+        body = bytearray()
         async for chunk in resp.aiter_raw():
             body += chunk
             if len(body) > PLAYLIST_CAP:
                 break
     finally:
         await resp.aclose()
-    text = body.decode("utf-8", errors="replace").lstrip("﻿ \t\r\n")
-    if not text.startswith("#EXTM3U"):
+    text = play.playlist_text(bytes(body))
+    if text is None:
         raise _Dead(DEAD_PLAYLIST)
     return text, final, latency
 
 
 async def _download(client, url, headers, cap) -> tuple[bytes, float, int]:
-    """Tải tối đa cap byte. Trả (dữ liệu, giây tải, độ trễ ms)."""
+    """Download at most cap bytes. Return (data, download seconds, latency ms)."""
     t0 = time.monotonic()
     resp, _ = await _open(client, url, headers)
     latency = int((time.monotonic() - t0) * 1000)
@@ -130,7 +130,7 @@ async def _download(client, url, headers, cap) -> tuple[bytes, float, int]:
 
 
 def _pick_variant(master: m3u8.M3U8) -> str | None:
-    """Variant có độ phân giải khai báo và BANDWIDTH thấp nhất; không có thì variant đầu."""
+    """Variant with a declared resolution and the lowest BANDWIDTH; otherwise the first variant."""
     plays = [p for p in master.playlists if p.absolute_uri]
     if not plays:
         return None
@@ -183,7 +183,7 @@ async def _measure(client, url, headers, probe) -> HealthResult:
 
 async def check_stream(client: httpx.AsyncClient, url: str, headers: dict[str, str], *,
                        probe=ffprobe) -> HealthResult:
-    """Không bao giờ ném lỗi, trừ FfprobeMissing (cả bộ kiểm không chạy được)."""
+    """Never raises, except FfprobeMissing (the whole checker cannot run)."""
     try:
         async with asyncio.timeout(DOWNLOAD_TIMEOUT * 3 + PROBE_TIMEOUT):
             return await _measure(client, url, headers, probe)

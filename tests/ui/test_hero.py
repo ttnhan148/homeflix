@@ -113,8 +113,8 @@ def test_tv_hero_arrow_keys_change_slide_and_buttons_focusable(open_app):
     page.wait_for_selector(".hero-slide")
     page.focus(".hero-btn-play")
     assert page.evaluate("document.activeElement.classList.contains('hero-btn-play')")
-    page.keyboard.press("ArrowRight")  # Phát -> Lưu
-    page.keyboard.press("ArrowRight")  # Lưu -> slide kế
+    page.keyboard.press("ArrowRight")  # Play -> Save
+    page.keyboard.press("ArrowRight")  # Save -> next slide
     page.wait_for_function("heroState.index === 1")
     page.focus(".hero-btn-save")
     assert page.evaluate("document.activeElement.classList.contains('hero-btn-save')")
@@ -191,3 +191,36 @@ def test_hero_does_not_auto_slide_when_off_screen(open_app):
     page.clock.fast_forward(AUTO_MS * 2)
     page.wait_for_timeout(300)
     assert page.evaluate("heroState.index") == 0
+
+
+def test_hero_auto_slide_animates_without_snap_fighting(open_app):
+    """Auto-advance is driven frame by frame with snapping off, then snapping comes back once the card has landed."""
+    page = _clocked(open_app)
+    page.evaluate("""() => { const t = document.getElementById('heroTrack'); window.__snapDuring = [];
+        new MutationObserver(() => window.__snapDuring.push(getComputedStyle(t).scrollSnapType)).observe(t, {attributes: true}); }""")
+    page.clock.fast_forward(AUTO_MS + 50)
+    page.wait_for_function("heroState.index === 1")
+    page.wait_for_function(f"Math.abs({LEFT} - {_slide_left(page, 1)}) < 2")
+    page.wait_for_function("!document.getElementById('heroTrack').classList.contains('is-animating')")
+    assert "none" in page.evaluate("window.__snapDuring")
+    assert page.evaluate("getComputedStyle(document.getElementById('heroTrack')).scrollSnapType") != "none"
+
+
+def test_hero_wrap_fades_back_to_first_instead_of_scrolling_through(open_app):
+    page = _clocked(open_app)
+    page.evaluate("(() => { const t = document.getElementById('heroTrack'); t.scrollTo({left: t.scrollWidth, behavior: 'instant'}); })()")
+    page.wait_for_function("heroState.index === 9")
+    page.evaluate("""() => { const t = document.getElementById('heroTrack'); window.__lefts = [];
+        t.addEventListener('scroll', () => window.__lefts.push(t.scrollLeft)); }""")
+    page.clock.fast_forward(AUTO_MS + 50)
+    page.wait_for_function(f"heroState.index === 0 && {LEFT} < 2")
+    page.wait_for_function("getComputedStyle(document.getElementById('heroTrack')).opacity === '1'")
+    mid = page.evaluate("window.__lefts.filter(x => x > 2)")
+    first = mid[0] if mid else 0
+    assert all(abs(x - first) < 2 for x in mid), "wrap must jump, not scroll through the middle cards"
+
+
+def test_hero_images_preload_eagerly(open_app):
+    page = _open(open_app)
+    page.wait_for_selector(".hero-slide")
+    assert set(page.eval_on_selector_all("#hero img.hero-bg", "els => els.map(e => e.loading + '/' + e.decoding)")) == {"eager/async"}

@@ -1,11 +1,11 @@
-// Nối DOM cho tự qua tập (đếm ngược 10 giây, có nút Hủy). Cài đặt lưu theo thiết bị trong localStorage.
+// DOM wiring for auto-next episode (10-second countdown with a Cancel button). Settings are stored per device in localStorage.
 (function (root) {
   const U = root.HFPlayerUtils;
   const cfg = Object.assign({ tickMs: 1000, countdownSeconds: 10 }, root.__HF_PLAYER_CONFIG || {});
   let video = null, getEpisodes = null, playNext = null, storage = null;
   let prefs = U.DEFAULT_PREFS;
   let timer = null, secondsLeft = 0;
-  let introHandled = false; // đã tự nhảy intro trong tập này
+  let introHandled = false; // intro already auto-skipped in this episode
 
   const $ = (id) => document.getElementById(id);
 

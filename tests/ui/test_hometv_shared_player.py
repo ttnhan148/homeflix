@@ -1,4 +1,4 @@
-"""Khung player dùng chung (macro player_shell) và CSS theatre cho tv-player-active."""
+"""Shared player frame (player_shell macro) and theatre CSS for tv-player-active."""
 URL = "http://homeflix.test/"
 
 

@@ -58,7 +58,7 @@ def test_progress_is_per_device(make_client):
 @pytest.mark.parametrize("bad", ["abc", None, float("nan"), float("inf"), [1], {"a": 1}])
 def test_garbage_position_rejected_without_writing(make_client, bad):
     c = make_client(); saved(c); prog(c, U1, 40, 2700)
-    # httpx từ chối NaN/inf trong json=, nên gửi JSON thô như một client không chuẩn có thể làm
+    # httpx rejects NaN/inf in json=, so send raw JSON as a non-conforming client might
     raw = json.dumps({"slug": "phim-a", "last_watched_episode": "Tập 1", "last_watched_url": U1,
                       "position": bad, "duration": 2700})
     r = c.post("/api/saved/progress", content=raw, headers={"content-type": "application/json"})

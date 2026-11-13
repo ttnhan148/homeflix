@@ -1,4 +1,4 @@
-"""Cài đặt hệ thống: khai báo, kiểm tra và lưu trong bảng app_settings (khóa 'setting:<key>')."""
+"""System settings: declaration, validation and storage in the app_settings table (key 'setting:<key>')."""
 import json
 import logging
 import sqlite3
@@ -41,7 +41,7 @@ class SettingsError(ValueError):
 
 
 def check(key: str, value) -> int | bool:
-    """Trả giá trị đã hợp lệ, hoặc ném SettingsError({key: lý do})."""
+    """Return the validated value, or raise SettingsError({key: reason})."""
     s = _BY_KEY.get(key)
     if s is None:
         raise SettingsError({key: "không có cài đặt này"})
@@ -49,7 +49,7 @@ def check(key: str, value) -> int | bool:
         if not isinstance(value, bool):
             raise SettingsError({key: "phải là true hoặc false"})
         return value
-    # bool là con của int nên loại trước
+    # bool is a subclass of int, so exclude it first
     if isinstance(value, bool) or not isinstance(value, int):
         raise SettingsError({key: "phải là số nguyên"})
     if (s.min is not None and value < s.min) or (s.max is not None and value > s.max):

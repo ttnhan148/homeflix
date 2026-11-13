@@ -87,7 +87,7 @@ def test_link_unlink_controllers_of():
     hub, _ = hub_with_clock()
     hub.link("p1", "tv"); hub.link("p2", "tv")
     assert sorted(hub.controllers_of("tv")) == ["p1", "p2"] and hub.linked_target("p1") == "tv"
-    hub.link("p1", "tv2")  # một controller chỉ liên kết một TV
+    hub.link("p1", "tv2")  # a controller links to only one TV
     assert hub.controllers_of("tv") == ["p2"] and hub.linked_target("p1") == "tv2"
     assert hub.unlink("p2") == "tv" and hub.unlink("p2") is None
     assert hub.controllers_of("tv") == []
@@ -105,13 +105,13 @@ def test_pending_retry_after_interval_pending_for_and_clear():
     hub, t = hub_with_clock()
     assert hub.add_pending("tv", "p") is True
     t[0] += 5
-    assert hub.add_pending("tv", "p") is False            # dưới 10 giây: không phát lại
+    assert hub.add_pending("tv", "p") is False            # under 10 seconds: no re-broadcast
     t[0] += 6
-    assert hub.add_pending("tv", "p") is True             # quá 10 giây: cho phép phát lại yêu cầu
+    assert hub.add_pending("tv", "p") is True             # over 10 seconds: re-broadcasting the request is allowed
     hub.add_pending("tv", "q")
     assert sorted(hub.pending_for("tv")) == ["p", "q"] and hub.pending_for("other") == []
     t[0] += 601
-    assert hub.pending_for("tv") == []                    # yêu cầu quá cũ bị bỏ
+    assert hub.pending_for("tv") == []                    # stale request is dropped
     hub.add_pending("tv", "r")
     hub.clear_pending("tv")
     assert hub.pending_for("tv") == [] and hub.add_pending("tv", "r") is True

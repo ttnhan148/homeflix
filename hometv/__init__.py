@@ -1,4 +1,4 @@
-"""HomeTV: thu thập nguồn IPTV vào hometv.db."""
+"""HomeTV: collect IPTV sources into hometv.db."""
 import time
 
 from hometv import (api, catalog, db, fetcher, geo, health, health_api, health_scheduler, health_store, play,
@@ -6,7 +6,7 @@ from hometv import (api, catalog, db, fetcher, geo, health, health_api, health_s
 
 
 def init(path: str) -> None:
-    """Mở hometv.db và tạo schema và nguồn mặc định lần đầu."""
+    """Open hometv.db and create the schema and default sources on first run."""
     db.open(path)
     sources.seed_defaults(time.time())
 

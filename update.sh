@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Kiểm tra quyền root
+# Check for root
 if [ "$EUID" -ne 0 ]; then 
   echo "Vui lòng chạy script với quyền root (sudo ./update.sh)"
   exit 1
@@ -16,7 +16,7 @@ echo "      CẬP NHẬT HOMEFLIX PROXY PLAYER   "
 echo "======================================="
 
 
-# 1. Kiểm tra và cài đặt ffmpeg nếu thiếu
+# 1. Check for ffmpeg and install it if missing
 echo "Đang kiểm tra và cập nhật dependencies..."
 if ! command -v ffmpeg >/dev/null 2>&1; then
     echo "Không tìm thấy ffmpeg. Đang tự động cài đặt..."
@@ -33,7 +33,7 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
     fi
 fi
 
-# 2. Dừng và gỡ bỏ service m3u8player cũ nếu đang chạy
+# 2. Stop and remove the old m3u8player service if running
 if systemctl is-active --quiet "$OLD_SERVICE_NAME"; then
     echo "Đang dừng dịch vụ $OLD_SERVICE_NAME cũ..."
     systemctl stop "$OLD_SERVICE_NAME"
@@ -47,7 +47,7 @@ if [ -f "/etc/systemd/system/${OLD_SERVICE_NAME}.service" ]; then
     rm -f "/etc/systemd/system/${OLD_SERVICE_NAME}.service"
 fi
 
-# 3. Tạo thư mục cài đặt mới nếu chưa tồn tại
+# 3. Create the new install directory if it does not exist
 if [ ! -d "$INSTALL_DIR" ]; then
     echo "Tạo thư mục cài đặt mới tại $INSTALL_DIR..."
     mkdir -p "$INSTALL_DIR"
@@ -56,13 +56,13 @@ if [ ! -d "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR/downloads"
 fi
 
-# 4. Tạo môi trường ảo venv nếu chưa có (khi nâng cấp từ phiên bản cũ không đầy đủ)
+# 4. Create the venv if missing (when upgrading from an incomplete old version)
 if [ ! -d "$INSTALL_DIR/venv" ]; then
     echo "Tạo môi trường ảo venv..."
     python3 -m venv "$INSTALL_DIR/venv"
 fi
 
-# 5. Sao chép các tệp mới đè lên thư mục cài đặt
+# 5. Copy new files over the install directory
 echo "[1/4] Đang cập nhật mã nguồn mới..."
 cp app.py "$INSTALL_DIR/"
 cp migrate_json_to_sqlite.py "$INSTALL_DIR/"
@@ -70,7 +70,7 @@ cp -r templates/index.html "$INSTALL_DIR/templates/"
 cp -r static "$INSTALL_DIR/"
 cp requirements.txt "$INSTALL_DIR/"
 
-# 6. Đảm bảo cấu hình systemd cho homeflix.service tồn tại
+# 6. Ensure the systemd config for homeflix.service exists
 cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service
 [Unit]
 Description=HomeFlix Proxy Player FastAPI Service
@@ -91,20 +91,20 @@ EOF
 systemctl daemon-reload
 systemctl enable ${SERVICE_NAME}
 
-# 3. Phân quyền lại cho thư mục cài đặt
+# 3. Reset permissions on the install directory
 echo "[2/4] Thiết lập lại phân quyền..."
 chown -R root:root "$INSTALL_DIR"
 chmod -R 755 "$INSTALL_DIR"
 chmod -R 777 "$INSTALL_DIR/cache"
 chmod -R 777 "$INSTALL_DIR/downloads" 2>/dev/null || true
 
-# 4. Cập nhật các dependencies từ requirements.txt mới
+# 4. Update dependencies from the new requirements.txt
 echo "[3/4] Cập nhật thư viện Python (pip)..."
 if [ -f "$INSTALL_DIR/venv/bin/pip" ]; then
     "$INSTALL_DIR/venv/bin/pip" install --upgrade pip
     "$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
     
-    # Chạy script di chuyển dữ liệu nếu còn file saved_movies.json cũ
+    # Run the data migration script if the old saved_movies.json still exists
     if [ -f "$INSTALL_DIR/saved_movies.json" ]; then
         echo "Phát hiện tệp saved_movies.json cũ. Tiến hành chuyển đổi sang SQLite..."
         "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/migrate_json_to_sqlite.py"
@@ -113,12 +113,12 @@ else
     echo "Cảnh báo: Không tìm thấy môi trường ảo venv tại $INSTALL_DIR/venv. Bỏ qua bước pip install."
 fi
 
-# 5. Khởi động lại dịch vụ
+# 5. Restart the service
 echo "[4/4] Khởi động lại dịch vụ $SERVICE_NAME..."
 systemctl daemon-reload
 systemctl restart $SERVICE_NAME
 
-# Hoàn tất và hiển thị trạng thái
+# Done; show status
 echo "======================================="
 echo " CẬP NHẬT THÀNH CÔNG!                  "
 echo "======================================="

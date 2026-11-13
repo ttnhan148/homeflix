@@ -16,10 +16,10 @@ def no_real_dns(monkeypatch):
     "::ffff:127.0.0.1", "::ffff:10.0.0.1", "224.0.0.1", "240.0.0.1",
     "fe80::1%eth0",                      # zone id
     "::127.0.0.1",                       # IPv4-compatible
-    "2002:7f00:1::1",                    # 6to4 chứa 127.0.0.1
-    "2002:0a00:0001::",                  # 6to4 chứa 10.0.0.1
-    "64:ff9b::7f00:1",                   # NAT64 chứa 127.0.0.1
-    "not-an-ip", "", "999.1.1.1",        # không parse được thì chặn
+    "2002:7f00:1::1",                    # 6to4 containing 127.0.0.1
+    "2002:0a00:0001::",                  # 6to4 containing 10.0.0.1
+    "64:ff9b::7f00:1",                   # NAT64 containing 127.0.0.1
+    "not-an-ip", "", "999.1.1.1",        # unparseable means blocked
 ])
 def test_blocked_ips(ip):
     assert netguard.is_blocked_ip(ip)
@@ -71,7 +71,7 @@ def test_check_url_host(url, host):
     "http://169.254.169.254/latest/meta-data", "http://100.64.0.1/",
 ])
 def test_ip_literal_not_resolved(url):
-    # resolve bị thay bằng hàm ném: IP literal không được phân giải
+    # resolve replaced with a function that raises: IP literals must not be resolved
     with pytest.raises(netguard.BlockedURL) as e:
         netguard.check(url)
     assert e.value.reason == "Địa chỉ bị chặn"
@@ -115,14 +115,14 @@ def test_public_dns_fixture(public_dns):
 
 
 def test_resolve_uses_getaddrinfo(monkeypatch):
-    monkeypatch.undo()  # bỏ no_real_dns, thay getaddrinfo giả
+    monkeypatch.undo()  # drop no_real_dns, use a fake getaddrinfo
     monkeypatch.setattr(netguard.socket, "getaddrinfo", lambda h, p, **k: [
         (2, 1, 6, "", ("8.8.8.8", 0)), (10, 1, 6, "", ("2606:4700::1", 0, 0, 0)),
         (2, 1, 6, "", ("8.8.8.8", 0))])
     assert netguard.resolve("x.example") == ["8.8.8.8", "2606:4700::1"]
 
 
-# --- vòng sửa 1: host kiểm tra phải trùng host httpx sẽ kết nối ---
+# --- fix round 1: the checked host must match the host httpx will connect to ---
 
 def test_ipv4_with_percent_is_not_an_ip_literal():
     assert netguard.is_blocked_ip("8.8.8.8%foo")
@@ -135,7 +135,7 @@ def test_ipv4_percent_host_never_skips_dns(monkeypatch, url):
     try:
         netguard.check(url)
     except netguard.BlockedURL:
-        pass  # từ chối cũng được; không được bỏ qua DNS mà cho qua
+        pass  # rejecting is fine too; it must not skip DNS and let it through
     else:
         assert calls, "host đi qua mà không phân giải"
 

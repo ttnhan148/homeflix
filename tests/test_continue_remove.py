@@ -20,7 +20,7 @@ def test_saved_movie_leaves_continue_but_stays_saved(make_client):
     assert m["saved"] is True
     assert m["last_watched_url"] == "" and m["last_watched_episode"] == ""
     assert m["position"] is None and m["duration"] is None
-    assert m["episode_states"] == {U1: "watched"}  # tập đã xem giữ dấu, tập đang dở bỏ
+    assert m["episode_states"] == {U1: "watched"}  # watched episode keeps its mark, in-progress episode is dropped
     assert r["movie"]["last_watched_url"] == ""
 
 

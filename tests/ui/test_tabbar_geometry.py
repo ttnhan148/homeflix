@@ -8,7 +8,7 @@ def box(page, sel):
 def test_tabbar_glass_reaches_screen_bottom_and_buttons_sit_above_home_indicator(open_app):
     page = open_app(safe=(59, 0, 34, 0))
     page.goto("http://homeflix.test/")
-    assert abs(box(page, "#floatTabBar")["b"] - VIEW_H) <= 1          # không lộ nội dung dưới thanh Home
+    assert abs(box(page, "#floatTabBar")["b"] - VIEW_H) <= 1          # no content exposed below the Home bar
     assert box(page, "#floatTabBar .fab-capsule")["b"] <= VIEW_H - 34 + 0.5
     assert "blur" in page.evaluate("getComputedStyle(document.getElementById('floatTabBar')).backdropFilter")
 

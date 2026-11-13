@@ -1,4 +1,4 @@
-// Cast phía client: heartbeat, luồng sự kiện SSE có nối lại, gọi API. Giao diện nằm ở các phần sau của file này.
+// Client-side cast: heartbeat, SSE event stream with reconnect, API calls. The UI is in later sections of this file.
 (function () {
     const defaults = { heartbeatMs: 15000, reconnectBaseMs: 2000, reconnectMaxMs: 30000, stateMs: 2000, silenceMs: 6000 };
     const EVENTS = ['hello', 'connect_request', 'connect_result', 'controller_joined', 'controller_left', 'command', 'state', 'unlinked'];
@@ -6,10 +6,10 @@
     const HFCast = window.HFCast = {
         config: Object.assign({}, defaults, window.__HF_CAST_CONFIG || {}),
         started: false,
-        linked: null,       // {id, name} của TV đang điều khiển (iPhone)
-        attempt: 0,         // số lần nối lại liên tiếp chưa nhận được hello
+        linked: null,       // {id, name} of the TV being controlled (iPhone)
+        attempt: 0,         // consecutive reconnects without receiving hello
         es: null,
-        wantEvents: false,  // đang cần luồng sự kiện (TV/desktop luôn cần; iPhone khi có tờ hoặc liên kết)
+        wantEvents: false,  // event stream needed (TV/desktop always; iPhone when the sheet is open or linked)
         handlers: {},
         reconnectTimer: null,
     };
@@ -36,7 +36,7 @@
             body: body === undefined ? undefined : JSON.stringify(body),
         });
         let data = null;
-        try { data = await res.json(); } catch (e) { /* thân rỗng */ }
+        try { data = await res.json(); } catch (e) { /* empty body */ }
         return { status: res.status, data };
     };
 
@@ -80,7 +80,7 @@
         dropSource();
     };
 
-    // iOS ngắt kết nối nền khi khóa màn hình: nối lại khi trang hiện lại và báo để lấy trạng thái mới
+    // iOS drops background connections on screen lock: reconnect when the page becomes visible and signal to fetch fresh state
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible' || !HFCast.wantEvents) return;
         HFCast.openEvents();
@@ -95,11 +95,11 @@
         if (HFCast.kind() !== 'phone') HFCast.openEvents();
     };
 
-    // ---------- Dùng chung: nhãn nút Phát, định tuyến Phát lên TV ----------
+    // ---------- Shared: Play button label, routing Play to the TV ----------
     function playLabel() { return HFCast.linked ? 'Phát lên TV' : 'Phát'; }
 
     window.refreshPlayLabels = function () {
-        document.querySelectorAll('.hero-btn-play').forEach(b => { b.textContent = playLabel(); });
+        document.querySelectorAll('#hero .hero-btn-play').forEach(b => { b.textContent = playLabel(); });
         document.querySelectorAll('.detail-action-play .btn-label').forEach(n => { n.textContent = playLabel(); });
     };
 
@@ -113,28 +113,31 @@
         toastTimer = setTimeout(() => { toast.hidden = true; }, 3500);
     };
 
-    // Trả true khi đã gửi lệnh phát lên TV (chặn phát cục bộ). Kết quả đến sau: lỗi thì báo và quay về phát trên iPhone.
+    // Returns true when a play command was sent to the TV (blocks local playback). Result arrives later: on error, notify and fall back to playing on the iPhone.
     HFCast.markUnresponsive = HFCast.markUnresponsive || function () {};
+    // Send a command to a TV; any failure marks it unresponsive (looked up at call time, initController may replace it)
+    function postCommand(targetId, cmd) {
+        HFCast.api('POST', `/api/cast/${encodeURIComponent(targetId)}/command`, cmd)
+            .then(res => { if (res.status !== 200) HFCast.markUnresponsive(); })
+            .catch(() => HFCast.markUnresponsive());
+    }
     window.__castRoute = function (slug, episodeUrl) {
         const target = HFCast.linked;
         if (!target) return false;
-        HFCast.api('POST', `/api/cast/${encodeURIComponent(target.id)}/command`,
-            { type: 'play', slug, episode_url: episodeUrl || null })
-            .then(res => { if (res.status !== 200) HFCast.markUnresponsive(); })
-            .catch(() => HFCast.markUnresponsive());
+        postCommand(target.id, { type: 'play', slug, episode_url: episodeUrl || null });
         return true;
     };
 
-    // ---------- Bên điều khiển (iPhone): nút cast, tờ "Phát lên", kết nối ----------
+    // ---------- Controller side (iPhone): cast button, "Phát lên" sheet, connection ----------
     function initController() {
         const $ = (id) => document.getElementById(id);
         const STORE_KEY = 'hf_cast_last_tv';
         const inflight = new Set();
         let devices = [];
-        HFCast.pending = null;   // {id, name} TV đang chờ cho phép
+        HFCast.pending = null;   // {id, name} of the TV awaiting permission
 
         function remember(dev) {
-            try { localStorage.setItem(STORE_KEY, JSON.stringify({ id: dev.id, name: dev.name })); } catch (e) { /* bỏ qua */ }
+            try { localStorage.setItem(STORE_KEY, JSON.stringify({ id: dev.id, name: dev.name })); } catch (e) { /* ignore */ }
         }
         function recall() {
             try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { return null; }
@@ -179,7 +182,7 @@
 
         HFCast.markUnresponsive = function (message) {
             HFCast.notify(typeof message === 'string' ? message : 'TV không phản hồi');
-            if (HFCast.linked) HFCast.api('DELETE', '/api/cast/link').catch(() => null);   // TV bỏ nhãn "đang kết nối"
+            if (HFCast.linked) HFCast.api('DELETE', '/api/cast/link').catch(() => null);   // TV drops the "đang kết nối" label
             HFCast.linked = null;
             HFCast.pending = null;
             releaseEventsIfIdle();
@@ -223,8 +226,8 @@
             HFCast.emit('link_lost', {});
         };
 
-        // Liên kết phía server nằm trong bộ nhớ: mất khi server khởi động lại hoặc khi iPhone im lặng quá 40 giây.
-        // Mỗi lần luồng sự kiện (nối lại) báo hello hoặc trang hiện lại, lập lại liên kết để TV báo trạng thái trở lại.
+        // Server-side link lives in memory: lost when the server restarts or the iPhone stays silent for over 40 seconds.
+        // Whenever the event stream (reconnect) reports hello or the page becomes visible again, re-link so the TV reports state again.
         async function restoreLink() {
             if (!HFCast.linked) return;
             const target = HFCast.linked;
@@ -268,8 +271,8 @@
         $('castSheetClose').addEventListener('click', closeSheet);
         $('castScrim').addEventListener('click', closeSheet);
 
-        // --- Thanh nhỏ và bảng điều khiển ---
-        let remote = null;      // trạng thái phát mới nhất của TV đang liên kết
+        // --- Mini bar and control panel ---
+        let remote = null;      // latest playback state of the linked TV
         let lastStateTs = null;
 
         function renderRemote() {
@@ -297,7 +300,7 @@
             renderRemote();
         }
 
-        let refreshing = 0;   // đang lấy trạng thái mới: người canh im lặng nghỉ cho tới khi có kết quả
+        let refreshing = 0;   // fetching fresh state: the silence watchdog pauses until there's a result
 
         async function refreshRemote(strict) {
             if (!HFCast.linked) return;
@@ -305,7 +308,7 @@
             try {
                 const res = await HFCast.api('GET', `/api/cast/state/${encodeURIComponent(HFCast.linked.id)}`).catch(() => null);
                 if (res && res.status === 200 && res.data && res.data.target_id) applyState(res.data);
-                else if (strict) HFCast.markUnresponsive();   // sau khi iPhone thức dậy: không có trạng thái = TV đã mất
+                else if (strict) HFCast.markUnresponsive();   // after the iPhone wakes up: no state = TV is gone
             } finally {
                 refreshing -= 1;
                 lastStateTs = Date.now();
@@ -318,12 +321,12 @@
         HFCast.on('linked', () => { remote = null; lastStateTs = null; renderRemote(); refreshRemote(false); });
         HFCast.on('link_lost', () => { remote = null; renderRemote(); });
         HFCast.on('resume', () => {
-            lastStateTs = Date.now();   // đồng hồ tiếp tục chạy sau khi ngủ: đừng coi khoảng ngủ là TV im lặng
+            lastStateTs = Date.now();   // timers keep running after sleep: don't count the sleep period as TV silence
             restoreLink();
             refreshRemote(true);
         });
 
-        // Đang phát mà TV im lặng quá lâu: coi như mất kết nối (TV dừng thì không có state nên không tính)
+        // Playing but the TV has been silent too long: treat as disconnected (a stopped TV sends no state, so it doesn't count)
         setInterval(() => {
             if (!refreshing && HFCast.linked && remote && remote.playing && HFCastUtils.isStale(lastStateTs, Date.now(), HFCast.config.silenceMs)) {
                 HFCast.markUnresponsive();
@@ -331,10 +334,7 @@
         }, 200);
 
         function sendCmd(cmd) {
-            if (!HFCast.linked) return;
-            HFCast.api('POST', `/api/cast/${encodeURIComponent(HFCast.linked.id)}/command`, cmd)
-                .then(res => { if (res.status !== 200) HFCast.markUnresponsive(); })
-                .catch(() => HFCast.markUnresponsive());
+            if (HFCast.linked) postCommand(HFCast.linked.id, cmd);
         }
 
         $('castMiniBar').addEventListener('click', () => { $('castRemote').hidden = false; });
@@ -349,7 +349,7 @@
         $('castStop').addEventListener('click', () => sendCmd({ type: 'stop' }));
         $('castDisconnect').addEventListener('click', () => { HFCast.disconnect(); $('castRemote').hidden = true; });
 
-        // Nối lại TV lần trước nếu còn trực tuyến. Im lặng: không tờ, không thông báo, không để trạng thái chờ.
+        // Reconnect to the last TV if it's still online. Silently: no sheet, no notification, no pending state.
         (async function silentReconnect() {
             const last = recall();
             if (!last || !last.id) return;
@@ -361,10 +361,10 @@
         })();
     }
 
-    // ---------- Bên nhận (TV, máy tính): nhận lệnh, hỏi xác nhận, báo trạng thái ----------
+    // ---------- Receiver side (TV, desktop): receive commands, ask for confirmation, report state ----------
     function initReceiver() {
         const $ = (id) => document.getElementById(id);
-        const controllers = new Map();   // id -> tên
+        const controllers = new Map();   // id -> name
         const confirmQueue = [];
 
         function show(node, on) { node.hidden = !on; }
@@ -376,7 +376,7 @@
             show(label, true);
         }
 
-        // --- trạng thái phát ---
+        // --- playback state ---
         function currentState() {
             const active = document.body.classList.contains('player-active') && playbackEpisodes.length > 0 && currentPlaybackIndex >= 0;
             const prefs = HFPlayerAuto.getPrefs();
@@ -402,7 +402,7 @@
         setInterval(() => { if (!video.paused) reportState(); }, HFCast.config.stateMs);
         ['play', 'pause', 'ended', 'loadedmetadata'].forEach(ev => video.addEventListener(ev, reportState));
 
-        // --- hộp xác nhận kết nối (lần đầu một controller xin điều khiển) ---
+        // --- connection confirmation dialog (first time a controller asks to take control) ---
         function showNextConfirm() {
             const next = confirmQueue[0];
             if (!next) return show($('castConfirm'), false);
@@ -420,7 +420,7 @@
         $('castAllow').addEventListener('click', () => answerConfirm(true));
         $('castDeny').addEventListener('click', () => answerConfirm(false));
 
-        // --- trình duyệt chặn autoplay: lệnh cast đến mà chưa có thao tác người dùng ---
+        // --- browser blocks autoplay: cast command arrives before any user interaction ---
         const prompt = $('castAutoplayPrompt');
         video.play = function () {
             const p = HTMLMediaElement.prototype.play.apply(video, arguments);
@@ -439,12 +439,12 @@
         });
         video.addEventListener('playing', () => show(prompt, false));
 
-        // --- lệnh ---
+        // --- commands ---
         async function castPlay(cmd) {
             const res = await fetch(`/api/movie/${encodeURIComponent(cmd.slug)}`);
             const data = await res.json();
             if (data.status !== 'success' || !data.episodes || data.episodes.length === 0) return;
-            await fetchSavedMovies(); // tiến độ mới nhất của chính thiết bị này
+            await fetchSavedMovies(); // latest progress of this device itself
             const eps = data.episodes;
             const row = savedMoviesList.find(i => i.slug === cmd.slug);
             let index = cmd.episode_url ? eps.findIndex(e => e.link_m3u8 === cmd.episode_url) : -1;
@@ -494,7 +494,7 @@
             setTimeout(reportState, 150);
         });
         function enqueueRequest(req) {
-            if (confirmQueue.some(r => r.controller_id === req.controller_id)) return;   // đã hỏi rồi: không nhân đôi hộp thoại
+            if (confirmQueue.some(r => r.controller_id === req.controller_id)) return;   // already asked: don't duplicate the dialog
             confirmQueue.push(req);
             if (confirmQueue.length === 1) showNextConfirm();
         }
@@ -504,11 +504,11 @@
             (d.controllers || []).forEach(c => controllers.set(c.id, c.name));
             updateLabel();
             reportState();
-            (d.pending || []).forEach(enqueueRequest);   // TV tải lại khi còn yêu cầu đang chờ: hỏi lại
+            (d.pending || []).forEach(enqueueRequest);   // TV reloaded while a request is still pending: ask again
         });
         HFCast.on('controller_joined', (d) => { controllers.set(d.controller_id, d.name); updateLabel(); reportState(); });
         HFCast.on('controller_left', (d) => { controllers.delete(d.controller_id); updateLabel(); });
-        // công tắc "Cho phép điều khiển từ xa" nằm ở trang Cài đặt (static/settings.js)
+        // the "Cho phép điều khiển từ xa" toggle lives on the Settings page (static/settings.js)
     }
 
     HFCast.start();

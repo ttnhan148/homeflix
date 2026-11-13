@@ -1,11 +1,11 @@
-"""SQLite store của HomeTV: mở DB, schema, transaction. Thời gian là epoch giây."""
+"""HomeTV SQLite store: open DB, schema, transactions. Times are epoch seconds."""
 import sqlite3
 import threading
 from contextlib import contextmanager
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
-# Khóa ghi: mọi transaction giữ khóa này
+# Write lock: every transaction holds this lock
 lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
 
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS sources (
     url TEXT NOT NULL,
     priority INTEGER NOT NULL DEFAULT 50,
     enabled INTEGER NOT NULL DEFAULT 1,
-    rights_status TEXT NOT NULL DEFAULT 'pending_review'
+    rights_status TEXT NOT NULL DEFAULT 'approved'
         CHECK (rights_status IN ('pending_review', 'approved', 'rejected')),
     refresh_interval INTEGER NOT NULL DEFAULT 21600,
     timeout INTEGER NOT NULL DEFAULT 30,
@@ -116,7 +116,7 @@ CREATE INDEX IF NOT EXISTS idx_source_versions_source_fetched ON source_versions
 
 
 def open(path: str) -> None:
-    """Mở DB (đóng kết nối cũ nếu có), bật WAL + FK, tạo schema nếu chưa có."""
+    """Open the DB (closing any old connection), enable WAL + FK, create the schema if missing."""
     global _conn
     close()
     c = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
@@ -125,12 +125,15 @@ def open(path: str) -> None:
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA foreign_keys=ON")
         c.executescript(_SCHEMA)
-        # Bảng sources có từ trước: CREATE TABLE IF NOT EXISTS không thêm cột mới
+        # Pre-existing sources table: CREATE TABLE IF NOT EXISTS does not add new columns
         have = {r[1] for r in c.execute("PRAGMA table_info(sources)")}
         for col in ("next_check_at", "last_check_at"):
             if col not in have:
                 c.execute(f"ALTER TABLE sources ADD COLUMN {col} REAL")
-        if c.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 0:
+        ver = c.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        if ver is not None and ver < 4:  # v4: sources no longer wait for approval
+            c.execute("UPDATE sources SET rights_status='approved' WHERE rights_status='pending_review'")
+        if ver is None:
             c.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
         else:
             c.execute("UPDATE schema_version SET version = ? WHERE version < ?", (SCHEMA_VERSION, SCHEMA_VERSION))
@@ -153,10 +156,22 @@ def conn() -> sqlite3.Connection:
     return _conn
 
 
+def read(sql: str, params: tuple = ()) -> list:
+    """Locked read: several threads (API, checker) share one SQLite connection; unlocked reads raise InterfaceError."""
+    with lock:
+        return conn().execute(sql, params).fetchall()
+
+
+def read_one(sql: str, params: tuple = ()):
+    """Locked read of a single row (or None)."""
+    with lock:
+        return conn().execute(sql, params).fetchone()
+
+
 @contextmanager
 def tx():
-    """Transaction ghi: giữ khóa, BEGIN IMMEDIATE, commit khi êm, rollback khi lỗi.
-    Không reentrant: không lồng tx trong tx."""
+    """Write transaction: hold the lock, BEGIN IMMEDIATE, commit on success, rollback on error.
+    Not reentrant: do not nest tx inside tx."""
     with lock:
         c = conn()
         c.execute("BEGIN IMMEDIATE")

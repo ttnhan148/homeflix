@@ -1,4 +1,4 @@
-"""Menu lọc và khối Home dùng chung (HomeFlix và HomeTV)."""
+"""Filter menu and Home blocks shared by HomeFlix and HomeTV."""
 URL = "http://homeflix.test/"
 
 
@@ -48,11 +48,11 @@ def test_macro_markup_ids_unchanged(app_module, open_app):
     assert page.locator("#filterBar .filter-dropdown").count() == 3
 
 
-def test_mobile_chip_row_scrolls_sideways_in_both_filter_bars(app_module, open_app):
+def test_mobile_chip_row_and_tab_rows_scroll_sideways(app_module, open_app):
     page = open_app()
     page.goto(URL)
-    got = page.evaluate("""() => ['filterBar', 'tvFilterBar'].map((id) => {
-        const cs = getComputedStyle(document.querySelector('#' + id + ' .filter-bar'));
+    got = page.evaluate("""() => ['#filterBar .filter-bar', '#filterBar .type-row', '#tvGroupTabs'].map((sel) => {
+        const cs = getComputedStyle(document.querySelector(sel));
         return [cs.flexWrap, cs.overflowX];
     })""")
-    assert got == [["nowrap", "auto"], ["nowrap", "auto"]]
+    assert got == [["nowrap", "auto"], ["nowrap", "auto"], ["nowrap", "auto"]]

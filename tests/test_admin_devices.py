@@ -12,7 +12,7 @@ def _me(c):
 
 
 def _pid(app_module, client):
-    """Id công khai của một máy bất kỳ, kể cả máy không phải admin (danh sách chỉ liệt kê admin)."""
+    """Public id of any device, including non-admin ones (the list only shows admins)."""
     return app_module._cast_public_id(client.cookies["hf_device"])
 
 

@@ -7,6 +7,7 @@ import aiofiles
 import shutil
 import time
 import asyncio
+import contextlib
 import sqlite3
 import re
 import unicodedata
@@ -14,8 +15,7 @@ import threading
 import uuid
 import math
 import secrets
-from datetime import datetime, date
-from contextlib import asynccontextmanager
+from datetime import datetime
 from functools import lru_cache
 from fastapi import Depends, FastAPI, Request, Response, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -37,10 +37,10 @@ from devices import (DEVICE_KINDS, client_ip, default_device_name, device_kind,
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Quản lý các tiến trình đang tải (Single Flight) để chống tải trùng
+# Track in-flight downloads (Single Flight) to avoid duplicate fetches
 download_locks = {} 
 
-# Đảm bảo đường dẫn tuyệt đối để chạy ổn định trên Linux/Systemd
+# Use absolute paths so it runs reliably under Linux/Systemd
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 POSTER_CACHE_DIR = os.path.join(CACHE_DIR, "posters")
@@ -51,40 +51,45 @@ os.makedirs(DATA_DIR, exist_ok=True)
 DB_FILE = os.path.join(DATA_DIR, "homeflix.db")
 DOWNLOADS_STATUS_FILE = os.path.join(DATA_DIR, "downloads.json")
 
-# --- Định danh thiết bị (không đăng nhập) ---
+# --- Device identity (no login) ---
 DEVICE_COOKIE = "hf_device"
-DEVICE_COOKIE_MAX_AGE = 63072000  # 2 năm
-# Chỉ cấp cookie ở "/" và các route này; không cấp ở /proxy, /media, /static
+DEVICE_COOKIE_MAX_AGE = 63072000  # 2 years
+# Only issue the cookie on "/" and these routes; not on /proxy, /media, /static
 DEVICE_COOKIE_PATHS = ("/api/saved", "/api/device", "/api/cast", "/api/settings", "/api/admin")
-# IP của reverse proxy tin cậy (cách nhau bằng dấu phẩy) mới được đọc X-Forwarded-For
+# Only trusted reverse proxy IPs (comma-separated) may have X-Forwarded-For read
 TRUSTED_PROXIES = parse_trusted_proxies(os.environ.get("TRUSTED_PROXIES"))
 
-# Cài đặt hệ thống (cache, prefetch, làm mới trang chủ) đọc trực tiếp từ settings_store
+# System settings (cache, prefetch, homepage refresh) are read directly from settings_store
 _prefetch_sem: tuple[int, asyncio.Semaphore] | None = None
 
-if not os.path.exists(CACHE_DIR):
-    os.makedirs(CACHE_DIR, exist_ok=True)
+for _dir in (CACHE_DIR, POSTER_CACHE_DIR, DOWNLOAD_DIR):
+    os.makedirs(_dir, exist_ok=True)
 
-if not os.path.exists(POSTER_CACHE_DIR):
-    os.makedirs(POSTER_CACHE_DIR, exist_ok=True)
+# Browser User-Agent sent upstream (some CDNs reject non-browser clients)
+BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+UPSTREAM_HEADERS = {"User-Agent": BROWSER_UA}
 
-if not os.path.exists(DOWNLOAD_DIR):
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+def _remove_quietly(path: str) -> None:
+    """Delete a file, ignoring a missing file or any OS error."""
+    with contextlib.suppress(OSError):
+        os.remove(path)
 
 # --- SQLite Connection Pool (thread-safe singleton) ---
-# Thay vì mở/đóng connection cho mỗi query, dùng 1 connection chia sẻ
-# với Lock để đảm bảo thread-safe khi chạy với asyncio.to_thread.
+# Instead of opening/closing a connection per query, use one shared connection
+# guarded by a Lock for thread safety when used with asyncio.to_thread.
 _db_conn = None
 _db_lock = threading.Lock()
 
 def get_db() -> sqlite3.Connection:
-    """Trả về connection SQLite singleton (thread-safe).
+    """Return the singleton SQLite connection (thread-safe).
     
-    Connection được tạo 1 lần và tái sử dụng, tránh overhead mở/đóng
-    liên tục. PRAGMA được thiết lập cho hiệu năng tối đa:
-    - WAL: ghi không block đọc
-    - synchronous=NORMAL: cân bằng tốc độ/an toàn
-    - cache_size=-64MB: cache lớn trong RAM
+    The connection is created once and reused, avoiding the overhead of
+    repeated open/close. PRAGMAs are tuned for maximum performance:
+    - WAL: writes do not block reads
+    - synchronous=NORMAL: balance of speed and safety
+    - cache_size=-64MB: large in-RAM cache
     - temp_store=MEMORY: temp table trong RAM
     - mmap_size=256MB: memory-mapped I/O
     """
@@ -105,7 +110,7 @@ def get_db() -> sqlite3.Connection:
     return _db_conn
 
 def db_execute(sql: str, params=(), commit: bool = True) -> sqlite3.Cursor:
-    """Thực thi SQL với thread-safe lock, trả về cursor."""
+    """Execute SQL under the thread-safe lock and return the cursor."""
     conn = get_db()
     with _db_lock:
         cursor = conn.cursor()
@@ -115,7 +120,7 @@ def db_execute(sql: str, params=(), commit: bool = True) -> sqlite3.Cursor:
         return cursor
 
 def db_query(sql: str, params=()) -> list:
-    """Query SELECT với thread-safe lock, trả về list of rows."""
+    """Run a SELECT under the thread-safe lock and return a list of rows."""
     conn = get_db()
     with _db_lock:
         cursor = conn.cursor()
@@ -123,7 +128,7 @@ def db_query(sql: str, params=()) -> list:
         return cursor.fetchall()
 
 def db_query_one(sql: str, params=()) -> sqlite3.Row | None:
-    """Query SELECT trả về 1 row đầu tiên."""
+    """Run a SELECT and return the first row."""
     conn = get_db()
     with _db_lock:
         cursor = conn.cursor()
@@ -136,7 +141,7 @@ def setting(key: str) -> int | bool:
     return settings_store.get(key)
 
 def get_prefetch_semaphore() -> asyncio.Semaphore:
-    """Semaphore hiện tại; đổi prefetch.concurrency thì tạo cái mới, các prefetch đang chạy giữ cái cũ."""
+    """Current semaphore; changing prefetch.concurrency creates a new one, while running prefetches keep the old one."""
     global _prefetch_sem
     n = setting("prefetch.concurrency")
     if _prefetch_sem is None or _prefetch_sem[0] != n:
@@ -180,7 +185,7 @@ def init_db():
                 ttl_seconds INTEGER NOT NULL
             )
         """)
-        # --- Thiết bị: mỗi thiết bị có danh sách lưu và tiến độ xem riêng ---
+        # --- Devices: each device has its own saved list and watch progress ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS devices (
                 id TEXT PRIMARY KEY,
@@ -226,10 +231,10 @@ def init_db():
                 PRIMARY KEY (target_id, controller_id)
             )
         """)
-        # Cột quyền admin cho DB cũ
+        # Admin column for older DBs
         if "is_admin" not in [r[1] for r in cursor.execute("PRAGMA table_info(devices)")]:
             cursor.execute("ALTER TABLE devices ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
-        # Yêu cầu quyền admin bằng mã 6 số (hết hạn tính lúc đọc)
+        # Admin access requests via 6-digit code (expiry checked at read time)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS admin_requests (
                 id TEXT PRIMARY KEY,
@@ -245,8 +250,8 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_updated ON device_movies(device_id, updated_at DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_device_movies_slug ON device_movies(slug)")
-        # --- INDEX: tăng tốc query thường dùng ---
-        # episode_downloads: query theo movie_slug (rất thường xuyên)
+        # --- INDEX: speed up common queries ---
+        # episode_downloads: queried by movie_slug (very frequently)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ep_dl_slug ON episode_downloads(movie_slug)")
         # episode_downloads: cleanup worker query theo delete_at
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ep_dl_delete_at ON episode_downloads(delete_at)")
@@ -257,7 +262,7 @@ def init_db():
         # api_cache: cleanup theo cached_at
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_cache_cached_at ON api_cache(cached_at)")
         conn.commit()
-    settings_store.invalidate()  # bỏ cache giá trị cũ (DB có thể đã đổi)
+    settings_store.invalidate()  # drop stale cached values (the DB may have changed)
     logger.info("[DB] Tables + indexes initialized")
 
 def migrate_downloads_json_to_db():
@@ -306,7 +311,7 @@ def _db_set_cache(cache_key: str, response_obj, ttl_seconds: int):
     """, (cache_key, json.dumps(response_obj, ensure_ascii=False), time.time(), ttl_seconds))
 
 async def cached_fetch(cache_key: str, ttl_seconds: int, fetch_fn):
-    """Cache-aside with stale-fallback: trả cache cũ nếu phimapi.com lỗi."""
+    """Cache-aside with stale-fallback: return stale cache if phimapi.com fails."""
     cached = await asyncio.to_thread(_db_get_cache, cache_key)
     if cached and cached["is_fresh"]:
         logger.info(f"[Cache] HIT key={cache_key}")
@@ -323,9 +328,9 @@ async def cached_fetch(cache_key: str, ttl_seconds: int, fetch_fn):
             return cached["data"]
         raise
 
-# --- Thiết bị ---
+# --- Devices ---
 def get_household_salt() -> str:
-    """Salt dùng băm IP thành "nhà". Sinh một lần, lưu trong DB."""
+    """Salt used to hash an IP into a "home". Generated once, stored in the DB."""
     conn = get_db()
     with _db_lock:
         row = conn.execute("SELECT value FROM app_settings WHERE key = 'household_salt'").fetchone()
@@ -336,11 +341,11 @@ def get_household_salt() -> str:
         conn.commit()
         return salt
 
-DEVICE_LAST_SEEN_THROTTLE = 60  # giây: không ghi last_seen thường hơn mức này
+DEVICE_LAST_SEEN_THROTTLE = 60  # seconds: do not write last_seen more often than this
 
 def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str, now: float,
                      adopt_legacy: bool = True) -> dict:
-    """Thêm thiết bị nếu chưa có, ngược lại cập nhật last_seen (tối đa mỗi 60 giây)."""
+    """Insert the device if missing, otherwise update last_seen (at most every 60 seconds)."""
     conn = get_db()
     with _db_lock:
         row = conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
@@ -353,8 +358,8 @@ def _db_touch_device(device_id: str, household: str, kind: str, user_agent: str,
             )
             flagged = conn.execute("SELECT 1 FROM app_settings WHERE key = 'legacy_adopted'").fetchone()
             if adopt_legacy and not flagged:
-                # Thiết bị đầu tiên (qua /api, không phải bot tải "/") nhận toàn bộ tủ phim chung cũ.
-                # Cờ legacy_adopted đảm bảo chỉ nhập một lần, kể cả sau khi mọi thiết bị bị dọn.
+                # The first device (via /api, not a bot loading "/") adopts the entire old shared library.
+                # The legacy_adopted flag ensures this happens once, even after all devices are purged.
                 conn.execute("INSERT INTO app_settings (key, value) VALUES ('legacy_adopted', '1')")
                 conn.execute("""
                     INSERT INTO device_movies (
@@ -380,11 +385,11 @@ def _register_request_device(device_id: str, ip: str, user_agent: str, adopt_leg
                             adopt_legacy=adopt_legacy)
 
 def _public_device(row: dict) -> dict:
-    # Không trả "id": đó chính là giá trị cookie xác thực hf_device.
+    # Never return "id": it is the hf_device auth cookie value itself.
     return {k: row[k] for k in ("name", "kind", "created_at", "last_seen")}
 
 def _valid_device_cookie(value: str | None) -> str | None:
-    """Chỉ nhận UUIDv4 dạng chuẩn có gạch nối; mọi thứ khác bị coi là không có cookie."""
+    """Accept only canonical hyphenated UUIDv4; anything else is treated as no cookie."""
     if not value:
         return None
     try:
@@ -398,7 +403,7 @@ def _valid_device_cookie(value: str | None) -> str | None:
 DEVICE_MAX_INACTIVE_DAYS = 180
 
 def _db_delete_device(conn, device_id: str) -> None:
-    """Xóa một thiết bị cùng mọi dòng gắn với nó. Gọi khi đang giữ _db_lock; không commit."""
+    """Delete a device and every row tied to it. Call while holding _db_lock; does not commit."""
     conn.execute("DELETE FROM device_movies WHERE device_id = ?", (device_id,))
     conn.execute("DELETE FROM cast_allowed WHERE target_id = ? OR controller_id = ?", (device_id, device_id))
     conn.execute("DELETE FROM app_settings WHERE key = ?", (_cast_allow_key(device_id),))
@@ -406,7 +411,7 @@ def _db_delete_device(conn, device_id: str) -> None:
     conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
 
 def _db_prune_inactive_devices(now: float, max_age_days: int = DEVICE_MAX_INACTIVE_DAYS) -> int:
-    """Xóa thiết bị không hoạt động quá max_age_days cùng phim của chúng. Trả số thiết bị đã xóa."""
+    """Delete devices inactive for more than max_age_days along with their movies. Returns the number deleted."""
     cutoff = now - max_age_days * 86400
     conn = get_db()
     with _db_lock:
@@ -416,8 +421,43 @@ def _db_prune_inactive_devices(now: float, max_age_days: int = DEVICE_MAX_INACTI
         conn.commit()
     return len(old_ids)
 
-# --- Quyền admin theo thiết bị ---
+# --- Per-device admin rights ---
 admin_login_limiter = admin.LoginLimiter()
+
+# --- Admin password stored in the DB (scrypt hash); HOMEFLIX_ADMIN_PASSWORD, if set, wins ---
+ADMIN_HASH_KEY = "admin_password_hash"
+
+def _db_admin_hash() -> str | None:
+    row = db_query_one("SELECT value FROM app_settings WHERE key = ?", (ADMIN_HASH_KEY,))
+    return row[0] if row else None
+
+def _db_set_admin_hash(value: str) -> None:
+    db_execute("INSERT INTO app_settings (key, value) VALUES (?, ?) "
+               "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (ADMIN_HASH_KEY, value))
+
+def _admin_configured() -> bool:
+    return admin.env_managed() or _db_admin_hash() is not None
+
+def _log_admin_password(password: str, reason: str) -> None:
+    bar = "=" * 64
+    logger.warning(f"\n{bar}\n  {reason}\n  Mật khẩu admin: {password}\n"
+                   f"  Đăng nhập trong Cài đặt > Quản trị, rồi đổi mật khẩu tại đó.\n{bar}")
+
+def ensure_admin_password() -> str | None:
+    """First start (no env password, nothing stored): generate one, store its hash and log it once.
+    Returns the generated password, or None when one already exists."""
+    if _admin_configured():
+        return None
+    password = admin.generate_password()
+    _db_set_admin_hash(admin.hash_password(password))
+    _log_admin_password(password, "Lần chạy đầu: đã tạo mật khẩu admin")
+    return password
+
+def reset_admin_password() -> str:
+    """Forgotten password: replace the stored one with a fresh random one (CLI: python app.py reset-admin-password)."""
+    password = admin.generate_password()
+    _db_set_admin_hash(admin.hash_password(password))
+    return password
 
 def _db_is_admin(device_id: str) -> bool:
     row = db_query_one("SELECT is_admin FROM devices WHERE id = ?", (device_id,))
@@ -432,9 +472,9 @@ def _db_admin_count() -> int:
 def _now() -> float:
     return time.time()
 
-# --- Xin quyền admin bằng mã 6 số: TV xin, máy admin duyệt hoặc từ chối ---
+# --- Admin requests via 6-digit code: the TV requests, an admin device approves or denies ---
 def _db_create_admin_request(device_id: str, now: float) -> dict | None:
-    """Tạo yêu cầu mới (thay yêu cầu cũ của máy này). None khi đã đủ MAX_PENDING yêu cầu còn hạn."""
+    """Create a new request (replacing this device's old one). None when MAX_PENDING unexpired requests already exist."""
     conn = get_db()
     with _db_lock:
         conn.execute("DELETE FROM admin_requests WHERE created_at < ?", (now - 86400,))
@@ -477,7 +517,7 @@ def _db_pending_admin_requests(now: float) -> list[dict]:
              "code": r["code"], "expires_at": r["created_at"] + admin.REQUEST_TTL} for r in rows]
 
 def _db_decide_admin_request(request_id: str, approve: bool, now: float) -> bool:
-    """Chốt yêu cầu bằng một UPDATE có điều kiện (chỉ một bên thắng); duyệt thì cấp admin cùng giao dịch."""
+    """Settle a request with one conditional UPDATE (only one side wins); approval grants admin in the same transaction."""
     conn = get_db()
     with _db_lock:
         try:
@@ -498,8 +538,8 @@ def _db_decide_admin_request(request_id: str, approve: bool, now: float) -> bool
             conn.rollback()
             raise
 
-# --- Cast: quyền điều khiển và công tắc của TV ---
-# Hàng đợi SSE, hiện diện, liên kết và trạng thái nằm trong bộ nhớ (cast.py), chỉ đúng với một worker.
+# --- Cast: control permissions and the TV's toggle ---
+# SSE queues, presence, links and state live in memory (cast.py); only correct with a single worker.
 cast_hub = CastHub()
 
 def _cast_allow_key(device_id: str) -> str:
@@ -522,7 +562,7 @@ def _db_cast_set_allow_control(device_id: str, value: bool) -> None:
                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                (_cast_allow_key(device_id), "1" if value else "0"))
 
-# --- Phim theo thiết bị (device_movies) ---
+# --- Per-device movies (device_movies) ---
 def _device_movie_dict(row) -> dict:
     m = dict(row)
     m["episodes"] = json.loads(m["episodes"]) if m["episodes"] else []
@@ -534,7 +574,7 @@ def _device_movie_dict(row) -> dict:
     return m
 
 def _db_list_device_movies(device_id: str) -> list[dict]:
-    """Phim đã lưu hoặc có tiến độ xem của thiết bị, mới cập nhật nhất trước."""
+    """Movies saved or with watch progress on the device, most recently updated first."""
     rows = db_query(
         "SELECT * FROM device_movies WHERE device_id = ? AND (saved = 1 "
         "OR (last_watched_url IS NOT NULL AND last_watched_url != '') OR position_sec IS NOT NULL) "
@@ -582,12 +622,12 @@ def _db_delete_device_movie(device_id: str, slug: str) -> bool:
     return cursor.rowcount > 0
 
 def _db_other_devices_hold(device_id: str, slug: str) -> bool:
-    """True nếu còn thiết bị khác giữ phim này (file tải xuống và cache là dùng chung)."""
+    """True if another device still holds this movie (downloaded files and cache are shared)."""
     return db_query_one("SELECT 1 FROM device_movies WHERE slug = ? AND device_id != ? LIMIT 1",
                         (slug, device_id)) is not None
 
 def _db_all_device_movies() -> list[dict]:
-    """Mỗi slug một bản (bản cập nhật mới nhất), dùng cho worker tải xuống."""
+    """One row per slug (the most recently updated), used by the download worker."""
     seen, result = set(), []
     for r in db_query("SELECT * FROM device_movies ORDER BY updated_at DESC"):
         if r["slug"] not in seen:
@@ -607,10 +647,10 @@ async def save_device_movie(device_id: str, movie: dict):
 async def delete_device_movie(device_id: str, slug: str):
     return await asyncio.to_thread(_db_delete_device_movie, device_id, slug)
 
-# Tải xuống MP4 qua ffmpeg
+# Download MP4 via ffmpeg
 @lru_cache(maxsize=512)
 def clean_filename(name: str) -> str:
-    # Bỏ dấu tiếng Việt để tránh lỗi filesystem/locale khi truyền vào subprocess ffmpeg
+    # Strip Vietnamese diacritics to avoid filesystem/locale errors when passing to the ffmpeg subprocess
     nfkd_form = unicodedata.normalize('NFKD', name)
     no_accent = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
     no_accent = no_accent.replace('đ', 'd').replace('Đ', 'D')
@@ -620,6 +660,16 @@ def clean_filename(name: str) -> str:
     if not s:
         s = hashlib.md5(name.encode()).hexdigest()
     return s
+
+def _episode_file(movie_slug: str, ep_name: str) -> str:
+    """Path of an episode's downloaded MP4."""
+    return os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_filename(ep_name)}.mp4")
+
+def _effective_status(movie_slug: str, ep_name: str, status: str) -> str:
+    """'completed' whose file has since disappeared counts as 'not_started'."""
+    if status == "completed" and not os.path.exists(_episode_file(movie_slug, ep_name)):
+        return "not_started"
+    return status
 
 def _db_get_download_status(movie_slug: str, ep_name: str) -> dict:
     row = db_query_one(
@@ -648,24 +698,18 @@ def _db_get_all_downloads_status(movie_slug: str = None) -> dict:
         )
         res = {row[0]: row[1] for row in rows}
     else:
-        rows = db_query("SELECT movie_slug, episode_name, status FROM episode_downloads")
         res = {}
-        for row in rows:
-            m_slug, ep_name, status = row
-            if m_slug not in res:
-                res[m_slug] = {}
-            res[m_slug][ep_name] = status
+        for m_slug, ep_name, status in db_query("SELECT movie_slug, episode_name, status FROM episode_downloads"):
+            res.setdefault(m_slug, {})[ep_name] = status
     return res
 
 async def get_download_status(movie_slug: str, ep_name: str) -> str:
     info = await asyncio.to_thread(_db_get_download_status, movie_slug, ep_name)
     status = info.get("status", "not_started")
-    clean_ep = clean_filename(ep_name)
-    file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
-    if status == "completed" and not os.path.exists(file_path):
-        await asyncio.to_thread(_db_update_download_status, movie_slug, ep_name, "not_started")
-        return "not_started"
-    return status
+    effective = _effective_status(movie_slug, ep_name, status)
+    if effective != status:
+        await asyncio.to_thread(_db_update_download_status, movie_slug, ep_name, effective)
+    return effective
 
 async def update_download_status(movie_slug: str, ep_name: str, status: str, error_msg: str = None, delete_at: float = None):
     await asyncio.to_thread(_db_update_download_status, movie_slug, ep_name, status, error_msg, delete_at)
@@ -683,10 +727,6 @@ async def add_to_download_queue(movie_slug: str, ep_name: str, ep_url: str):
     queued_items.add(key)
     await update_download_status(movie_slug, ep_name, "pending")
     await download_queue.put((movie_slug, ep_name, ep_url))
-
-async def enforce_download_window(movie_slug: str):
-    # Disabled automatic queueing per user request
-    pass
 
 def _db_get_deletable_episodes(now: float) -> list:
     return db_query(
@@ -707,8 +747,7 @@ async def delayed_cleanup_worker():
             now = time.time()
             deletable = await asyncio.to_thread(_db_get_deletable_episodes, now)
             for movie_slug, ep_name in deletable:
-                clean_ep = clean_filename(ep_name)
-                file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
+                file_path = _episode_file(movie_slug, ep_name)
                 if os.path.exists(file_path):
                     try:
                         os.remove(file_path)
@@ -731,6 +770,26 @@ def _db_get_queued_downloads() -> list:
         "SELECT movie_slug, episode_name FROM episode_downloads WHERE status IN ('pending', 'downloading')"
     )
 
+FFMPEG_TIMEOUT = 600.0
+
+def _ffmpeg_cmd(src_url: str, out_path: str, codec_args: list[str]) -> list[str]:
+    return ["ffmpeg", "-y", "-user_agent", BROWSER_UA, "-i", src_url, *codec_args, "-f", "mp4", out_path]
+
+async def _run_ffmpeg(cmd: list[str], key: str) -> tuple[int, bytes]:
+    """Run ffmpeg; return (exit code, stderr). Timeout -> kill, (-1, b"Timeout error").
+    FileNotFoundError (ffmpeg missing) propagates to the caller."""
+    proc = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=FFMPEG_TIMEOUT)
+        return proc.returncode, stderr
+    except asyncio.TimeoutError:
+        logger.error(f"[Download Worker] Timeout tải {key}")
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+        await proc.wait()  # reap it so the retry does not race a still-writing ffmpeg
+        return -1, b"Timeout error"
+
 async def download_worker():
     await asyncio.sleep(2)
     try:
@@ -739,12 +798,8 @@ async def download_worker():
         movies_by_slug = {m["slug"]: m for m in movies}
         for movie_slug, ep_name in queued:
             if movie_slug in movies_by_slug:
-                movie = movies_by_slug[movie_slug]
-                ep_url = None
-                for ep in movie.get("episodes", []):
-                    if ep.get("name") == ep_name:
-                        ep_url = ep.get("link_m3u8")
-                        break
+                ep_url = next((ep.get("link_m3u8") for ep in movies_by_slug[movie_slug].get("episodes", [])
+                               if ep.get("name") == ep_name), None)
                 if ep_url:
                     key = f"{movie_slug}/{ep_name}"
                     queued_items.discard(key)
@@ -767,68 +822,18 @@ async def download_worker():
             part_path = output_path + ".part"
             
             logger.info(f"[Download Worker] Bắt đầu tải {key} -> {output_path}")
-            ua_str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            
-            cmd = [
-                "ffmpeg", "-y",
-                "-user_agent", ua_str,
-                "-i", ep_url,
-                "-c", "copy",
-                "-f", "mp4",
-                part_path
-            ]
-            
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
+                # Strategy 1: stream copy; strategy 2: copy video, re-encode audio to AAC
+                exit_code, stderr = await _run_ffmpeg(_ffmpeg_cmd(ep_url, part_path, ["-c", "copy"]), key)
+                if exit_code != 0:
+                    logger.warning("[Download Worker] Thất bại -c copy, đang thử lại bằng re-encoding audio...")
+                    exit_code, stderr = await _run_ffmpeg(
+                        _ffmpeg_cmd(ep_url, part_path, ["-c:v", "copy", "-c:a", "aac"]), key)
             except FileNotFoundError:
                 logger.error("[Download Worker] Lệnh ffmpeg không tồn tại! Hãy chắc chắn ffmpeg đã được cài đặt trên hệ thống.")
                 await update_download_status(movie_slug, ep_name, "failed", "ffmpeg not installed")
                 continue
-            
-            try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=600.0)
-                exit_code = proc.returncode
-            except asyncio.TimeoutError:
-                logger.error(f"[Download Worker] Timeout tải {key}")
-                try: proc.kill()
-                except: pass
-                exit_code = -1
-                stderr = b"Timeout error"
-                
-            if exit_code != 0:
-                logger.warning(f"[Download Worker] Thất bại -c copy, đang thử lại bằng re-encoding audio...")
-                cmd_retry = [
-                    "ffmpeg", "-y",
-                    "-user_agent", ua_str,
-                    "-i", ep_url,
-                    "-c:v", "copy",
-                    "-c:a", "aac",
-                    "-f", "mp4",
-                    part_path
-                ]
-                try:
-                    proc = await asyncio.create_subprocess_exec(
-                        *cmd_retry,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=600.0)
-                    exit_code = proc.returncode
-                except FileNotFoundError:
-                    logger.error("[Download Worker] Lệnh ffmpeg không tồn tại khi retry!")
-                    await update_download_status(movie_slug, ep_name, "failed", "ffmpeg not installed")
-                    continue
-                except asyncio.TimeoutError:
-                    logger.error(f"[Download Worker] Timeout retry tải {key}")
-                    try: proc.kill()
-                    except: pass
-                    exit_code = -1
-                    stderr = b"Timeout error"
-                    
+
             if exit_code == 0 and os.path.exists(part_path):
                 os.rename(part_path, output_path)
                 await update_download_status(movie_slug, ep_name, "completed")
@@ -837,10 +842,8 @@ async def download_worker():
                 err_msg = stderr.decode('utf-8', errors='ignore')[-200:] if stderr else "Unknown error"
                 await update_download_status(movie_slug, ep_name, "failed", err_msg)
                 logger.error(f"[Download Worker] Lỗi tải {key}: {err_msg}")
-                if os.path.exists(part_path):
-                    try: os.remove(part_path)
-                    except: pass
-                    
+                _remove_quietly(part_path)
+
         except Exception as e:
             logger.error(f"[Download Worker] Lỗi hệ thống trong worker: {e}")
         finally:
@@ -849,7 +852,7 @@ async def download_worker():
 
 def _cleanup_disk():
     now = time.time()
-    max_age = setting("cache.max_age_hours") * 3600  # giờ -> giây
+    max_age = setting("cache.max_age_hours") * 3600  # hours -> seconds
     max_size = setting("cache.max_gb") * 1024 ** 3   # GB -> byte
     total_size = 0
     cleaned_sessions = 0
@@ -873,13 +876,10 @@ def _cleanup_disk():
                         total_size += fstats.st_size
                         if not f.endswith(".part"):
                             all_files.append((fpath, fstats.st_mtime, fstats.st_size))
-                        else:
-                            if now - fstats.st_mtime > 3600:
-                                try: os.remove(fpath)
-                                except: pass
+                        elif now - fstats.st_mtime > 3600:
+                            _remove_quietly(fpath)
         else:
-            try: os.remove(item_path)
-            except: pass
+            _remove_quietly(item_path)
 
     if cleaned_sessions > 0:
         logger.info(f"Đã xóa {cleaned_sessions} phiên làm việc (session) hết hạn.")
@@ -898,7 +898,7 @@ def _cleanup_disk():
                 pass
 
 async def prune_cache():
-    """Tự động dọn dẹp cache không block event loop"""
+    """Automatically clean up the cache without blocking the event loop"""
     while True:
         try:
             await asyncio.to_thread(_cleanup_disk)
@@ -911,22 +911,24 @@ async def prune_cache():
         except Exception as e:
             logger.error(f"Lỗi dọn thiết bị không hoạt động: {e}")
 
-        await asyncio.sleep(3600)  # Chạy mỗi giờ một lần
+        await asyncio.sleep(3600)  # Run once an hour
+
+def _segment_paths(sid: str, url: str) -> tuple[str, str, str]:
+    """(cache_path, part_path, lock_id) of a segment in session sid; creates the session directory."""
+    session_dir = os.path.join(CACHE_DIR, sid)
+    os.makedirs(session_dir, exist_ok=True)
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    cache_path = os.path.join(session_dir, f"{url_hash}.ts")
+    return cache_path, cache_path + ".part", f"{sid}_{url_hash}"
+
+def _segment_media_type(size: int) -> str:
+    # A 16-byte "segment" is an AES-128 key, not MPEG-TS
+    return "application/octet-stream" if size == 16 else "video/MP2T"
 
 async def _prefetch_one(target_url: str, sid: str):
-    session_dir = os.path.join(CACHE_DIR, sid)
-    if not os.path.exists(session_dir):
-        os.makedirs(session_dir, exist_ok=True)
+    cache_path, part_path, lock_id = _segment_paths(sid, target_url)
 
-    url_hash = hashlib.md5(target_url.encode()).hexdigest()
-    cache_path = os.path.join(session_dir, f"{url_hash}.ts")
-    part_path = os.path.join(session_dir, f"{url_hash}.ts.part")
-    lock_id = f"{sid}_{url_hash}"
-
-    if os.path.exists(cache_path):
-        return
-
-    if lock_id in download_locks:
+    if os.path.exists(cache_path) or lock_id in download_locks:
         return
 
     async with get_prefetch_semaphore():
@@ -938,8 +940,7 @@ async def _prefetch_one(target_url: str, sid: str):
         download_locks[lock_id] = event
         try:
             logger.info(f"[Prefetch] Tải: {target_url}")
-            headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-            async with client.stream("GET", target_url, headers=headers) as resp:
+            async with client.stream("GET", target_url, headers=UPSTREAM_HEADERS) as resp:
                 if resp.status_code != 200:
                     raise httpx.HTTPStatusError(
                         f"Origin trả {resp.status_code}", request=resp.request, response=resp
@@ -954,13 +955,10 @@ async def _prefetch_one(target_url: str, sid: str):
             logger.info(f"[Prefetch] Hoàn thành: {target_url}")
         except Exception as e:
             logger.warning(f"[Prefetch] Thất bại cho {target_url}: {e}")
-            if os.path.exists(part_path):
-                try: os.remove(part_path)
-                except Exception: pass
+            _remove_quietly(part_path)
         finally:
             event.set()
-            if lock_id in download_locks:
-                del download_locks[lock_id]
+            download_locks.pop(lock_id, None)
 
 async def prefetch_episode(segment_urls: list[str], key_url: str | None, sid: str):
     if key_url:
@@ -973,9 +971,9 @@ async def prefetch_episode(segment_urls: list[str], key_url: str | None, sid: st
         await asyncio.gather(*tasks, return_exceptions=True)
         logger.info(f"[Prefetch] Hoàn thành toàn bộ prefetch cho tập phim: {sid}")
 
-# HTTP client (khởi tạo trong lifespan; None cho đến khi app start)
+# HTTP client (initialized in lifespan; None until the app starts)
 client: httpx.AsyncClient | None = None
-# Client riêng cho đường phát HomeTV (không tự chuyển hướng, không đọc biến proxy); tạo lười khi cần
+# Separate client for HomeTV streams (no auto-redirects, ignores proxy env vars); created lazily
 hometv_play_client: httpx.AsyncClient | None = None
 
 
@@ -986,18 +984,18 @@ def get_hometv_play_client() -> httpx.AsyncClient:
     return hometv_play_client
 
 
-# --- Lifespan handler (thay thế @app.on_event deprecated) ---
-# Quản lý startup + shutdown trong 1 context manager duy nhất.
-# Background tasks được track để cancel sạch khi shutdown.
+# --- Lifespan handler (replaces the deprecated @app.on_event) ---
+# Manages startup + shutdown in a single context manager.
+# Background tasks are tracked so they can be cancelled cleanly on shutdown.
 _bg_tasks: list[asyncio.Task] = []
 
 def _warn_if_admin_disabled() -> None:
-    if not admin.configured():
+    if not _admin_configured():
         logger.warning("HOMEFLIX_ADMIN_PASSWORD chưa đặt: tính năng admin đang tắt")
 
 
 def _init_hometv() -> bool:
-    # HomeTV hỏng không được làm HomeFlix dừng: chỉ log lỗi
+    # A broken HomeTV must not stop HomeFlix: just log the error
     try:
         hometv.init(os.path.join(DATA_DIR, "hometv.db"))
         return True
@@ -1006,35 +1004,36 @@ def _init_hometv() -> bool:
         return False
 
 
-@asynccontextmanager
+@contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: init DB, workers. Shutdown: close httpx client, cancel tasks."""
     global client
-    # Khởi tạo database SQLite
+    # Initialize the SQLite database
     init_db()
-    # Chạy di chuyển dữ liệu downloads.json nếu có
+    ensure_admin_password()   # first start: generate and log an admin password
+    # Migrate downloads.json data if present
     migrate_downloads_json_to_db()
     hometv_ok = _init_hometv()
-    # Reset các download bị treo do server restart
+    # Reset downloads left stuck by a server restart
     await asyncio.to_thread(_db_reset_stuck_downloads)
-    # Khởi tạo HTTP client (chuyển vào lifespan để đóng sạch khi shutdown)
+    # Initialize the HTTP client (in lifespan so it closes cleanly on shutdown)
     client = httpx.AsyncClient(
         timeout=httpx.Timeout(15.0, connect=5.0, write=5.0, pool=10.0),
         follow_redirects=True,
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
     )
-    # Khởi động các background worker
+    # Start background workers
     _bg_tasks.append(asyncio.create_task(prune_cache()))
     _bg_tasks.append(asyncio.create_task(download_worker()))
     _bg_tasks.append(asyncio.create_task(delayed_cleanup_worker()))
     _bg_tasks.append(asyncio.create_task(home_cache_warmer()))
-    if hometv_ok:  # HomeTV chỉ chạy khi hometv.db mở được
+    if hometv_ok:  # HomeTV only runs when hometv.db opened successfully
         _bg_tasks.append(asyncio.create_task(hometv.scheduler.hometv_refresher()))
         _bg_tasks.append(asyncio.create_task(hometv.health_scheduler.hometv_health_checker()))
     _warn_if_admin_disabled()
     logger.info("[Startup] HomeFlix ready — DB, workers, httpx client initialized")
     yield
-    # Shutdown: hủy background tasks + đóng httpx client
+    # Shutdown: cancel background tasks + close the httpx client
     for t in _bg_tasks:
         t.cancel()
     await asyncio.gather(*_bg_tasks, return_exceptions=True)
@@ -1046,10 +1045,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HomeFlix Proxy Player", lifespan=lifespan)
 
-# --- File tĩnh có phiên bản ---
-# Trang gắn ?v=<hash nội dung> vào URL của JS/CSS (asset_url). URL có v đổi theo nội dung nên
-# được cache immutable 7 ngày; URL không có v (logo, manifest) và sw.js thì luôn hỏi lại server
-# (ETag), để bản deploy mới không bị trình duyệt giữ file cũ.
+# --- Versioned static files ---
+# Pages append ?v=<content hash> to JS/CSS URLs (asset_url). URLs with v change with content, so
+# they are cached immutable for 7 days; URLs without v (logo, manifest) and sw.js always revalidate
+# (ETag), so a new deploy is not shadowed by stale files in the browser.
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 _asset_versions = {}
 
@@ -1078,42 +1077,42 @@ class CachedStaticFiles(StaticFiles):
 app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
 
 
-# Khởi tạo Jinja2 templates với đường dẫn tuyệt đối
+# Initialize Jinja2 templates with an absolute path
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 templates.env.globals["asset"] = lambda name: asset_url(name)
 
-# Cho phép CORS để Player JS có thể truy cập streams từ bất kì đâu
+# Allow CORS so the Player JS can access streams from anywhere
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    # Không credentials: nếu bật, Starlette phản chiếu mọi Origin kèm credentials=true,
-    # làm vô hiệu lớp chống CSRF của các route ghi (JSON-only) với subdomain cùng site.
+    # No credentials: if enabled, Starlette reflects any Origin with credentials=true,
+    # defeating the CSRF protection of write routes (JSON-only) against same-site subdomains.
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --- Browser cache cho API responses (GET) ---
-# Các API /api/home/* và /api/search, /api/movie/* đã có server-side cache
-# (cached_fetch). Thêm Cache-Control header để browser cũng cache tạm thời,
-# giảm RTT khi user điều hướng lại trang. max-age ngắn (60s) + stale-while-
-# revalidate để luôn tươi mà không chờ.
+# The /api/home/*, /api/search and /api/movie/* APIs already have a server-side cache
+# (cached_fetch). Add a Cache-Control header so the browser caches briefly too,
+# reducing RTT when the user navigates back. Short max-age (60s) + stale-while-
+# revalidate keeps data fresh without waiting.
 @app.middleware("http")
 async def api_cache_headers(request: Request, call_next):
     response = await call_next(request)
     if request.method == "GET" and response.status_code == 200:
         path = request.url.path
-        # Cache ngắn cho homepage sections (data thay đổi mỗi 10-30 phút)
+        # Short cache for homepage sections (data changes every 10-30 minutes)
         if path.startswith("/api/home/"):
             response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=600"
-        # Cache search & movie detail ngắn hơn (user-specific nhưng ổn định)
+        # Shorter cache for search & movie detail (user-specific but stable)
         elif path.startswith("/api/search") or path.startswith("/api/movie/"):
             response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=300"
         elif path.startswith("/proxy/image"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
 
-# Ghi vào /api/admin và /api/settings bắt buộc application/json (chặn form CSRF)
+# Writes to /api/admin and /api/settings require application/json (blocks form CSRF)
 @app.middleware("http")
 async def json_only_middleware(request: Request, call_next):
     path = request.url.path
@@ -1124,7 +1123,7 @@ async def json_only_middleware(request: Request, call_next):
             return JSONResponse({"detail": "application/json required"}, status_code=415)
     return await call_next(request)
 
-# Cấp và đọc cookie hf_device cho "/" và các route theo thiết bị.
+# Issue and read the hf_device cookie for "/" and per-device routes.
 @app.middleware("http")
 async def device_middleware(request: Request, call_next):
     path = request.url.path
@@ -1150,9 +1149,9 @@ async def device_middleware(request: Request, call_next):
         response.headers["Vary"] = "Cookie"
     return response
 
-# --- Admin: đăng nhập bằng mật khẩu, đăng xuất, thu hồi máy khác ---
+# --- Admin: password login, logout, revoking other devices ---
 def require_admin_enabled():
-    if not admin.configured():
+    if not _admin_configured():
         raise HTTPException(status_code=404)
 
 def require_admin(request: Request):
@@ -1160,17 +1159,21 @@ def require_admin(request: Request):
     if not _db_is_admin(request.state.device_id):
         raise HTTPException(status_code=403, detail="admin required")
 
-# Route admin HomeTV (router tự gắn require_admin cho mọi route)
+# HomeTV admin routes (the router attaches require_admin to every route)
 app.include_router(hometv.api.make_router(require_admin))
 app.include_router(hometv.health_api.make_health_router(require_admin))
-# Route công khai HomeTV: kênh, yêu thích, đường phát
+# Public HomeTV routes: channels, favorites, streams
 app.include_router(hometv.public_api.make_public_router(lambda: get_hometv_play_client()))
 
-# --- Cài đặt hệ thống ---
+# --- System settings ---
 def _settings_payload(request: Request) -> dict:
-    is_admin = admin.configured() and _db_is_admin(request.state.device_id)
-    return {"admin_enabled": admin.configured(), "is_admin": is_admin,
-            "groups": settings_store.describe() if is_admin else []}
+    enabled = _admin_configured()
+    is_admin = enabled and _db_is_admin(request.state.device_id)
+    payload = {"admin_enabled": enabled, "is_admin": is_admin,
+               "groups": settings_store.describe() if is_admin else []}
+    if is_admin:
+        payload["password_env"] = admin.env_managed()   # the UI hides "Đổi mật khẩu" when the env var sets it
+    return payload
 
 @app.get("/api/settings")
 async def get_settings_api(request: Request):
@@ -1190,14 +1193,14 @@ async def patch_settings_api(request: Request):
         return JSONResponse({"errors": e.errors}, status_code=422)
     return await asyncio.to_thread(_settings_payload, request)
 
-# --- Admin: quản lý thiết bị (chỉ dùng id công khai, không bao giờ lộ id thật) ---
+# --- Admin: device management (public ids only, never expose the real id) ---
 def _admin_device_view(row, salt: str, self_id: str) -> dict:
     return {"id": _cast_public_id(row["id"], salt), "name": row["name"], "kind": row["kind"],
             "household": row["household"][:8], "last_seen": row["last_seen"],
             "is_admin": bool(row["is_admin"]), "is_self": row["id"] == self_id}
 
 def _resolve_public_device(public_id: str) -> dict | None:
-    """Quét mọi thiết bị, so id công khai bằng compare_digest. None nếu không có."""
+    """Scan all devices, comparing public ids with compare_digest. None if not found."""
     salt = get_household_salt()
     for row in db_query("SELECT * FROM devices"):
         if hmac.compare_digest(_cast_public_id(row["id"], salt), str(public_id)):
@@ -1212,8 +1215,8 @@ def _db_admin_devices(self_id: str) -> list[dict]:
     return out
 
 def _db_admin_patch_device(public_id: str, name, is_admin, self_id: str) -> dict | None:
-    """Sửa tên / quyền admin. Đếm admin và ghi cùng một khóa nên không thể về 0 admin; thu admin cuối → 409."""
-    target = _resolve_public_device(public_id)  # lấy id thật trước khi giữ khóa (khóa không reentrant)
+    """Edit name / admin rights. Counting admins and writing share one lock, so admins can never reach 0; revoking the last admin -> 409."""
+    target = _resolve_public_device(public_id)  # resolve the real id before taking the lock (the lock is not reentrant)
     if target is None:
         return None
     salt = get_household_salt()
@@ -1271,7 +1274,7 @@ async def admin_delete_device_api(request: Request, public_id: str):
     return Response(status_code=204)
 
 def _lockout_ip_key(ip: str) -> str:
-    """Khóa theo IP: IPv6 gộp về /64 để không xoay địa chỉ trong cùng dải."""
+    """Lockout per IP: IPv6 is grouped to /64 so rotating addresses within a range does not help."""
     try:
         addr = ipaddress.ip_address((ip or "").strip())
     except ValueError:
@@ -1284,22 +1287,49 @@ def _lockout_ip_key(ip: str) -> str:
 
 @app.post("/api/admin/login", dependencies=[Depends(require_admin_enabled)])
 async def admin_login_api(request: Request):
-    # Đọc thân TRƯỚC khi kiểm khóa; từ retry_after đến record_failure không có await,
-    # nên nhiều kết nối thân chậm không lọt qua cùng lúc
+    # Read the body BEFORE checking the lockout; there is no await between retry_after and record_failure,
+    # so many slow-body connections cannot slip through at once
     try:
         body = await request.json()
     except ValueError:
         body = None
     candidate = body.get("password") if isinstance(body, dict) else None
     keys = [f"d:{request.state.device_id}", _lockout_ip_key(request.state.ip)]
-    wait = admin_login_limiter.retry_after(keys)  # kiểm khóa trước khi so mật khẩu
+    wait = admin_login_limiter.retry_after(keys)  # check the lockout before comparing the password
     if wait > 0:
         return JSONResponse({"retry_after": wait}, status_code=429, headers={"Retry-After": str(wait)})
-    if not admin.password_ok(candidate):
+    # scrypt runs inline on purpose: an await here would let parallel guesses pass retry_after together
+    if not admin.password_ok(candidate, _db_admin_hash()):
         admin_login_limiter.record_failure(keys)
         raise HTTPException(status_code=401, detail="wrong password")
     admin_login_limiter.reset(keys)
     await asyncio.to_thread(_db_set_admin, request.state.device_id, True)
+    return Response(status_code=204)
+
+@app.post("/api/admin/password", dependencies=[Depends(require_admin)])
+async def admin_change_password_api(request: Request):
+    """Change the stored admin password; needs the current one (wrong guesses count toward the login lockout)."""
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return JSONResponse({"errors": {"_": "cần một đối tượng JSON"}}, status_code=422)
+    if admin.env_managed():
+        raise HTTPException(status_code=409, detail="password is set by HOMEFLIX_ADMIN_PASSWORD")
+    keys = [f"d:{request.state.device_id}", _lockout_ip_key(request.state.ip)]
+    wait = admin_login_limiter.retry_after(keys)
+    if wait > 0:
+        return JSONResponse({"retry_after": wait}, status_code=429, headers={"Retry-After": str(wait)})
+    error = admin.new_password_error(body.get("new"))
+    if error:
+        return JSONResponse({"errors": {"new": error}}, status_code=422)
+    # inline scrypt, same reason as login: no await between retry_after and record_failure
+    if not admin.password_ok(body.get("current"), _db_admin_hash()):
+        admin_login_limiter.record_failure(keys)
+        return JSONResponse({"errors": {"current": "Sai mật khẩu hiện tại"}}, status_code=401)
+    admin_login_limiter.reset(keys)
+    await asyncio.to_thread(_db_set_admin_hash, admin.hash_password(body["new"]))
     return Response(status_code=204)
 
 @app.post("/api/admin/logout", dependencies=[Depends(require_admin)])
@@ -1365,15 +1395,15 @@ async def patch_device_api(request: Request, body: dict):
                                 (*updates.values(), request.state.device_id))
     return await get_device_api(request)
 
-# --- Cast: hiện diện và thiết bị gần đây ---
-# Id thiết bị chính là cookie đăng nhập nên KHÔNG bao giờ gửi cho thiết bị khác. Mọi payload và route cast
-# dùng id công khai = HMAC(salt, id thiết bị); server chỉ giải ngược trong phạm vi cùng nhà.
+# --- Cast: presence and recent devices ---
+# The device id is the login cookie, so NEVER send it to another device. All cast payloads and routes
+# use the public id = HMAC(salt, device id); the server only resolves it back within the same home.
 def _cast_public_id(device_id: str, salt: str | None = None) -> str:
     key = (salt or get_household_salt()).encode()
     return hmac.new(key, b"cast:" + device_id.encode(), hashlib.sha256).hexdigest()[:20]
 
 async def _cast_resolve(request: Request, public_id: str, kinds: tuple | None = None) -> dict | None:
-    """Hàng devices cùng nhà có id công khai khớp (và đúng loại nếu có `kinds`), hoặc None."""
+    """The same-home devices row whose public id matches (and of the right kind if `kinds` is given), or None."""
     rows = await asyncio.to_thread(db_query, "SELECT * FROM devices WHERE household = ?", (request.state.household,))
     salt = await asyncio.to_thread(get_household_salt)
     for row in rows:
@@ -1382,7 +1412,7 @@ async def _cast_resolve(request: Request, public_id: str, kinds: tuple | None = 
     return None
 
 def _sweep_stale_controllers(tv_id: str) -> None:
-    """Controller không còn heartbeat (đóng Safari, mất mạng) thì gỡ liên kết và báo TV bỏ nhãn."""
+    """When a controller stops heartbeating (Safari closed, network lost), unlink it and tell the TV to drop the label."""
     salt = get_household_salt()
     for controller_id in cast_hub.controllers_of(tv_id):
         if not cast_hub.is_online(controller_id):
@@ -1434,7 +1464,7 @@ async def patch_cast_settings_api(request: Request, body: dict):
             cast_hub.unlink(controller_id)
             cast_hub.publish(device_id, "controller_left", {"controller_id": _cast_public_id(controller_id, salt)})
             cast_hub.publish(controller_id, "unlinked", {"target_id": tv_public})
-        cast_hub.clear_pending(device_id)   # yêu cầu đang chờ không được duyệt sau khi đã tắt điều khiển
+        cast_hub.clear_pending(device_id)   # pending requests must not be approved after control is turned off
     return {"allow_control": value}
 
 CAST_PING_SECONDS = 15
@@ -1447,11 +1477,11 @@ def _db_device_names(ids: list[str]) -> dict[str, str]:
 
 @app.get("/api/cast/events")
 async def cast_events_api(request: Request):
-    """Luồng SSE của một thiết bị: lệnh, yêu cầu kết nối, trạng thái. Một dòng ': ping' mỗi CAST_PING_SECONDS."""
+    """SSE stream for a device: commands, connection requests, state. One ': ping' line every CAST_PING_SECONDS."""
     device_id = request.state.device_id
 
     async def stream():
-        # Đăng ký bên trong generator: nếu client ngắt trước khi luồng bắt đầu thì không có gì để dọn
+        # Register inside the generator: if the client disconnects before the stream starts, there is nothing to clean up
         sub = cast_hub.subscribe(device_id)
         try:
             salt = await asyncio.to_thread(get_household_salt)
@@ -1477,8 +1507,8 @@ async def cast_events_api(request: Request):
                              headers={"X-Accel-Buffering": "no", "Cache-Control": "private, no-store"})
 
 async def _cast_target(request: Request, public_id: str) -> dict:
-    """Hàng devices của TV đích. 403 nếu không có, khác nhà, không phải tv/desktop, hoặc là chính mình
-    (không phân biệt các trường hợp, để không dò được id)."""
+    """The target TV's devices row. 403 if missing, in another home, not tv/desktop, or the caller itself
+    (cases are not distinguished, so ids cannot be probed)."""
     row = await _cast_resolve(request, public_id, kinds=("tv", "desktop"))
     if row is None or row["id"] == request.state.device_id:
         raise HTTPException(status_code=403, detail="forbidden")
@@ -1510,7 +1540,7 @@ async def cast_connect_api(request: Request, target_id: str):
 
 @app.post("/api/cast/requests/{controller_id}")
 async def cast_answer_request_api(request: Request, controller_id: str, body: dict):
-    """TV trả lời yêu cầu kết nối của một controller (id công khai trong đường dẫn)."""
+    """The TV answers a controller's connection request (public id in the path)."""
     tv_id = request.state.device_id
     allow = body.get("allow")
     if not isinstance(allow, bool):
@@ -1539,7 +1569,7 @@ async def cast_unlink_api(request: Request):
     return {"status": "ok"}
 
 async def _cast_authorize(request: Request, public_id: str) -> dict:
-    """Controller được điều khiển target: cùng nhà, TV bật công tắc, và TV đã cho phép controller này."""
+    """The controller may control the target: same home, the TV's toggle is on, and the TV has allowed this controller."""
     target = await _cast_target(request, public_id)
     if not await asyncio.to_thread(_db_cast_allow_control, target["id"]):
         raise HTTPException(status_code=403, detail="target does not accept control")
@@ -1559,7 +1589,7 @@ async def cast_command_api(request: Request, target_id: str, body: dict):
         raise HTTPException(status_code=409, detail="target offline")
     controller_id = request.state.device_id
     if cast_hub.linked_target(controller_id) != tv_id:
-        # Liên kết trong bộ nhớ đã mất (server khởi động lại): lập lại và cho TV biết để nó báo trạng thái
+        # The in-memory link was lost (server restarted): re-establish it and notify the TV so it reports its state
         cast_hub.link(controller_id, tv_id)
         cast_hub.publish(tv_id, "controller_joined", {
             "controller_id": await asyncio.to_thread(_cast_public_id, controller_id),
@@ -1569,7 +1599,7 @@ async def cast_command_api(request: Request, target_id: str, body: dict):
 
 @app.post("/api/cast/state")
 async def cast_report_state_api(request: Request, body: dict):
-    """TV báo trạng thái phát; chuyển tới các controller đang liên kết."""
+    """The TV reports playback state; forward it to linked controllers."""
     tv_id = request.state.device_id
     row = await asyncio.to_thread(db_query_one, "SELECT kind FROM devices WHERE id = ?", (tv_id,))
     if row is None or row["kind"] not in ("tv", "desktop"):
@@ -1590,51 +1620,48 @@ async def cast_get_state_api(request: Request, target_id: str):
     target = await _cast_authorize(request, target_id)
     return cast_hub.get_state(target["id"]) or {}
 
-# GZip nén response HTTP (JSON, HTML) giảm bandwidth ~70% cho text responses
+# GZip-compress HTTP responses (JSON, HTML), cutting bandwidth ~70% for text responses
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
+_IMAGE_TYPES = {".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg"}
 
 @app.get("/proxy/image")
 async def proxy_image(url: str):
-    """Proxy và disk-cache poster/hỉnh ảnh phim để tăng tốc độ tải trên client & PWA"""
+    """Proxy and disk-cache movie posters/images to speed up loading on the client & PWA"""
     if not url or not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid image URL")
     
     url_hash = hashlib.md5(url.encode()).hexdigest()
-    # Tìm ext thích hợp
-    ext = ".jpg"
-    if ".png" in url.lower():
-        ext = ".png"
-    elif ".webp" in url.lower():
-        ext = ".webp"
-    
+    lowered = url.lower()
+    ext = ".png" if ".png" in lowered else ".webp" if ".webp" in lowered else ".jpg"
     file_path = os.path.join(POSTER_CACHE_DIR, f"{url_hash}{ext}")
-    
+
     if os.path.exists(file_path):
-        media_type = "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "image/jpeg"
-        return FileResponse(file_path, media_type=media_type, headers={"X-Cache": "HIT", "Cache-Control": "public, max-age=31536000, immutable"})
-    
+        return FileResponse(file_path, media_type=_IMAGE_TYPES[ext],
+                            headers={"X-Cache": "HIT", "Cache-Control": IMMUTABLE_CACHE})
+
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-        resp = await client.get(url, headers=headers, follow_redirects=True, timeout=15.0)
+        resp = await client.get(url, headers=UPSTREAM_HEADERS, follow_redirects=True, timeout=15.0)
         if resp.status_code != 200:
             raise HTTPException(status_code=resp.status_code, detail="Unable to fetch remote image")
-        
+
         content = resp.content
         part_path = f"{file_path}.part"
         async with aiofiles.open(part_path, "wb") as f:
             await f.write(content)
-        if os.path.exists(part_path):
-            os.rename(part_path, file_path)
-            
+        os.replace(part_path, file_path)
+
         content_type = resp.headers.get("content-type", "image/jpeg")
-        return Response(content=content, media_type=content_type, headers={"X-Cache": "MISS", "Cache-Control": "public, max-age=31536000, immutable"})
+        return Response(content=content, media_type=content_type,
+                        headers={"X-Cache": "MISS", "Cache-Control": IMMUTABLE_CACHE})
     except Exception as e:
         logger.warning(f"[ImageProxy] Lỗi tải ảnh {url}: {e}")
-        # Redirect đến url gốc nếu fail
+        # Redirect to the original url on failure
         return Response(status_code=307, headers={"Location": url})
 
 def make_proxy_url(request: Request, path: str, target_url: str, sid: str = None) -> str:
-    """Tạo URL đi qua proxy của chúng ta"""
+    """Build a URL that goes through our proxy"""
     encoded_target = urllib.parse.quote(target_url, safe="")
     res = f"{path}?url={encoded_target}"
     if sid:
@@ -1643,39 +1670,29 @@ def make_proxy_url(request: Request, path: str, target_url: str, sid: str = None
 
 @app.get("/")
 async def root(request: Request):
-    """Trang chủ - giao diện Player"""
+    """Home page - Player UI"""
     return templates.TemplateResponse(request=request, name="index.html")
 
 @app.get("/proxy/m3u8")
 async def proxy_m3u8(request: Request, url: str, sid: str = None):
-    """Proxy phân tích m3u8 và viết lại các URL bên trong"""
+    """Proxy that parses m3u8 and rewrites the URLs inside"""
     if not sid:
         sid = hashlib.md5(url.encode()).hexdigest()
 
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-        response = await client.get(url, headers=headers, follow_redirects=True)
+        response = await client.get(url, headers=UPSTREAM_HEADERS, follow_redirects=True)
         response.raise_for_status()
-        
-        # Phân tích nội dung M3U8 với thư viện m3u8
+
+        # Parse the M3U8 content with the m3u8 library
         playlist = m3u8.loads(response.text, uri=url)
-        
-        # Phân nhánh 1: Nếu là luồng MASTER
+
+        # Branch 1: MASTER playlist — variants, I-frame playlists and renditions all go back through /proxy/m3u8
         if playlist.is_variant:
-            for item in playlist.playlists:
-                abs_uri = item.absolute_uri
-                item.uri = make_proxy_url(request, "/proxy/m3u8", abs_uri, sid)
-            if playlist.iframe_playlists:
-                for iframe in playlist.iframe_playlists:
-                    abs_uri = iframe.absolute_uri
-                    iframe.uri = make_proxy_url(request, "/proxy/m3u8", abs_uri, sid)
-            if playlist.media:
-                for media in playlist.media:
-                    if media.uri:
-                        abs_uri = media.absolute_uri
-                        media.uri = make_proxy_url(request, "/proxy/m3u8", abs_uri, sid)
-                        
-        # Phân nhánh 2: Nếu là luồng MEDIA
+            for item in (*playlist.playlists, *playlist.iframe_playlists, *playlist.media):
+                if item.uri:
+                    item.uri = make_proxy_url(request, "/proxy/m3u8", item.absolute_uri, sid)
+
+        # Branch 2: MEDIA playlist
         else:
             original_segment_urls = []
             original_key_url = None
@@ -1691,7 +1708,7 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
                     original_key_url = abs_uri
                     key.uri = make_proxy_url(request, "/proxy/ts", abs_uri, sid)
             
-            # Khởi chạy prefetch toàn bộ tập phim dưới nền
+            # Start prefetching the whole episode in the background
             asyncio.create_task(prefetch_episode(original_segment_urls, original_key_url, sid))
                     
         return PlainTextResponse(
@@ -1701,7 +1718,7 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
         )
         
     except httpx.HTTPStatusError as e:
-        # Nguồn trả lỗi (thường là CDN chặn IP ngoài Việt Nam): báo 502 kèm lý do để client tự phát thẳng
+        # The source returned an error (usually the CDN blocking non-Vietnam IPs): return 502 with a reason so the client plays directly
         status = e.response.status_code
         headers = {"X-Upstream-Status": str(status), "Cache-Control": "no-store"}
         if "mạng trong nước" in e.response.text:
@@ -1716,11 +1733,11 @@ async def proxy_m3u8(request: Request, url: str, sid: str = None):
         return PlainTextResponse(f"Proxy Error: {str(e)}", status_code=500)
 
 async def fetch_and_cache_full(url: str, cache_path: str, part_path: str, event: asyncio.Event) -> bytes:
+    """Download a segment to part_path then rename it to cache_path; event is always set when done.
+    Any failure removes the part file and surfaces as HTTP 502."""
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-        async with client.stream("GET", url, headers=headers) as resp:
+        async with client.stream("GET", url, headers=UPSTREAM_HEADERS) as resp:
             if resp.status_code != 200:
-                event.set()
                 raise HTTPException(
                     status_code=502,
                     detail=f"Origin trả status code {resp.status_code} cho segment: {url}"
@@ -1730,69 +1747,48 @@ async def fetch_and_cache_full(url: str, cache_path: str, part_path: str, event:
                 async for chunk in resp.aiter_bytes():
                     await f.write(chunk)
                     chunks.append(chunk)
-        if os.path.exists(part_path):
-            os.rename(part_path, cache_path)
-        event.set()
+        os.replace(part_path, cache_path)
         return b"".join(chunks)
-    except HTTPException as he:
-        event.set()
-        if os.path.exists(part_path):
-            try: os.remove(part_path)
-            except Exception: pass
-        raise he
-    except asyncio.CancelledError:
-        event.set()
-        if os.path.exists(part_path):
-            try: os.remove(part_path)
-            except Exception: pass
+    except (HTTPException, asyncio.CancelledError):
+        _remove_quietly(part_path)
         raise
     except Exception as e:
         logger.error(f"Lỗi tải segment: {e}")
-        event.set()
-        if os.path.exists(part_path):
-            try: os.remove(part_path)
-            except Exception: pass
+        _remove_quietly(part_path)
         raise HTTPException(status_code=502, detail=f"Lỗi tải segment từ nguồn: {str(e)}")
+    finally:
+        event.set()
+
+def _cached_segment_response(cache_path: str, cache_tag: str) -> FileResponse:
+    return FileResponse(cache_path, media_type=_segment_media_type(os.path.getsize(cache_path)),
+                        headers={"X-Cache": cache_tag})
 
 @app.get("/proxy/ts")
 async def proxy_ts(request: Request, url: str, sid: str = "default"):
-    """Proxy và cache .ts với cơ chế Pass-through Stream và Part-files theo Session"""
-    session_dir = os.path.join(CACHE_DIR, sid)
-    if not os.path.exists(session_dir):
-        os.makedirs(session_dir, exist_ok=True)
-        
-    url_hash = hashlib.md5(url.encode()).hexdigest()
-    cache_path = os.path.join(session_dir, f"{url_hash}.ts")
-    part_path = os.path.join(session_dir, f"{url_hash}.ts.part")
-    lock_id = f"{sid}_{url_hash}"
-    
-    # 1. Kiểm tra cache trên đĩa
+    """Proxy and cache .ts with Pass-through Stream and per-Session Part-files"""
+    cache_path, part_path, lock_id = _segment_paths(sid, url)
+
+    # 1. Check the on-disk cache
     if os.path.exists(cache_path):
-        size = os.path.getsize(cache_path)
-        media_type = "application/octet-stream" if size == 16 else "video/MP2T"
-        return FileResponse(cache_path, media_type=media_type, headers={"X-Cache": "HIT"})
-    
-    # 2. Cơ chế Single Flight: Kiểm tra xem có ai đang tải đoạn này chưa
+        return _cached_segment_response(cache_path, "HIT")
+
+    # 2. Single Flight: check whether someone is already fetching this segment
     if lock_id in download_locks:
         await download_locks[lock_id].wait()
         if os.path.exists(cache_path):
-            size = os.path.getsize(cache_path)
-            media_type = "application/octet-stream" if size == 16 else "video/MP2T"
-            return FileResponse(cache_path, media_type=media_type, headers={"X-Cache": "HIT-QUEUED"})
+            return _cached_segment_response(cache_path, "HIT-QUEUED")
 
-    # 3. Tạo Lock và tải xuống
+    # 3. Create a Lock and download
     event = asyncio.Event()
     download_locks[lock_id] = event
     try:
         data = await fetch_and_cache_full(url, cache_path, part_path, event)
     finally:
-        if lock_id in download_locks:
-            del download_locks[lock_id]
+        download_locks.pop(lock_id, None)
 
-    media_type = "application/octet-stream" if len(data) == 16 else "video/MP2T"
     return Response(
         content=data,
-        media_type=media_type,
+        media_type=_segment_media_type(len(data)),
         headers={
             "X-Cache": "MISS",
             "Content-Length": str(len(data))
@@ -1810,7 +1806,7 @@ def _calculate_cache_size():
 
 @app.get("/api/cache/status")
 async def get_cache_status():
-    """Lấy thông tin dung lượng cache hiện tại (chống nghẽn Event Loop)"""
+    """Get current cache size info (without blocking the Event Loop)"""
     try:
         total_size = await asyncio.to_thread(_calculate_cache_size)
         max_gb = setting("cache.max_gb")
@@ -1829,15 +1825,13 @@ def _clear_all_cache():
     for item in os.listdir(CACHE_DIR):
         item_path = os.path.join(CACHE_DIR, item)
         if os.path.isdir(item_path):
-            try: shutil.rmtree(item_path)
-            except: pass
+            shutil.rmtree(item_path, ignore_errors=True)
         else:
-            try: os.remove(item_path)
-            except: pass
+            _remove_quietly(item_path)
 
 @app.post("/api/admin/cache/clear", dependencies=[Depends(require_admin)])
 async def clear_cache_endpoint():
-    """Xóa sạch bộ nhớ đêm ngay lập tức (chống nghẽn Event Loop)"""
+    """Clear the cache immediately (without blocking the Event Loop)"""
     try:
         await asyncio.to_thread(_clear_all_cache)
         return {"status": "success", "message": "Đã dọn sạch cache."}
@@ -1846,7 +1840,7 @@ async def clear_cache_endpoint():
 
 @app.get("/api/search")
 async def search_movies(q: str):
-    """Proxy tìm kiếm phim từ PhimAPI (cached 30 phút, stale-fallback)"""
+    """Proxy movie search to PhimAPI (cached 30 minutes, stale-fallback)"""
     async def _fetch():
         url = f"https://phimapi.com/v1/api/tim-kiem?keyword={urllib.parse.quote(q)}&limit=30"
         response = await client.get(url)
@@ -1859,14 +1853,14 @@ async def search_movies(q: str):
         return {"status": "error", "message": str(e)}
 
 def _names(value) -> list[str]:
-    """Tên hiển thị từ danh sách [{"name", "slug"}] của phimapi; dữ liệu lạ cho []."""
+    """Display names from a phimapi [{"name", "slug"}] list; unexpected data yields []."""
     if not isinstance(value, list):
         return []
     return [i["name"] for i in value if isinstance(i, dict) and isinstance(i.get("name"), str) and i["name"]]
 
 @app.get("/api/movie/{slug}")
 async def get_movie_detail(slug: str):
-    """Proxy và chuẩn hóa chi tiết phim để tối ưu hiệu năng client (cached 60 phút, stale-fallback)"""
+    """Proxy and normalize movie details for client performance (cached 60 minutes, stale-fallback)"""
     async def _fetch():
         url = f"https://phimapi.com/phim/{slug}"
         response = await client.get(url)
@@ -1877,7 +1871,7 @@ async def get_movie_detail(slug: str):
             return data
             
         movie_raw = data.get("movie", {})
-        # Rút gọn thông tin phim cần thiết
+        # Keep only the needed movie fields
         poster_raw = movie_raw.get("poster_url") or ""
         poster_url = _make_img_proxy_url(poster_raw)
         movie_clean = {
@@ -1895,7 +1889,7 @@ async def get_movie_detail(slug: str):
             "country": _names(movie_raw.get("country"))
         }
         
-        # Rút gọn danh sách tập phim (chỉ lấy server đầu tiên có dữ liệu)
+        # Trim the episode list (only the first server that has data)
         episodes_clean = []
         raw_eps = data.get("episodes", [])
         main_server = next((srv for srv in raw_eps if srv.get("server_data")), None)
@@ -1937,15 +1931,12 @@ async def save_movie_api(request: Request, movie: dict):
         existing.update(movie)
         movie = existing
     else:
-        if "last_watched_episode" not in movie:
-            movie["last_watched_episode"] = ""
-        if "last_watched_url" not in movie:
-            movie["last_watched_url"] = ""
-        if "episode_states" not in movie:
-            movie["episode_states"] = {}
+        movie.setdefault("last_watched_episode", "")
+        movie.setdefault("last_watched_url", "")
+        movie.setdefault("episode_states", {})
     movie["saved"] = True
 
-    # Sửa lỗi total_episodes dựa trên độ dài episodes
+    # Fix total_episodes based on the length of episodes
     if "episodes" in movie and isinstance(movie["episodes"], list):
         movie["total_episodes"] = len(movie["episodes"])
 
@@ -1953,12 +1944,12 @@ async def save_movie_api(request: Request, movie: dict):
     return {"status": "success", "movie": movie}
 
 def _valid_slug(slug) -> bool:
-    """Slug phải là chuỗi một đoạn đường dẫn: không rỗng, không '.', '..', '/', '\\' hay NUL."""
+    """Slug must be a single path segment: non-empty, no '.', '..', '/', '\\' or NUL."""
     return (isinstance(slug, str) and 0 < len(slug) <= 200 and slug not in (".", "..")
             and not any(c in slug for c in "/\\\x00"))
 
 def _safe_rmtree_under(base: str, target: str) -> bool:
-    """rmtree target chỉ khi nó nằm thật sự bên dưới base (sau khi giải symlink và '..')."""
+    """rmtree target only if it really lies under base (after resolving symlinks and '..')."""
     real_base = os.path.realpath(base)
     real_target = os.path.realpath(target)
     if real_target == real_base or not real_target.startswith(real_base + os.sep):
@@ -1973,7 +1964,7 @@ _SCALAR_MOVIE_FIELDS = ("name", "poster_url", "year", "episode_current", "total_
                         "last_watched_episode", "last_watched_url")
 
 def _clean_client_movie(movie: dict) -> dict:
-    """Bỏ các trường server tự quản và các trường không phải số/chuỗi trước khi lưu."""
+    """Drop server-managed fields and non-number/string fields before saving."""
     for key in ("position", "duration", "saved"):
         movie.pop(key, None)
     for key in _SCALAR_MOVIE_FIELDS:
@@ -1982,10 +1973,10 @@ def _clean_client_movie(movie: dict) -> dict:
     return movie
 
 def _clean_position(position, duration):
-    """Chuẩn hóa (position, duration) tính bằng giây. Trả None nếu position không hợp lệ.
+    """Normalize (position, duration) in seconds. Returns None if position is invalid.
 
-    position None = client không gửi vị trí. Số âm quy về 0; lớn hơn duration thì bằng duration.
-    duration không hữu hạn hoặc <= 0 bị bỏ qua (None).
+    position None = client sent no position. Negatives clamp to 0; values above duration clamp to duration.
+    A non-finite or <= 0 duration is ignored (None).
     """
     def _number(v):
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
@@ -2025,7 +2016,7 @@ async def save_movie_progress_api(request: Request, progress: dict):
     device_id = request.state.device_id
     movie = await get_device_movie(device_id, slug)
     if not movie:
-        # Phim chưa lưu: chỉ tạo hàng lịch sử khi client gửi kèm thông tin phim
+        # Unsaved movie: only create a history row when the client sends movie info
         if not progress.get("name"):
             return {"status": "error", "message": "Movie not in saved list"}
         episodes = progress.get("episodes") if isinstance(progress.get("episodes"), list) else []
@@ -2035,13 +2026,13 @@ async def save_movie_progress_api(request: Request, progress: dict):
             "episode_states": {}, "last_watched_episode": "", "last_watched_url": "", "saved": False,
         }
 
-    # Báo cáo vị trí đến muộn của một tập đã xem xong (vd. sự kiện pause của tập trước
-    # đến sau khi tập sau đã bắt đầu): bỏ qua, không lùi tiến độ về tập cũ.
+    # A late position report for an already-finished episode (e.g. the previous episode's pause event
+    # arriving after the next one started): ignore it, do not roll progress back to the old episode.
     if (position is not None and last_url and last_url != movie.get("last_watched_url")
             and movie.get("episode_states", {}).get(last_url) == "watched"):
         return {"status": "success", "movie": movie}
 
-    # Cùng tập đang xem: chỉ cập nhật vị trí, không đổi trạng thái hay lên lịch xóa file.
+    # Same episode in progress: only update the position, no status change or file-deletion scheduling.
     if not last_url or last_url == movie.get("last_watched_url"):
         if position is not None:
             movie["position"] = position
@@ -2055,8 +2046,7 @@ async def save_movie_progress_api(request: Request, progress: dict):
     movie["position"] = position if position is not None else 0.0
     if duration is not None:
         movie["duration"] = duration
-    if "episode_states" not in movie:
-        movie["episode_states"] = {}
+    movie.setdefault("episode_states", {})
 
     previously_watching_urls = []
     for ep_url, state in list(movie["episode_states"].items()):
@@ -2065,19 +2055,18 @@ async def save_movie_progress_api(request: Request, progress: dict):
             previously_watching_urls.append(ep_url)
     movie["episode_states"][last_url] = "watching"
 
-    # Tập sắp xem không được nằm trong lịch xóa (vd. xem lại tập đã xem xong)
+    # The episode about to be watched must not be scheduled for deletion (e.g. rewatching a finished one)
     for ep in movie.get("episodes", []):
         if ep.get("link_m3u8") == last_url:
             st = await asyncio.to_thread(_db_get_download_status, slug, ep.get("name"))
             if st["delete_at"] is not None:
                 await update_download_status(slug, ep.get("name"), st["status"], delete_at=None)
 
-    # Xóa các file tập đã xem sau 3 giờ, trừ khi thiết bị khác còn giữ phim (file dùng chung)
+    # Delete watched episode files after 3 hours, unless another device still holds the movie (shared files)
     if previously_watching_urls and not await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
         for ep in movie.get("episodes", []):
             if ep.get("link_m3u8") in previously_watching_urls:
-                clean_ep = clean_filename(ep.get("name"))
-                file_path = os.path.join(DOWNLOAD_DIR, slug, f"{clean_ep}.mp4")
+                file_path = _episode_file(slug, ep.get("name"))
                 if os.path.exists(file_path):
                     try:
                         await update_download_status(slug, ep.get("name"), "completed", delete_at=time.time() + 10800)
@@ -2091,17 +2080,15 @@ async def save_movie_progress_api(request: Request, progress: dict):
 async def _forget_device_movie(device_id: str, movie: dict) -> None:
     slug = movie["slug"]
     await delete_device_movie(device_id, slug)
-    # File tải xuống, cache và record tải xuống là dùng chung: chỉ dọn khi
-    # không còn thiết bị nào khác giữ phim này.
+    # Downloaded files, cache and download records are shared: only clean up when
+    # no other device still holds this movie.
     if await asyncio.to_thread(_db_other_devices_hold, device_id, slug):
         return
 
-    # 1. Xóa các record tải xuống của phim trong DB
-    await asyncio.to_thread(
-        lambda ms=slug: db_execute("DELETE FROM episode_downloads WHERE movie_slug = ?", (ms,))
-    )
+    # 1. Delete the movie's download records from the DB
+    await asyncio.to_thread(db_execute, "DELETE FROM episode_downloads WHERE movie_slug = ?", (slug,))
     
-    # 2. Xóa các thư mục cache phân đoạn liên quan đến từng tập phim
+    # 2. Delete segment cache directories for each episode
     for ep in movie.get("episodes", []):
         ep_url = ep.get("link_m3u8")
         if ep_url:
@@ -2114,7 +2101,7 @@ async def _forget_device_movie(device_id: str, movie: dict) -> None:
                 except Exception as e:
                     logger.warning(f"Lỗi khi xóa cache {session_dir}: {e}")
                     
-    # 3. Xóa thư mục tải xuống của phim
+    # 3. Delete the movie's download directory
     movie_dir = os.path.join(DOWNLOAD_DIR, slug)
     if os.path.exists(movie_dir):
         try:
@@ -2135,14 +2122,14 @@ async def delete_saved_movie_api(request: Request, slug: str):
     return {"status": "error", "message": "Movie not found"}
 
 def _db_clear_device_progress(device_id: str, slug: str, episode_states: dict) -> None:
-    # Ghi thẳng NULL: upsert giữ vị trí cũ khi position là None (COALESCE)
+    # Write NULL directly: the upsert keeps the old position when position is None (COALESCE)
     db_execute("UPDATE device_movies SET last_watched_episode = '', last_watched_url = '', position_sec = NULL, "
                "duration_sec = NULL, episode_states = ?, updated_at = ? WHERE device_id = ? AND slug = ?",
                (json.dumps(episode_states, ensure_ascii=False), datetime.now().isoformat(), device_id, slug))
 
 @app.delete("/api/saved/{slug}/progress")
 async def remove_from_continue_api(request: Request, slug: str):
-    """Bỏ phim khỏi "Xem tiếp". Phim đã lưu chỉ mất tiến độ; phim chỉ có lịch sử thì xóa hẳn."""
+    """Remove a movie from "Xem tiếp" (Continue Watching). Saved movies only lose progress; history-only movies are deleted."""
     if not _valid_slug(slug):
         return {"status": "error", "message": "Invalid slug"}
     device_id = request.state.device_id
@@ -2152,7 +2139,7 @@ async def remove_from_continue_api(request: Request, slug: str):
     if not movie["saved"]:
         await _forget_device_movie(device_id, movie)
         return {"status": "success", "movie": None}
-    # Tập đang dở bỏ trạng thái "watching": xem lại sau đó không bị coi là tập vừa xem xong rồi lên lịch xóa file
+    # Clear "watching" on the in-progress episode so a later rewatch is not treated as just-finished and scheduled for file deletion
     states = {u: s for u, s in movie.get("episode_states", {}).items() if s != "watching"}
     await asyncio.to_thread(_db_clear_device_progress, device_id, slug, states)
     return {"status": "success", "movie": await get_device_movie(device_id, slug)}
@@ -2170,28 +2157,13 @@ async def download_episode_api(payload: dict):
 @app.get("/api/download/status")
 async def get_all_downloads_status_api():
     raw_status = await asyncio.to_thread(_db_get_all_downloads_status)
-    res = {}
-    for movie_slug, eps in raw_status.items():
-        res[movie_slug] = {}
-        for ep_name, status in eps.items():
-            clean_ep = clean_filename(ep_name)
-            file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
-            if status == "completed" and not os.path.exists(file_path):
-                status = "not_started"
-            res[movie_slug][ep_name] = status
-    return res
+    return {slug: {ep: _effective_status(slug, ep, st) for ep, st in eps.items()}
+            for slug, eps in raw_status.items()}
 
 @app.get("/api/download/status/{movie_slug}")
 async def get_movie_downloads_status_api(movie_slug: str):
     raw_status = await asyncio.to_thread(_db_get_all_downloads_status, movie_slug)
-    res = {}
-    for ep_name, status in raw_status.items():
-        clean_ep = clean_filename(ep_name)
-        file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
-        if status == "completed" and not os.path.exists(file_path):
-            status = "not_started"
-        res[ep_name] = status
-    return res
+    return {ep: _effective_status(movie_slug, ep, st) for ep, st in raw_status.items()}
 
 @app.get("/api/download/status/{movie_slug}/{episode_name}")
 async def get_episode_download_status_api(movie_slug: str, episode_name: str):
@@ -2201,8 +2173,7 @@ async def get_episode_download_status_api(movie_slug: str, episode_name: str):
 @app.get("/media/{movie_slug}/{episode_name}.mp4")
 async def get_media_file_api(movie_slug: str, episode_name: str):
     logger.info(f"[Media API] Yêu cầu: movie_slug={movie_slug}, episode_name={episode_name}")
-    clean_ep = clean_filename(episode_name)
-    file_path = os.path.join(DOWNLOAD_DIR, movie_slug, f"{clean_ep}.mp4")
+    file_path = _episode_file(movie_slug, episode_name)
     exists = os.path.exists(file_path)
     logger.info(f"[Media API] Đường dẫn file: {file_path}, Tồn tại: {exists}")
     if not exists:
@@ -2236,97 +2207,67 @@ def _normalize_movie_list(items: list) -> list:
     return result
 
 def _danh_sach_cache_key(section: str, page: int, category: str = "", country: str = "", year: str = "") -> str:
-    """Cache key cho một danh sách + bộ lọc. Rỗng = không lọc."""
+    """Cache key for a list + filters. Empty = no filter."""
     return f"home:{section}:{page}:{category}:{country}:{year}"
 
 
 async def _fetch_danh_sach(type_slug: str, page: int, category: str = "", country: str = "", year: str = ""):
-    """Fetch + normalize danh sách phim từ phimapi với bộ lọc (AND)."""
-    url = f"https://phimapi.com/v1/api/danh-sach/{type_slug}"
-    params = {"page": page}
-    if category:
-        params["category"] = category
-    if country:
-        params["country"] = country
-    if year:
-        params["year"] = year
-    resp = await client.get(url, params=params)
+    """Fetch + normalize a movie list from phimapi with filters (AND)."""
+    filters = {"category": category, "country": country, "year": year}
+    resp = await client.get(f"https://phimapi.com/v1/api/danh-sach/{type_slug}",
+                            params={"page": page, **{k: v for k, v in filters.items() if v}})
     resp.raise_for_status()
-    data = resp.json()
-    items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
-    pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
+    return _list_payload(resp.json())
+
+def _list_payload(data: dict) -> dict:
+    """{items, pagination} from a phimapi list response (v1 nests them under "data", older ones do not)."""
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        items, pagination = inner.get("items", []), inner.get("params", {}).get("pagination", {})
+    else:
+        items, pagination = data.get("items", []), data.get("pagination", {})
     return {"items": _normalize_movie_list(items), "pagination": pagination}
+
+HOME_LATEST_TTL = 1800
+DANH_SACH_TTL = 3600
+
+async def _fetch_home_latest(page: int) -> dict:
+    resp = await client.get(f"https://phimapi.com/v1/api/home?page={page}")
+    resp.raise_for_status()
+    return _list_payload(resp.json())
 
 # --- Smart Homepage sections ---
 
 @app.get("/api/home/latest")
 async def home_latest(page: int = 1):
-    """Phim mới cập nhật (KKPhim home API, cache 30 phút)"""
-    async def _fetch():
-        url = f"https://phimapi.com/v1/api/home?page={page}"
-        resp = await client.get(url)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
-        pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
-        return {
-            "items": _normalize_movie_list(items),
-            "pagination": pagination
-        }
+    """Recently updated movies (KKPhim home API, cached 30 minutes)"""
     try:
-        return await cached_fetch(f"home:latest:{page}", 1800, _fetch)
+        return await cached_fetch(f"home:latest:{page}", HOME_LATEST_TTL, lambda: _fetch_home_latest(page))
     except Exception as e:
         logger.error(f"Error fetching home/latest: {e}")
         return {"items": [], "pagination": {}, "error": str(e)}
 
-@app.get("/api/home/phim-le")
-async def home_phim_le(page: int = 1, category: str = "", country: str = "", year: str = ""):
-    """Phim Lẻ + bộ lọc thể loại/quốc gia/năm (cache 1 giờ theo tổ hợp lọc)"""
-    try:
-        return await cached_fetch(
-            _danh_sach_cache_key("phim-le", page, category, country, year), 3600,
-            lambda: _fetch_danh_sach("phim-le", page, category, country, year))
-    except Exception as e:
-        logger.error(f"Error fetching home/phim-le: {e}")
-        return {"items": [], "pagination": {}, "error": str(e)}
+# Phim Lẻ (single), Phim Chiếu Rạp (theatrical), Phim Bộ (series), TV Shows
+DANH_SACH_SECTIONS = ("phim-le", "phim-chieu-rap", "phim-bo", "tv-shows")
 
-@app.get("/api/home/phim-chieu-rap")
-async def home_phim_chieu_rap(page: int = 1, category: str = "", country: str = "", year: str = ""):
-    """Phim Chiếu Rạp + bộ lọc thể loại/quốc gia/năm (cache 1 giờ theo tổ hợp lọc)"""
-    try:
-        return await cached_fetch(
-            _danh_sach_cache_key("phim-chieu-rap", page, category, country, year), 3600,
-            lambda: _fetch_danh_sach("phim-chieu-rap", page, category, country, year))
-    except Exception as e:
-        logger.error(f"Error fetching home/phim-chieu-rap: {e}")
-        return {"items": [], "pagination": {}, "error": str(e)}
+def _make_danh_sach_route(section: str):
+    async def route(page: int = 1, category: str = "", country: str = "", year: str = ""):
+        """Movie list + genre/country/year filters (cached 1 hour per filter combination)"""
+        try:
+            return await cached_fetch(
+                _danh_sach_cache_key(section, page, category, country, year), DANH_SACH_TTL,
+                lambda: _fetch_danh_sach(section, page, category, country, year))
+        except Exception as e:
+            logger.error(f"Error fetching home/{section}: {e}")
+            return {"items": [], "pagination": {}, "error": str(e)}
+    route.__name__ = f"home_{section.replace('-', '_')}"
+    return route
 
-
-@app.get("/api/home/phim-bo")
-async def home_phim_bo(page: int = 1, category: str = "", country: str = "", year: str = ""):
-    """Phim Bộ + bộ lọc thể loại/quốc gia/năm (cache 1 giờ theo tổ hợp lọc)"""
-    try:
-        return await cached_fetch(
-            _danh_sach_cache_key("phim-bo", page, category, country, year), 3600,
-            lambda: _fetch_danh_sach("phim-bo", page, category, country, year))
-    except Exception as e:
-        logger.error(f"Error fetching home/phim-bo: {e}")
-        return {"items": [], "pagination": {}, "error": str(e)}
-
-
-@app.get("/api/home/tv-shows")
-async def home_tv_shows(page: int = 1, category: str = "", country: str = "", year: str = ""):
-    """TV Shows + bộ lọc thể loại/quốc gia/năm (cache 1 giờ theo tổ hợp lọc)"""
-    try:
-        return await cached_fetch(
-            _danh_sach_cache_key("tv-shows", page, category, country, year), 3600,
-            lambda: _fetch_danh_sach("tv-shows", page, category, country, year))
-    except Exception as e:
-        logger.error(f"Error fetching home/tv-shows: {e}")
-        return {"items": [], "pagination": {}, "error": str(e)}
+for _section in DANH_SACH_SECTIONS:
+    app.get(f"/api/home/{_section}")(_make_danh_sach_route(_section))
 
 async def _fetch_filter_list(api_path: str):
-    """Fetch danh sách lọc (thể loại/quốc gia) từ phimapi."""
+    """Fetch filter lists (genres/countries) from phimapi."""
     resp = await client.get(f"https://phimapi.com/v1/api/{api_path}")
     resp.raise_for_status()
     data = resp.json()
@@ -2336,7 +2277,7 @@ async def _fetch_filter_list(api_path: str):
 
 @app.get("/api/home/categories")
 async def home_categories():
-    """Danh sách thể loại cho bộ lọc (cache 24 giờ)"""
+    """Genre list for filters (cached 24 hours)"""
     try:
         return await cached_fetch("home:categories", 86400, lambda: _fetch_filter_list("the-loai"))
     except Exception as e:
@@ -2346,7 +2287,7 @@ async def home_categories():
 
 @app.get("/api/home/countries")
 async def home_countries():
-    """Danh sách quốc gia cho bộ lọc (cache 24 giờ)"""
+    """Country list for filters (cached 24 hours)"""
     try:
         return await cached_fetch("home:countries", 86400, lambda: _fetch_filter_list("quoc-gia"))
     except Exception as e:
@@ -2354,45 +2295,42 @@ async def home_countries():
         return {"items": [], "error": str(e)}
 
 # --- Background cache warmer cho Homepage ---
-async def _warm_section(section_name: str, page: int, ttl: int, url_template: str):
-    """Helper: fetch + cache một section."""
-    async def _fetch():
-        url = url_template.format(page=page)
-        resp = await client.get(url)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("data", {}).get("items", []) if isinstance(data.get("data"), dict) else data.get("items", [])
-        pagination = data.get("data", {}).get("params", {}).get("pagination", {}) if isinstance(data.get("data"), dict) else data.get("pagination", {})
-        return {
-            "items": _normalize_movie_list(items),
-            "pagination": pagination
-        }
+async def _warm(section: str, page: int, cache_key: str, ttl: int, fetch_fn):
     try:
-        await cached_fetch(f"home:{section_name}:{page}", ttl, _fetch)
-        logger.info(f"[CacheWarmer] OK section={section_name} page={page}")
-    except Exception as e:
-        logger.warning(f"[CacheWarmer] FAIL section={section_name} page={page}: {e}")
-
-async def _warm_danh_sach(section: str, page: int):
-    """Làm nóng cache cho một danh sách (không lọc) với đúng định dạng key mới."""
-    try:
-        await cached_fetch(
-            _danh_sach_cache_key(section, page), 3600,
-            lambda: _fetch_danh_sach(section, page))
+        await cached_fetch(cache_key, ttl, fetch_fn)
         logger.info(f"[CacheWarmer] OK section={section} page={page}")
     except Exception as e:
         logger.warning(f"[CacheWarmer] FAIL section={section} page={page}: {e}")
 
+async def _warm_section(page: int):
+    """Warm the "latest" section (same cache key as /api/home/latest)."""
+    await _warm("latest", page, f"home:latest:{page}", HOME_LATEST_TTL, lambda: _fetch_home_latest(page))
+
+async def _warm_danh_sach(section: str, page: int):
+    """Warm the cache for a list (unfiltered), same key as the route without filters."""
+    await _warm(section, page, _danh_sach_cache_key(section, page), DANH_SACH_TTL,
+                lambda: _fetch_danh_sach(section, page))
+
 async def home_cache_warmer():
-    """Định kỳ làm mới cache homepage để user luôn có data nhanh."""
+    """Periodically refresh the homepage cache so users always get data fast."""
     while True:
         logger.info("[CacheWarmer] Bắt đầu làm mới cache homepage...")
-        # Page 1 cho cả 5 section (có thể mở rộng thêm page sau)
-        await _warm_section("latest", 1, 1800, "https://phimapi.com/v1/api/home?page={page}")
-        await _warm_danh_sach("phim-le", 1)
-        await _warm_danh_sach("phim-chieu-rap", 1)
-        await _warm_danh_sach("phim-bo", 1)
-        await _warm_danh_sach("tv-shows", 1)
-        interval = setting("home.refresh_minutes") * 60  # đọc lại trước mỗi lần ngủ
+        # Page 1 for all 5 sections (more pages can be added later)
+        await _warm_section(1)
+        for section in DANH_SACH_SECTIONS:
+            await _warm_danh_sach(section, 1)
+        interval = setting("home.refresh_minutes") * 60  # re-read before each sleep
         logger.info(f"[CacheWarmer] Đợi {interval}s cho lần refresh tiếp theo...")
         await asyncio.sleep(interval)
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] == ["reset-admin-password"]:
+        init_db()
+        if admin.env_managed():
+            print("HOMEFLIX_ADMIN_PASSWORD đang được đặt: mật khẩu admin lấy từ biến môi trường, bỏ qua.")
+        else:
+            print(f"Mật khẩu admin mới: {reset_admin_password()}")
+    else:
+        print("Dùng: python app.py reset-admin-password")

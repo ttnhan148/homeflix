@@ -1,7 +1,7 @@
-"""Chấm điểm stream 0-100 từ kết quả kiểm tra (hàm thuần)."""
+"""Score a stream 0-100 from check results (pure functions)."""
 from hometv.health import HealthResult
 
-UNKNOWN = 50  # chưa kiểm: không thưởng, không phạt
+UNKNOWN = 50  # unchecked: no bonus, no penalty
 _RES_TIERS = ((1080, 25), (720, 18), (480, 10))
 _RES_DEFAULT = 4
 

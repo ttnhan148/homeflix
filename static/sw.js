@@ -1,5 +1,5 @@
 const CACHE_NAME = 'homeflix-shell-v6';
-// JS/CSS có ?v=<hash> trong URL nên được cache theo từng phiên bản khi tải lần đầu, không precache
+// JS/CSS have ?v=<hash> in the URL, so they're cached per version on first load, not precached
 const SHELL_URLS = ['/', '/static/logo.png', '/static/manifest.json'];
 
 // Install: pre-cache app-shell
@@ -52,7 +52,7 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // CACHE-FIRST: static assets. JS/CSS có ?v=<hash> nên URL mới = nội dung mới.
+    // CACHE-FIRST: static assets. JS/CSS have ?v=<hash>, so a new URL = new content.
     event.respondWith(
         caches.match(event.request).then((cached) => {
             if (cached) return cached;
@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
                 const clone = response.clone();
                 caches.open(CACHE_NAME).then(async (cache) => {
                     if (url.searchParams.has('v')) {
-                        // Bỏ các phiên bản cũ của cùng file
+                        // Remove old versions of the same file
                         for (const req of await cache.keys()) {
                             const old = new URL(req.url);
                             if (old.pathname === url.pathname && old.search !== url.search) cache.delete(req);

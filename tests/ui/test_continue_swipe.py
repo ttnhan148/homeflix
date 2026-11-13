@@ -7,7 +7,7 @@ UNDO_MS = 5000
 
 
 def swipe(page, selector, dx, dy=0, ms=240, steps=8):
-    """Vuốt bằng ngón tay thật (CDP touch): sự kiện trusted như trên iPhone."""
+    """Swipe with a real finger (CDP touch): trusted events like on an iPhone."""
     box = page.locator(selector).bounding_box()
     x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
     cdp = page.context.new_cdp_session(page)
@@ -23,7 +23,7 @@ def swipe(page, selector, dx, dy=0, ms=240, steps=8):
 def _with_history(open_app, *slugs, clock=False):
     page = open_app()
     if clock:
-        page.clock.install()  # đồng hồ vẫn chạy; fast_forward để nhảy qua cửa sổ hoàn tác
+        page.clock.install()  # clock keeps running; fast_forward to jump past the undo window
     page.goto(URL)
     page.wait_for_selector(CARD)
     for s in slugs:

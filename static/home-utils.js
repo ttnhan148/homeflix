@@ -1,4 +1,4 @@
-// Logic thuần cho trang chủ: không đụng DOM, chạy được trong trình duyệt lẫn Node.
+// Pure logic for the home page: no DOM access, runs in both the browser and Node.
 (function (root) {
   const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
 
@@ -15,14 +15,14 @@
     return y && y !== 'undefined' && y !== 'null' ? String(y) : '';
   }
 
-  // Một thể loại, một quốc gia: dòng meta ngắn để giao diện đỡ chữ
+  // One genre, one country: a short meta line to keep the UI uncluttered
   function heroMeta(m) {
     m = m || {};
     const first = (a) => (Array.isArray(a) ? a.filter(Boolean)[0] || '' : '');
     return [yearText(m.year), first(m.category), first(m.country)].filter(Boolean).join(' · ');
   }
 
-  // "Hoàn Tất (8/8)" -> "Đủ 8 tập"; các nhãn khác giữ nguyên
+  // "Hoàn Tất (8/8)" -> "Đủ 8 tập"; other labels unchanged
   function shortEpisode(s) {
     if (s == null) return '';
     const t = String(s).trim();
@@ -36,7 +36,7 @@
     return [shortEpisode(m.episode_current), yearText(m.year)].filter(Boolean).join(' · ');
   }
 
-  // Ô tập chỉ hiện số: "Tập 09" -> "9"
+  // Episode cells show only the number: "Tập 09" -> "9"
   function epShort(name) {
     const t = String(name == null ? '' : name).trim();
     const n = t.match(/^tập\s+0*(\d+(?:\.\d+)?)$/i);
@@ -102,8 +102,8 @@
     return Math.max(0, Math.min(100, Math.round((row.position / row.duration) * 100)));
   }
 
-  // Vuốt ngang thẻ "Xem tiếp": phải là phát, trái là bỏ. Kéo quá ngưỡng (30% bề rộng, 72..120px)
-  // hoặc hất nhanh (px/ms) cùng chiều kéo khi đã kéo được 40px.
+  // Horizontal swipe on a "Xem tiếp" card: right plays, left removes. Dragging past the threshold (30% of width, 72..120px)
+  // or a quick flick (px/ms) in the drag direction once dragged at least 40px.
   function swipeAction(dx, width, velocity) {
     const threshold = Math.min(120, Math.max(72, (width || 0) * 0.3));
     const flick = Math.abs(dx) >= 40 && Math.abs(velocity || 0) >= 0.5 && Math.sign(velocity) === Math.sign(dx);
@@ -111,12 +111,18 @@
     return dx > 0 ? 'play' : 'remove';
   }
 
-  // Thẻ chiếu rạp tự trượt: tới thẻ kế, hết hàng (hoặc đã cuộn chạm cuối) thì về đầu
+  // Theatre card auto-advances: to the next card, at the end of the row (or once scrolled to the end) back to the start
   function heroNext(index, n, atEnd) {
     return atEnd || index + 1 >= n ? 0 : index + 1;
   }
 
-  const api = { stripHtml, heroMeta, shortEpisode, cardMeta, epShort, continueMeta, mergeTypePages, resumeTarget, splitLibrary, progressPct, swipeAction, heroNext };
+  // Ease-in-out (cubic) for the card row's auto-slide: t in [0, 1] -> progress in [0, 1]
+  function heroEase(t) {
+    t = Math.max(0, Math.min(1, t));
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  const api = { stripHtml, heroMeta, shortEpisode, cardMeta, epShort, continueMeta, mergeTypePages, resumeTarget, splitLibrary, progressPct, swipeAction, heroNext, heroEase };
   root.HFUtils = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -1,4 +1,4 @@
-"""Trang Cài đặt, phần admin: Quản trị, Thiết bị trong nhà, Hệ thống, HomeTV."""
+"""Settings page, admin section: Administration, Home devices, System, HomeTV."""
 import json
 import re
 
@@ -22,7 +22,7 @@ def login(page, password):
 def admin_page(open_app, clock=False, **kw):
     page = open_app(**kw)
     if clock:
-        page.clock.install()   # đồng hồ vẫn chạy; fast_forward để nhảy qua chu kỳ tải lại
+        page.clock.install()   # clock keeps running; fast_forward to jump past the reload cycle
     page.goto(URL)
     tap(page, "#settingsBtn")
     page.wait_for_selector(DEVICE)
@@ -49,7 +49,7 @@ def wait_groups(page, expected, timeout=8000):
 
 
 def reopen(page, via="#settingsBack"):
-    """Rời trang Cài đặt rồi mở lại; đợi lượt dựng mới (DOM cũ vẫn nằm trong tab đã ẩn)."""
+    """Leave the Settings page and reopen it; wait for a fresh render (the old DOM still sits in the hidden tab)."""
     page.evaluate("document.querySelectorAll('#settingsBody .set-group').forEach(g => g.dataset.stale = '1')")
     tap(page, via)
     tap(page, "#settingsBtn")
@@ -77,7 +77,7 @@ def test_login_reveals_admin_groups(pw, open_app, tv):
     assert values == ["10 GB", "6 giờ", "4", "10 phút"]
     assert page.locator('[data-key="cache.max_gb"] .set-label').inner_text() == "Dung lượng tối đa"
     assert "/ 10 GB" in page.locator('[data-key="cache.usage"]').inner_text()
-    # màu đỏ chỉ cho thao tác nguy hiểm
+    # red only for dangerous actions
     reds = page.evaluate("[...document.querySelectorAll('#settingsBody .set-danger')].map(b => b.closest('[data-key]').dataset.key)")
     assert sorted(reds) == ["admin.revoke_others", "cache.clear"]
     heights = page.evaluate("[...document.querySelectorAll('#settingsBody .set-row')].map(r => r.getBoundingClientRect().height)")
@@ -93,16 +93,16 @@ def test_wrong_password_shows_error_and_lockout_time(pw, open_app):
     error = '[data-key="admin.login"] .set-error'
     for i in range(5):
         page.fill("#adminPassword", f"sai-{i}")
-        page.press("#adminPassword", "Enter")   # gửi thì xoá lỗi cũ ngay, lỗi mới hiện khi có kết quả
+        page.press("#adminPassword", "Enter")   # submitting clears the old error immediately; the new error appears when the result arrives
         wait_request(page, "POST /api/admin/login", count=i + 1)
         page.wait_for_selector(error)
         assert page.locator(error).inner_text() == "Sai mật khẩu"
-    page.fill("#adminPassword", "mk-test")   # đúng mật khẩu nhưng đang bị khóa
+    page.fill("#adminPassword", "mk-test")   # correct password but currently locked out
     page.press("#adminPassword", "Enter")
     page.wait_for_function("document.querySelector('[data-key=\"admin.login\"] .set-error')?.textContent.includes('phút')")
     assert page.locator(error).inner_text() == "Thử lại sau 15 phút"
     assert groups(page) == ["device", "admin"]
-    assert "sai-" not in " ".join(page.requests)   # mật khẩu đi trong thân JSON, không nằm trên URL
+    assert "sai-" not in " ".join(page.requests)   # password goes in the JSON body, not in the URL
 
 
 def test_password_escape_closes_input(pw, open_app):
@@ -158,7 +158,7 @@ def test_system_rows_come_from_settings_api(pw, open_app):
 
 def test_403_reloads_settings(pw, open_app, app_module):
     page = admin_page(open_app)
-    app_module._db_set_admin(device_id(page), False)   # máy khác vừa thu quyền
+    app_module._db_set_admin(device_id(page), False)   # another device just revoked the permission
     tap(page, PLUS_GB)
     wait_groups(page, ["device", "admin"], timeout=3000)
     assert row_keys(page, "admin") == ["admin.login", "admin.request"]
@@ -169,7 +169,7 @@ def test_rerender_keeps_focus_on_same_row_tv(pw, open_app, app_module):
     page = admin_page(open_app, clock=True, tv=True)
     page.focus('[data-key="player.autoNext"] .set-switch')
     app_module._db_set_admin(device_id(page), False)
-    page.clock.fast_forward(5100)   # lượt tải lại yêu cầu chờ nhận 403 → dựng lại trang
+    page.clock.fast_forward(5100)   # the pending-request reload gets 403 → page re-renders
     wait_groups(page, ["device", "admin"], timeout=3000)
     assert page.evaluate("document.activeElement.matches('[data-key=\"player.autoNext\"] .set-switch')"
                          " && document.activeElement.isConnected")
@@ -179,7 +179,7 @@ def test_rerender_moves_focus_to_gear_when_row_is_gone_tv(pw, open_app, app_modu
     page = admin_page(open_app, tv=True)
     page.focus(PLUS_GB)
     app_module._db_set_admin(device_id(page), False)
-    page.keyboard.press("Enter")   # (+) bằng remote → PATCH 403
+    page.keyboard.press("Enter")   # (+) via remote → PATCH 403
     wait_groups(page, ["device", "admin"], timeout=3000)
     assert page.evaluate("document.activeElement.id") == "settingsBtn"
 
@@ -223,7 +223,7 @@ def test_request_denied_then_expired_copy(pw, open_app):
     assert tv.locator('[data-key="admin.request"] .set-error').inner_text() == "Bị từ chối"
     assert tv.locator("#adminCode").count() == 0
     assert groups(tv) == ["device", "admin"]
-    # xin lại, rồi server báo hết hạn
+    # request again, then the server reports it expired
     tv.route("**/api/admin/requests/mine", lambda r: r.fulfill(status=200, content_type="application/json",
                                                                body='{"status": "expired"}'))
     tap(tv, '[data-key="admin.request"]')
@@ -248,14 +248,14 @@ def test_close_stops_admin_polling(pw, open_app):
     n = page.requests.count(entry)
     page.clock.fast_forward(5100)
     wait_request(page, entry, count=n + 1)
-    tap(page, "#fabTabExplore")   # rời trang Cài đặt
+    tap(page, "#fabTabExplore")   # leave the Settings page
     page.wait_for_timeout(200)
     n = page.requests.count(entry)
     page.clock.fast_forward(16000)
     page.wait_for_timeout(300)
     assert page.requests.count(entry) == n
     page.evaluate("document.querySelectorAll('#settingsBody .set-group').forEach(g => g.dataset.stale = '1')")
-    tap(page, "#settingsBtn")   # mở lại: tải lại như cũ
+    tap(page, "#settingsBtn")   # reopen: reloads as before
     page.wait_for_selector(f"{SYSTEM}:not([data-stale])")
     n = page.requests.count(entry)
     page.clock.fast_forward(5100)
@@ -283,14 +283,14 @@ def test_close_stops_waiting_poll(pw, open_app):
 
 
 def test_devices_grouped_and_rename(pw, open_app, app_module):
-    page = _settings(open_app)               # máy mình đăng ký trước
+    page = _settings(open_app)               # my device registers first
     tv = open_app(tv=True)
-    tv.goto(URL)                             # TV mới hơn: server xếp nó trước máy mình
+    tv.goto(URL)                             # newer TV: the server lists it before my device
     far = open_app(width=1280, height=800)
     far.goto(URL)
     app_module.db_execute("UPDATE devices SET household = ? WHERE id = ?", ("f" * 16, device_id(far)))
     for p in (tv, far):
-        app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(p),))   # danh sách chỉ liệt kê máy admin
+        app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(p),))   # the list only shows admin devices
     login(page, "mk-test")
     page.wait_for_selector(SYSTEM)
     lists = page.locator('[data-group="devices"] .set-list:not(.set-requests)')
@@ -303,8 +303,8 @@ def test_devices_grouped_and_rename(pw, open_app, app_module):
     assert "admin" in first.nth(0).locator(".set-tag").inner_text()
     content = page.content()
     for p in (page, tv, far):
-        assert device_id(p) not in content   # id thật là cookie đăng nhập
-    # đổi tên TV
+        assert device_id(p) not in content   # the real id is the login cookie
+    # rename the TV
     tv_row = first.nth(1)
     tv_id = tv_row.get_attribute("data-id")
     tap(page, f'.set-device[data-id="{tv_id}"] .set-action')
@@ -316,10 +316,10 @@ def test_devices_grouped_and_rename(pw, open_app, app_module):
                            ".textContent === 'Phòng khách'", arg=tv_id)
     names = {d["id"]: d["name"] for d in server_json(page, "/api/admin/devices")}
     assert names[tv_id] == "Phòng khách"
-    # thu quyền admin của TV: máy rời khỏi danh sách
+    # revoke the TV's admin rights: the device leaves the list
     assert page.locator(f'.set-device[data-id="{tv_id}"] [data-act="admin"]').inner_text() == "Thu quyền admin"
     assert page.eval_on_selector(f'.set-device[data-id="{tv_id}"] [data-act="admin"]',
-                                 "b => getComputedStyle(b).color") == "rgb(229, 9, 20)"   # thu quyền: đỏ
+                                 "b => getComputedStyle(b).color") == "rgb(229, 9, 20)"   # revoke: red
     tap(page, f'.set-device[data-id="{tv_id}"] [data-act="admin"]')
     page.wait_for_selector(f'.set-device[data-id="{tv_id}"]', state="detached")
     assert tv_id not in [d["id"] for d in server_json(page, "/api/admin/devices")]
@@ -329,7 +329,7 @@ def test_devices_grouped_and_rename(pw, open_app, app_module):
 def test_device_rename_rejects_empty(pw, open_app, app_module):
     tv = open_app(tv=True)
     tv.goto(URL)
-    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(tv),))   # danh sách chỉ liệt kê máy admin
+    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(tv),))   # the list only shows admin devices
     page = admin_page(open_app)
     row = '.set-device:not(:has-text("máy này"))'
     tap(page, f"{row} .set-action")
@@ -365,7 +365,7 @@ def test_device_without_last_seen_shows_no_time(pw, open_app):
 def test_delete_device_asks_confirmation(pw, open_app, app_module):
     tv = open_app(tv=True)
     tv.goto(URL)
-    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(tv),))   # danh sách chỉ liệt kê máy admin
+    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(tv),))   # the list only shows admin devices
     page = admin_page(open_app)
     tv_id = page.locator('.set-device:not(:has-text("máy này"))').get_attribute("data-id")
     row = f'.set-device[data-id="{tv_id}"]'
@@ -438,7 +438,7 @@ def active_desc(page):
 
 def test_tv_every_row_reachable_by_arrows(pw, open_app):
     page = admin_page(open_app, tv=True)
-    page.wait_for_selector('[data-key="hometv.add"]')   # nhóm HomeTV tải nguồn sau khi trang dựng
+    page.wait_for_selector('[data-key="hometv.add"]')   # the HomeTV group loads sources after the page renders
     page.focus('[data-key="device.name"] button')
     seen = ["device.name"]
     for _ in range(40):
@@ -447,11 +447,11 @@ def test_tv_every_row_reachable_by_arrows(pw, open_app):
     expected = page.evaluate("[...document.querySelectorAll('#settingsBody .set-row')].map(r => r.dataset.key || r.dataset.id)")
     assert set(expected) <= set(seen), set(expected) - set(seen)
     assert page.evaluate("document.activeElement.closest('.set-row').dataset.key") == "hometv.add"
-    # và ngược lên
+    # and back up
     for _ in range(40):
         page.keyboard.press("ArrowUp")
     assert page.evaluate("document.activeElement.closest('.set-row').dataset.key") == "device.name"
-    # dòng chỉ-đọc có vòng focus nhìn thấy
+    # read-only rows have a visible focus ring
     page.focus('[data-key="cache.usage"]')
     assert page.evaluate("getComputedStyle(document.activeElement).outlineStyle") != "none"
 
@@ -461,7 +461,7 @@ def test_tv_open_device_actions_walk_down_one_by_one(pw, open_app, app_module):
     page.goto(URL)
     other = open_app(width=1280, height=800)
     other.goto(URL)
-    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(other),))   # danh sách chỉ liệt kê máy admin
+    app_module.db_execute("UPDATE devices SET is_admin = 1 WHERE id = ?", (device_id(other),))   # the list only shows admin devices
     page.reload()
     tap(page, "#settingsBtn")
     page.wait_for_selector(DEVICE)
@@ -471,7 +471,7 @@ def test_tv_open_device_actions_walk_down_one_by_one(pw, open_app, app_module):
     other_row.locator(".set-action").focus()
     page.keyboard.press("Enter")
     page.wait_for_selector('.set-device [data-act="delete"]')
-    # mỗi thao tác xếp dọc là một dòng riêng: Xuống đi qua từng cái
+    # each stacked action is its own row: Down goes through each one
     for act in ("rename", "admin", "delete"):
         page.keyboard.press("ArrowDown")
         assert page.evaluate("document.activeElement.dataset.act") == act

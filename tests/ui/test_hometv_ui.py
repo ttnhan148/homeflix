@@ -1,4 +1,4 @@
-"""Mode HomeTV: nút chuyển, thanh tab, tab Home (xem gần đây, lọc Alive/Nhóm, lưới), yêu thích."""
+"""HomeTV mode: switch button, tab bar, Home tab (recently watched, Group filter, alive-only grid), favorites."""
 import hometv
 from hometv import geo, health_store
 from hometv.geo import HealthMode
@@ -15,7 +15,7 @@ def set_geo(monkeypatch, enabled):
 
 
 def seed(n=6, names=None, logo=None, health=None):
-    """health: {channel_id: True|False} -> hàng stream_health của stream cùng id (stream i thuộc kênh i)."""
+    """health: {channel_id: True|False} -> stream_health row for the stream with the same id (stream i belongs to channel i)."""
     c = hometv.db.conn()
     c.execute("UPDATE sources SET rights_status='approved' WHERE id='doubo-vn'")
     for i in range(1, n + 1):
@@ -54,6 +54,23 @@ def test_toggle_enters_and_remembers_mode(app_module, open_app):
     assert page.is_visible("#search-tab") and not page.is_visible("#hometv-root")
 
 
+def test_brand_shows_mode_name_with_exchange_toggle(app_module, open_app):
+    page = open_app()
+    page.goto(URL)
+    assert page.locator(".brand-mark").count() == 0
+    assert page.locator(".brand #hometvToggle").count() == 1
+    assert page.inner_text("#appHeader h1") == "HomeFlix"
+    tap(page, "#hometvToggle")
+    page.wait_for_selector("body.mode-hometv")
+    assert page.inner_text("#appHeader h1") == "HomeTV"
+    page.reload()
+    page.wait_for_selector("body.mode-hometv")
+    assert page.inner_text("#appHeader h1") == "HomeTV"
+    tap(page, "#hometvToggle")
+    page.wait_for_selector("body:not(.mode-hometv)")
+    assert page.inner_text("#appHeader h1") == "HomeFlix"
+
+
 def test_empty_state(app_module, open_app):
     page = enter(open_app)
     assert "Chưa có kênh" in page.locator("#tvEmpty").inner_text()
@@ -83,7 +100,7 @@ def test_renders_in_batches_of_60(app_module, open_app):
     page = enter(open_app)
     page.wait_for_selector("#tvGrid .tv-card")
     assert cards(page) == 60
-    # cuộn lại ở mỗi lần thăm dò: IntersectionObserver chỉ báo khi phần tử đổi trạng thái, một lần cuộn có thể lỡ
+    # scroll again on each poll: IntersectionObserver only fires when an element changes state, a single scroll may miss it
     def count_after_scroll():
         return page.evaluate("() => { window.scrollTo(0, document.body.scrollHeight); return document.querySelectorAll('#tvGrid .tv-card').length; }")
     for want in (120, 130):
@@ -129,71 +146,106 @@ def test_recent_row_hidden_without_recents(app_module, open_app):
     assert page.is_hidden("#tvRecent")
 
 
-def test_alive_button_filters_and_hides_when_health_off(app_module, open_app, monkeypatch):
-    seed(3, health={1: True, 2: False})
+def test_grid_shows_only_alive_with_checker_on(app_module, open_app, monkeypatch):
+    seed(3, health={1: True, 2: False})   # 3: never checked
     set_geo(monkeypatch, True)
     page = enter(open_app)
     page.wait_for_selector("#tvGrid .tv-card")
-    assert cards(page) == 3
-    tap(page, '[data-tvfilter="alive"]')
     assert titles(page) == ["Kênh 001"]
-    tap(page, '[data-tvfilter="all"]')
-    assert cards(page) == 3
+    assert page.locator("[data-tvfilter]").count() == 0   # no separate All/Alive filter
 
 
-def test_alive_button_hidden_when_checker_off(app_module, open_app, monkeypatch):
+def test_grid_shows_all_when_checker_off(app_module, open_app, monkeypatch):
     seed(2)
     set_geo(monkeypatch, False)
     page = enter(open_app)
     page.wait_for_selector("#tvGrid .tv-card")
-    assert page.is_hidden('[data-tvfilter="alive"]')
+    assert cards(page) == 2
 
 
-def test_group_dropdown_filters_and_clear(app_module, open_app):
+def test_empty_message_when_nothing_alive(app_module, open_app, monkeypatch):
+    seed(2, health={1: False, 2: False})
+    set_geo(monkeypatch, True)
+    page = enter(open_app)
+    page.wait_for_function("document.getElementById('tvEmpty').textContent.includes('đang sống')")
+    assert cards(page) == 0
+
+
+def test_group_tabs_filter_like_movie_type_tabs(app_module, open_app):
     seed(6)
     page = enter(open_app)
     page.wait_for_selector("#tvGrid .tv-card")
-    assert page.is_hidden("#tvClearBtn")
-    tap(page, "#filterBtn-group")
-    assert page.locator("#filterMenu-group .filter-option").all_inner_texts() == ["Tất cả", "Quốc gia", "Tin tức", "Thể thao"]
-    tap(page, '#filterMenu-group .filter-option:has-text("Thể thao")')
+    tabs = "#tvGroupTabs .grid-tab-btn"
+    assert page.locator(tabs).all_inner_texts() == ["Tất cả", "Quốc gia", "Tin tức", "Thể thao"]
+    assert page.locator("#filterBtn-group").count() == 0 and page.locator("#tvClearBtn").count() == 0
+    tap(page, '#tvGroupTabs .grid-tab-btn:has-text("Thể thao")')
     assert titles(page) == ["Kênh %03d" % i for i in range(1, 7) if CATS[i % 3] == "Sports"]
-    assert page.inner_text("#filterBtn-group") == "Thể thao" and page.is_visible("#tvClearBtn")
+    assert page.locator("#tvGroupTabs .grid-tab-btn.active").inner_text() == "Thể thao"
     assert page.inner_text("#tvResultCount") == "2 kênh"
-    tap(page, "#tvClearBtn")
-    assert cards(page) == 6 and page.inner_text("#filterBtn-group") == "Nhóm"
+    tap(page, '#tvGroupTabs .grid-tab-btn:has-text("Tất cả")')
+    assert cards(page) == 6
 
 
-def test_status_dot_per_card_and_hidden_without_health(app_module, open_app, monkeypatch):
-    seed(3, health={1: True, 2: False})
+def test_hero_shows_featured_channels_with_logos(app_module, open_app):
+    seed(3, logo="https://l/a.png")
+    page = enter(open_app)
+    page.wait_for_selector("#tvHero .hero-slide")
+    assert page.inner_text("#tvHeroHeading") == "Kênh nổi bật"
+    assert page.eval_on_selector_all("#tvHero .hero-title", "els => els.map(e => e.textContent)") == ["Kênh 001", "Kênh 002", "Kênh 003"]
+    assert page.locator("#tvHero .hero-slide .hero-meta").first.inner_text() == "Tin tức"
+    assert page.locator("#tvHero .hero-btn-play").first.inner_text() == "Phát"
+    assert page.locator("#tvHero .hero-btn-save").first.inner_text() == "Yêu thích"
+
+
+def test_hero_hidden_without_logos(app_module, open_app):
+    seed(2)
+    page = enter(open_app)
+    page.wait_for_selector("#tvGrid .tv-card")
+    assert page.is_hidden("#tvHero")
+
+
+def test_hero_favorite_button_switches_rail_to_favorites(app_module, open_app):
+    seed(3, logo="https://l/a.png")
+    page = enter(open_app)
+    page.wait_for_selector("#tvHero .hero-slide")
+    tap(page, "#tvHero .hero-slide:nth-child(2) .hero-btn-save")
+    page.wait_for_function("document.getElementById('tvHeroHeading').textContent === 'Kênh yêu thích'")
+    assert page.eval_on_selector_all("#tvHero .hero-title", "els => els.map(e => e.textContent)") == ["Kênh 002"]
+    assert page.inner_text("#tvHero .hero-btn-save") == "Đã thích"
+    assert [r[0] for r in hometv.db.conn().execute("SELECT channel_id FROM favorites")] == [2]
+
+
+def test_hero_play_opens_channel(app_module, open_app):
+    seed(2, logo="https://l/a.png")
+    page = enter(open_app)
+    page.wait_for_selector("#tvHero .hero-slide")
+    tap(page, "#tvHero .hero-slide:nth-child(2) .hero-btn-play")
+    page.wait_for_selector("#tvPlayer:not([hidden])")
+    assert page.inner_text("#tvPlayerTitle") == "Kênh 002"
+
+
+def test_no_status_dot_on_cards_or_playlist(app_module, open_app, monkeypatch):
+    seed(3, health={1: True, 2: False, 3: True})
     set_geo(monkeypatch, True)
     page = enter(open_app)
     page.wait_for_selector("#tvGrid .tv-card")
-    got = page.eval_on_selector_all("#tvGrid .tv-card", "els => els.map(e => { const d = e.querySelector('.tv-dot'); return d && [d.dataset.status, d.getAttribute('aria-label')]; })")
-    assert got == [["alive", "Đang sống"], ["dead", "Đã chết"], ["unchecked", "Chưa kiểm"]]
+    assert cards(page) == 2
+    tap(page, '#tvGrid .tv-card[data-id="1"]')
+    page.wait_for_selector("#tvPlaylist .ep-item")
+    assert page.locator(".tv-dot, [data-status]").count() == 0
 
 
-def test_no_status_dot_when_checker_off(app_module, open_app, monkeypatch):
-    seed(2)
-    set_geo(monkeypatch, False)
-    page = enter(open_app)
-    page.wait_for_selector("#tvGrid .tv-card")
-    assert page.locator(".tv-dot").count() == 0
-
-
-def test_alive_filter_resets_when_health_goes_off(app_module, open_app, monkeypatch):
+def test_grid_shows_all_after_health_goes_off(app_module, open_app, monkeypatch):
     seed(3, health={1: True})
     set_geo(monkeypatch, True)
     page = enter(open_app)
     page.wait_for_selector("#tvGrid .tv-card")
-    tap(page, '[data-tvfilter="alive"]')
     assert cards(page) == 1
     set_geo(monkeypatch, False)
     tap(page, "#hometvToggle")
     page.wait_for_selector("body:not(.mode-hometv)")
     tap(page, "#hometvToggle")
     page.wait_for_function("document.querySelectorAll('#tvGrid .tv-card').length === 3")
-    assert page.is_hidden('[data-tvfilter="alive"]')
 
 
 def test_switch_tab_safe_before_hometv_init(app_module, open_app):
@@ -254,12 +306,11 @@ def test_search_tab_folds_diacritics_and_ignores_blank(app_module, open_app):
     assert page.locator("#tvSearchGrid .tv-card").count() == 0 and page.is_hidden("#tvSearchEmpty")
 
 
-def test_search_respects_alive_filter(app_module, open_app, monkeypatch):
+def test_search_only_finds_alive_channels(app_module, open_app, monkeypatch):
     seed(3, health={1: True, 2: False})
     set_geo(monkeypatch, True)
     page = enter(open_app)
     page.wait_for_selector("#tvGrid .tv-card")
-    tap(page, '[data-tvfilter="alive"]')
     go(page, "fabTabSearch")
     page.fill("#tvSearch", "kenh")
     assert grid_titles(page, "#tvSearchGrid") == ["Kênh 001"]

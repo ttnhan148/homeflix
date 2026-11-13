@@ -14,7 +14,7 @@ def test_request_then_approve(pw, make_client, admin_client, app_module):
     assert post(admin_client, f"/api/admin/requests/{req['id']}/approve").status_code == 204
     assert tv.get("/api/admin/requests/mine").json()["status"] == "approved"
     assert app_module._db_is_admin(tv.cookies["hf_device"])
-    # duyệt lần hai thua
+    # second approval loses
     assert post(admin_client, f"/api/admin/requests/{req['id']}/approve").status_code == 409
 
 

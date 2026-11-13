@@ -115,12 +115,12 @@ def test_reingested_stream_has_no_health_row(db):
     assert health_store.source_health(2.0)["a"]["unknown"] == 1
 
 
-# --- catalog dùng sức khỏe (Task 6) ---
+# --- catalog using health (Task 6) ---
 from hometv import catalog  # noqa: E402
 
 
 def graded(db, scores):
-    """Một kênh, mỗi stream một nguồn khác nhau điểm: scores = {stream_id: HealthResult|None}."""
+    """One channel, each stream from a different source with a different score: scores = {stream_id: HealthResult|None}."""
     seed_source(db, "a", 10); seed_source(db, "b", 20)
     seed_channel(db, 1, "VTV1")
     for sid, res in scores.items():
@@ -143,7 +143,7 @@ def test_unchecked_streams_rank_at_50(db):
 
 def test_streams_order_unchanged_when_disabled(db):
     graded(db, {1: DEAD, 2: HealthResult(ok=True, height=1080)})
-    assert [s["id"] for s in catalog.channel_streams(1)] == [1, 2]  # priority a (10) trước b (20)
+    assert [s["id"] for s in catalog.channel_streams(1)] == [1, 2]  # priority a (10) before b (20)
 
 
 def test_channel_hidden_when_all_streams_failed_3x(db):
@@ -154,11 +154,10 @@ def test_channel_hidden_when_all_streams_failed_3x(db):
     assert catalog.list_channels(9.0, use_health=True) == []
 
 
-def test_channel_visible_with_one_unchecked_stream(db):
+def test_channel_hidden_with_dead_and_unchecked_streams(db):
     graded(db, {1: None, 2: None})
-    for n in range(3):
-        health_store.record(1, DEAD, True, float(n))
-    assert [c["id"] for c in catalog.list_channels(9.0, use_health=True)] == [1]
+    health_store.record(1, DEAD, True, 1.0)
+    assert catalog.list_channels(9.0, use_health=True) == []
 
 
 def test_channel_visible_after_one_success(db):
@@ -179,7 +178,7 @@ def test_stale_health_ignored_when_disabled(db):
 
 
 def test_concurrent_reads_share_the_connection_safely(db):
-    """Nhiều thread đọc cùng lúc (bộ kiểm + API) không được làm hỏng kết nối dùng chung."""
+    """Many threads reading at once (checker + API) must not corrupt the shared connection."""
     import threading
     setup(db, 3)
     health_store.record(1, OK, True, 1.0)
@@ -200,3 +199,7 @@ def test_concurrent_reads_share_the_connection_safely(db):
     [t.start() for t in threads]
     [t.join() for t in threads]
     assert errors == []
+
+
+def test_check_every_twice_a_day():
+    assert health_store.CHECK_EVERY == 12 * 3600

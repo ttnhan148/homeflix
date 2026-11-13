@@ -1,4 +1,4 @@
-"""Vòng nền kiểm tra sức khỏe stream: chỉ chạy khi máy chủ ở Việt Nam (xem geo.py)."""
+"""Background stream health-check loop: runs only when the server is in Vietnam (see geo.py)."""
 import asyncio
 import logging
 import os
@@ -15,7 +15,7 @@ DEAD_UNEXPECTED = "Không đọc được video"
 
 
 async def _one(client, source_id: str, stream: dict, now: float, probe, sem, host_locks) -> bool:
-    """Kiểm một stream rồi ghi kết quả; False nếu nguồn không còn đủ điều kiện (bỏ, không ghi)."""
+    """Check one stream and record the result; False if the source is no longer eligible (skipped, not recorded)."""
     host = urlsplit(stream["url"]).hostname or ""
     async with host_locks.setdefault(host, asyncio.Lock()):
         async with sem:
@@ -30,14 +30,14 @@ async def _one(client, source_id: str, stream: dict, now: float, probe, sem, hos
                 logger.exception("HomeTV: lỗi bất ngờ khi kiểm stream %s", stream["id"])
                 result = health.HealthResult(ok=False, error=DEAD_UNEXPECTED)
             if not await asyncio.to_thread(health_store.eligible, source_id):
-                return False   # bị gỡ duyệt giữa lúc kiểm
+                return False   # approval revoked mid-check
             await asyncio.to_thread(health_store.record, stream["id"], result, stream["https"], now)
             return True
 
 
 async def check_source(client, source_id: str, now: float, *, probe=health.ffprobe,
                        sem: asyncio.Semaphore | None = None, host_locks: dict | None = None) -> int:
-    """Kiểm mọi stream của một nguồn; trả số stream đã ghi."""
+    """Check every stream of a source; return the number of streams recorded."""
     sem = sem or asyncio.Semaphore(MAX_PROBES)
     host_locks = {} if host_locks is None else host_locks
     health_store.checking.add(source_id)
@@ -59,7 +59,7 @@ async def check_source(client, source_id: str, now: float, *, probe=health.ffpro
 
 
 async def run_due_checks(client, now: float, *, probe=health.ffprobe) -> list[str]:
-    """Kiểm các nguồn đến hạn; tối đa MAX_PROBES stream song song, mỗi host một lượt."""
+    """Check due sources; at most MAX_PROBES streams in parallel, one at a time per host."""
     due = [s for s in await asyncio.to_thread(health_store.due_sources, now) if s not in health_store.checking]
     sem = asyncio.Semaphore(MAX_PROBES)
     host_locks: dict = {}
@@ -75,7 +75,7 @@ async def run_due_checks(client, now: float, *, probe=health.ffprobe) -> list[st
 
 
 async def hometv_health_checker(tick: float = TICK) -> None:
-    """Vòng nền: lỗi chỉ log; thiếu ffprobe thì dừng hẳn; đóng client khi bị huỷ."""
+    """Background loop: errors are only logged; stops for good if ffprobe is missing; closes the client on cancel."""
     client = fetcher.make_client()
     last_geo = 0.0
     try:

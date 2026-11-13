@@ -1,15 +1,15 @@
-"""Chuẩn hóa tên kênh, nhận diện đài, phân nhóm và nhãn chất lượng."""
+"""Channel name normalization, broadcaster detection, grouping and quality labels."""
 import re
 import unicodedata
 
 CATEGORIES = ("General", "National TV", "Local TV", "News", "Entertainment", "Movies", "Sports", "Kids",
               "Music", "International", "Unknown")
 
-# Đài quốc gia (theo spec)
+# National broadcasters (per spec)
 NATIONAL_BROADCASTERS = frozenset({"vtv", "htv", "vtc", "thvl", "vov", "antv", "qpvn", "vnews", "sctv",
                                    "vtvcab", "hplus", "vinh long"})
 
-# 63 tỉnh/thành (danh sách trước 2025), không dấu, viết thường
+# 63 provinces/cities (pre-2025 list), no diacritics, lowercase
 PROVINCES = frozenset("""an giang|ba ria vung tau|bac giang|bac kan|bac lieu|bac ninh|ben tre|binh dinh|binh duong
 |binh phuoc|binh thuan|ca mau|can tho|cao bang|da nang|dak lak|dak nong|dien bien|dong nai|dong thap|gia lai
 |ha giang|ha nam|ha noi|ha tinh|hai duong|hai phong|hau giang|hoa binh|ho chi minh|hung yen|khanh hoa|kien giang
@@ -17,30 +17,30 @@ PROVINCES = frozenset("""an giang|ba ria vung tau|bac giang|bac kan|bac lieu|bac
 |quang binh|quang nam|quang ngai|quang ninh|quang tri|soc trang|son la|tay ninh|thai binh|thai nguyen|thanh hoa
 |thua thien hue|tien giang|tra vinh|tuyen quang|vinh long|vinh phuc|yen bai""".replace("\n", "").split("|"))
 
-# Cách viết tắt/thường gặp của tên tỉnh
+# Common abbreviations/spellings of province names
 _PROVINCE_ALIASES = {"hue": "thua thien hue", "hanoi": "ha noi", "vung tau": "ba ria vung tau"}
 
 COUNTRIES = frozenset({"nga", "my", "han quoc", "nhat ban", "trung quoc", "phap", "anh", "duc", "uc",
                        "thai lan", "russia", "usa", "korea", "japan", "china", "france", "uk"})
 
 _QUALITY = frozenset({"hd", "fhd", "sd", "uhd", "4k", "1080p", "1080i", "720p", "576p", "480p", "backup"})
-# Nhãn iptv-org trong ngoặc: bỏ hẳn khỏi tên (không phải chất lượng)
+# iptv-org labels in brackets: removed from the name entirely (not quality)
 _TAGS = frozenset({"geo blocked", "not 24 7"})
 _FAKE_IDS = frozenset({"", "no_epg", "none", "null", "undefined"})
 _MAX_TVG_ID = 200
-_MARK = "\ue000"  # đánh dấu từ chất lượng trong ngoặc
+_MARK = "\ue000"  # marks quality words inside brackets
 _BRACKET = re.compile(r"[(\[{][^)\]}]*[)\]}]")
 
 
 def fold(text: str) -> str:
-    """NFKC, viết thường, bỏ dấu (đ thành d), gộp khoảng trắng."""
+    """NFKC, lowercase, strip diacritics (đ to d), collapse whitespace."""
     s = unicodedata.normalize("NFKC", text).lower().replace("đ", "d")
     s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
     return " ".join(s.split())
 
 
 def _split_quality(name: str) -> tuple[list[str], list[str]]:
-    """Trả (các từ giữ lại, các hậu tố chất lượng đã bỏ theo thứ tự xuất hiện)."""
+    """Return (kept tokens, removed quality suffixes in order of appearance)."""
     s = fold(name.replace(_MARK, " "))
 
     def unwrap(m: re.Match) -> str:
@@ -52,25 +52,25 @@ def _split_quality(name: str) -> tuple[list[str], list[str]]:
         return m.group(0)
 
     s = _BRACKET.sub(unwrap, s)
-    # chỉ chữ/số (kể cả ký tự không Latin) và dấu đánh dấu được giữ
+    # only letters/digits (including non-Latin characters) and the marker are kept
     s = "".join(c if (c.isalnum() or c == _MARK) else " " for c in s)
     toks = s.split()
     drop = {i for i, t in enumerate(toks) if t.startswith(_MARK)}
     live = [i for i in range(len(toks)) if i not in drop]
-    while live and toks[live[-1]] in _QUALITY:  # hậu tố ở cuối
+    while live and toks[live[-1]] in _QUALITY:  # trailing suffixes
         drop.add(live.pop())
     removed = [toks[i].lstrip(_MARK) for i in sorted(drop)]
     return [toks[i] for i in live], removed
 
 
 def normalize_name(name: str) -> str:
-    """Tên để so khớp: bỏ hậu tố chất lượng, dấu câu; nối chữ với số liền sau."""
+    """Name for matching: drop quality suffixes and punctuation; join words with a directly following number."""
     kept, _ = _split_quality(name)
     return re.sub(r"(?<=[^\W\d_]) (?=\d)", "", " ".join(kept))
 
 
 def quality_hint(name: str) -> str:
-    """Nhãn chất lượng đầu tiên trong tên (chỉ tham khảo); rỗng nếu không có."""
+    """First quality label in the name (informational only); empty if none."""
     for t in _split_quality(name)[1]:
         if t != "backup":
             return t if re.fullmatch(r"\d+[pi]", t) else t.upper()
@@ -87,7 +87,7 @@ _GROUP_JUNK = ("So", "Sk", "Cf", "Me", "Cs", "Co", "Cn")
 
 
 def strip_group(group_title: str) -> str:
-    """Bỏ emoji, ký tự ký hiệu và tiền tố dạng `xx| `."""
+    """Strip emoji, symbol characters and `xx| `-style prefixes."""
     s = "".join(c for c in group_title if unicodedata.category(c) not in _GROUP_JUNK and c != "\ufe0f")
     s = _GROUP_PREFIX.sub("", re.sub(r"^\s*\|\s*", "|", s))
     s = re.sub(r"^\|\s*", "", s)
@@ -99,7 +99,7 @@ def _tokens(text: str) -> list[str]:
 
 
 def _find_seq(tokens: list[str], phrase: str) -> int:
-    """Vị trí đầu của dãy từ nguyên vẹn trong tokens, -1 nếu không có."""
+    """Start index of the whole word sequence in tokens, -1 if absent."""
     p = phrase.split()
     for i in range(len(tokens) - len(p) + 1):
         if tokens[i:i + len(p)] == p:
@@ -108,7 +108,7 @@ def _find_seq(tokens: list[str], phrase: str) -> int:
 
 
 def _national_prefix(text: str) -> str:
-    """Đài quốc gia dài nhất là tiền tố của text, kết thúc ở ranh giới chữ."""
+    """Longest national broadcaster that prefixes text, ending at a word boundary."""
     for b in sorted(NATIONAL_BROADCASTERS, key=len, reverse=True):
         if text.startswith(b) and not text[len(b):len(b) + 1].isalpha():
             return b
@@ -116,7 +116,7 @@ def _national_prefix(text: str) -> str:
 
 
 def broadcaster(normalized: str, group_title: str) -> str:
-    """Đài: tiền tố đài quốc gia, rồi tên tỉnh trong tên, rồi group-title; rỗng nếu không rõ."""
+    """Broadcaster: national broadcaster prefix, then province name in the name, then group-title; empty if unknown."""
     b = _national_prefix(normalized)
     if b:
         return b
@@ -149,7 +149,7 @@ _RULES = (
 
 
 def category(group_title: str, broadcaster: str) -> str:
-    """Nhóm tự động, kiểm theo thứ tự của spec (Local, thể loại, International, National, ...)."""
+    """Automatic group, checked in spec order (Local, genre, International, National, ...)."""
     toks = _tokens(fold(strip_group(group_title)))
     if _find_seq(toks, "dia phuong") >= 0 or broadcaster in PROVINCES:
         return "Local TV"

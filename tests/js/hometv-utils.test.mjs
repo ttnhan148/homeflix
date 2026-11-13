@@ -49,10 +49,10 @@ test('initial: first letter upper-cased, ? when empty', () => {
 
 const mk = (id, category, status, extra) => Object.assign({ id, name: 'K' + id, category, status, favorite: false, recent_at: null }, extra);
 
-test('filterChannels: alive giữ kênh sống, ghép với group và query', () => {
+test('filterChannels: group ghép với query; không còn lọc alive phía client', () => {
   const list = [mk(1, 'News', 'alive'), mk(2, 'News', 'dead'), mk(3, 'Sports', 'alive'), mk(4, 'News', 'unchecked')];
-  assert.deepEqual(U.filterChannels(list, { alive: true }).map((c) => c.id), [1, 3]);
-  assert.deepEqual(U.filterChannels(list, { alive: true, group: 'News' }).map((c) => c.id), [1]);
+  assert.deepEqual(U.filterChannels(list, { group: 'News' }).map((c) => c.id), [1, 2, 4]);
+  assert.equal(U.filterChannels(list, { alive: true }).length, 4);
   assert.deepEqual(U.filterChannels(list, { group: 'News', query: 'k4' }).map((c) => c.id), [4]);
   assert.equal(U.filterChannels(list, { group: '' }).length, 4);
 });
@@ -70,9 +70,18 @@ test('recentChannels mới nhất trước và cắt max; favoriteChannels', () 
   assert.deepEqual(U.favoriteChannels(list).map((c) => c.id), [1]);
 });
 
-test('statusLabel', () => {
-  assert.equal(U.statusLabel('alive'), 'Đang sống');
-  assert.equal(U.statusLabel('dead'), 'Đã chết');
-  assert.equal(U.statusLabel('unchecked'), 'Chưa kiểm');
-  assert.equal(U.statusLabel(null), '');
+test('groupOf maps unknown or missing categories to Unknown', () => {
+  assert.equal(U.groupOf({ category: 'News' }), 'News');
+  assert.equal(U.groupOf({ category: 'Shopping' }), 'Unknown');
+  assert.equal(U.groupOf({}), 'Unknown');
+});
+
+test('heroChannels: favorites when any, otherwise up to max channels with a logo', () => {
+  const list = [ch(1, 'a', 'News', { logo: 'x' }), ch(2, 'b', 'News', { logo: '' }), ch(3, 'c', 'News', { logo: 'z' }),
+    ch(4, 'd', 'News', { logo: 'w' })];
+  assert.deepEqual(U.heroChannels(list, 10), { title: 'Kênh nổi bật', items: [list[0], list[2], list[3]] });
+  assert.deepEqual(U.heroChannels(list, 2).items.map((c) => c.id), [1, 3]);
+  list[1].favorite = true;
+  assert.deepEqual(U.heroChannels(list, 10), { title: 'Kênh yêu thích', items: [list[1]] });
+  assert.deepEqual(U.heroChannels([], 10).items, []);
 });

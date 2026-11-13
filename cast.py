@@ -1,7 +1,7 @@
-"""Cast: trung gian trong bộ nhớ giữa iPhone (controller) và TV (receiver).
+"""Cast: in-memory broker between the iPhone (controller) and the TV (receiver).
 
-Chỉ đúng khi server chạy một tiến trình: hàng đợi, hiện diện, liên kết và trạng thái nằm trong bộ nhớ.
-Không import app.py; phần cần DB và HTTP nằm ở app.py."""
+Only correct when the server runs a single process: queues, presence, links and state live in memory.
+Does not import app.py; the parts needing DB and HTTP live in app.py."""
 import asyncio
 import json
 import math
@@ -12,12 +12,12 @@ from collections import deque
 PRESENCE_TTL = 40
 MAX_SUBSCRIBERS_PER_DEVICE = 4
 QUEUE_LIMIT = 100
-PENDING_RETRY_SECONDS = 10   # yêu cầu kết nối lặp lại chỉ phát lại cho TV sau chừng này giây
-PENDING_MAX_AGE = 600        # yêu cầu chờ quá lâu bị bỏ
+PENDING_RETRY_SECONDS = 10   # a repeated connect request is re-sent to the TV only after this many seconds
+PENDING_MAX_AGE = 600        # requests pending too long are dropped
 
 
 class Subscriber:
-    """Một kết nối SSE của một thiết bị. put() an toàn đa luồng; chờ được cả đồng bộ lẫn asyncio."""
+    """One SSE connection of a device. put() is thread-safe; can be awaited both synchronously and via asyncio."""
 
     def __init__(self, device_id: str):
         self.device_id = device_id
@@ -34,7 +34,7 @@ class Subscriber:
         for loop, ev in waiters:
             try:
                 loop.call_soon_threadsafe(ev.set)
-            except RuntimeError:  # loop đã đóng
+            except RuntimeError:  # loop already closed
                 pass
 
     def put(self, event: str, data: dict) -> None:
@@ -66,7 +66,7 @@ class Subscriber:
         with self._lock:
             self._waiters.append((loop, ev))
         try:
-            items = self._take()  # kiểm tra lại sau khi đăng ký để không lỡ put xen giữa
+            items = self._take()  # re-check after registering so an interleaved put is not missed
             if items or self.closed:
                 return items
             try:
@@ -93,7 +93,7 @@ class CastHub:
         self._pending: dict[tuple[str, str], float] = {}
         self._state: dict[str, dict] = {}
 
-    # --- kết nối SSE ---
+    # --- SSE connections ---
     def subscribe(self, device_id: str) -> Subscriber:
         sub = Subscriber(device_id)
         with self._lock:
@@ -118,8 +118,8 @@ class CastHub:
             return bool(self._subs.get(device_id))
 
     def publish(self, device_id: str, event: str, data: dict, newest_only: bool = False) -> int:
-        """Gửi tới mọi kết nối của thiết bị, hoặc chỉ kết nối mới nhất (lệnh và yêu cầu: một thiết bị
-        mở nhiều tab thì chỉ tab mới nhất hành động)."""
+        """Send to all of a device's connections, or only the newest (commands and requests: if a device
+        has several tabs open, only the newest tab acts)."""
         with self._lock:
             subs = list(self._subs.get(device_id, []))
             if newest_only:
@@ -128,12 +128,12 @@ class CastHub:
             sub.put(event, data)
         return len(subs)
 
-    # --- hiện diện ---
+    # --- presence ---
     def heartbeat(self, device_id: str, kind: str) -> None:
         with self._lock:
             now = self._clock()
             self._presence[device_id] = (now, kind)
-            if len(self._presence) > 500:   # dọn thiết bị đã biến mất từ lâu
+            if len(self._presence) > 500:   # prune devices gone for a long time
                 cutoff = now - PRESENCE_TTL * 10
                 self._presence = {d: v for d, v in self._presence.items() if v[0] >= cutoff}
 
@@ -142,7 +142,7 @@ class CastHub:
             seen = self._presence.get(device_id)
         return seen is not None and self._clock() - seen[0] <= PRESENCE_TTL
 
-    # --- liên kết controller -> TV ---
+    # --- controller -> TV links ---
     def link(self, controller_id: str, target_id: str) -> None:
         with self._lock:
             self._links[controller_id] = target_id
@@ -160,7 +160,7 @@ class CastHub:
             return [c for c, t in self._links.items() if t == target_id]
 
     def add_pending(self, target_id: str, controller_id: str) -> bool:
-        """True nếu nên (phát lại) yêu cầu tới TV: yêu cầu mới, hoặc đã quá PENDING_RETRY_SECONDS."""
+        """True if the request should be (re)sent to the TV: a new request, or PENDING_RETRY_SECONDS has passed."""
         with self._lock:
             now = self._clock()
             last = self._pending.get((target_id, controller_id))
@@ -183,7 +183,7 @@ class CastHub:
         with self._lock:
             self._pending = {k: t for k, t in self._pending.items() if k[0] != target_id}
 
-    # --- trạng thái phát ---
+    # --- playback state ---
     def set_state(self, target_id: str, state: dict) -> None:
         with self._lock:
             self._state[target_id] = state
@@ -203,9 +203,9 @@ class CastHub:
             sub.close()
 
 
-# --- kiểm tra dữ liệu từ thiết bị khác ---
+# --- validation of data from other devices ---
 def _number(value, lo=None, hi=None):
-    """Số hữu hạn (bool không tính) trong [lo, hi]; ném ValueError nếu không."""
+    """Finite number (bool excluded) within [lo, hi]; raise ValueError otherwise."""
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise ValueError("not a finite number")
     if (lo is not None and value < lo) or (hi is not None and value > hi):
@@ -272,7 +272,7 @@ def validate_state(body, slug_ok) -> dict:
         return None if body.get(key) is None else _number(body[key], 0)
     out = {"slug": slug, "title": _short_text(body.get("title")), "episode": _short_text(body.get("episode")),
            "position": opt_number("position"), "duration": opt_number("duration"), "playing": body["playing"]}
-    for key in ("autoNext", "autoIntro"):   # cài đặt thật của TV, để iPhone hiện công tắc đúng
+    for key in ("autoNext", "autoIntro"):   # the TV's actual settings, so the iPhone shows the correct toggles
         if isinstance(body.get(key), bool):
             out[key] = body[key]
     return out

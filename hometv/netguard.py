@@ -1,4 +1,4 @@
-"""Chặn SSRF: mọi URL playlist và mọi lần chuyển hướng phải qua check()."""
+"""SSRF guard: every playlist URL and every redirect must pass check()."""
 import ipaddress
 import re
 import socket
@@ -12,7 +12,7 @@ BLOCKED = "Địa chỉ bị chặn"
 
 CGNAT = ipaddress.ip_network("100.64.0.0/10")
 NAT64 = ipaddress.ip_network("64:ff9b::/96")
-# Dạng số kiểu IPv4 (thập phân/bát phân/hex/rút gọn): inet_aton hiểu nhưng ipaddress thì không
+# IPv4-like numeric forms (decimal/octal/hex/shorthand): inet_aton accepts them but ipaddress does not
 _HOSTNAME = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.?$")
 _NUMERIC_HOST = re.compile(r"^(0x[0-9a-f]*|\d+)(\.(0x[0-9a-f]*|\d+))*$")
 
@@ -24,7 +24,7 @@ class BlockedURL(ValueError):
 
 
 class Unresolvable(BlockedURL):
-    """Không phân giải được tên miền (lỗi DNS tạm thời): khác với IP bị chặn, nên thử lại được."""
+    """Domain could not be resolved (transient DNS error): unlike a blocked IP, so it can be retried."""
 
 
 def _blocked_v4(ip: ipaddress.IPv4Address) -> bool:
@@ -35,7 +35,7 @@ def _blocked_v4(ip: ipaddress.IPv4Address) -> bool:
 def _blocked(ip) -> bool:
     if ip.version == 4:
         return _blocked_v4(ip)
-    # IPv6 chứa IPv4: chặn nếu IPv4 bên trong bị chặn
+    # IPv6 embedding IPv4: block if the embedded IPv4 is blocked
     embedded = []
     if ip.ipv4_mapped:
         embedded.append(ip.ipv4_mapped)
@@ -47,29 +47,29 @@ def _blocked(ip) -> bool:
         embedded.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
     if ip.packed[:12] == bytes(12):  # ::a.b.c.d (IPv4-compatible)
         embedded.append(ipaddress.IPv4Address(ip.packed[12:]))
-    if embedded:  # chỉ xét IPv4 bên trong (dải 2002::/16, ::ffff:0:0/96 tự bị coi là private)
+    if embedded:  # only check the embedded IPv4 (ranges 2002::/16, ::ffff:0:0/96 are themselves treated as private)
         return any(_blocked_v4(v4) for v4 in embedded)
     return (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
             or ip.is_reserved or ip.is_unspecified or ip.is_site_local)
 
 
 def is_blocked_ip(ip: str) -> bool:
-    """True nếu IP không được phép kết nối; không parse được cũng coi là chặn."""
+    """True if the IP may not be connected to; unparseable also counts as blocked."""
     try:
-        addr = ipaddress.ip_address(str(ip))  # zone id chỉ hợp lệ với IPv6
+        addr = ipaddress.ip_address(str(ip))  # zone id is only valid for IPv6
     except ValueError:
         return True
     return _blocked(addr)
 
 
 def check_url(url: str) -> str:
-    """Kiểm tra cú pháp, trả host đã chuẩn hóa."""
+    """Check syntax, return the normalized host."""
     if not isinstance(url, str) or not url or len(url) > MAX_URL_LEN:
         raise BlockedURL(INVALID)
     try:
         parts = urlsplit(url)
-        parts.port  # noqa: B018 - cổng sai thì ném ValueError
-        # Host đúng như httpx sẽ kết nối (IDNA2008, dạng ASCII)
+        parts.port  # noqa: B018 - an invalid port raises ValueError
+        # Host exactly as httpx will connect (IDNA2008, ASCII form)
         parsed = httpx.URL(url)
         host = parsed.raw_host.decode("ascii")
     except (ValueError, UnicodeError, httpx.InvalidURL):
@@ -86,7 +86,7 @@ def check_url(url: str) -> str:
         raise BlockedURL(INVALID)
     host = host.rstrip(".")
     if _NUMERIC_HOST.match(host):
-        # Chỉ nhận dotted-quad thập phân chuẩn; 2130706433, 0x7f000001, 127.1... bị từ chối
+        # Accept only standard decimal dotted-quad; 2130706433, 0x7f000001, 127.1... are rejected
         try:
             ipaddress.IPv4Address(host)
         except ValueError:
@@ -102,12 +102,12 @@ def resolve(host: str) -> list[str]:
 def check_host(host: str) -> None:
     try:
         ipaddress.ip_address(host)
-        ips = [host]  # IP literal: không phân giải
+        ips = [host]  # IP literal: no resolution
     except ValueError:
         try:
             ips = resolve(host)
         except (OSError, UnicodeError):
-            raise Unresolvable(BLOCKED)  # create/update vẫn báo 422 "Địa chỉ bị chặn"
+            raise Unresolvable(BLOCKED)  # create/update still report 422 "Địa chỉ bị chặn"
     if not ips or any(is_blocked_ip(ip) for ip in ips):
         raise BlockedURL(BLOCKED)
 

@@ -28,7 +28,7 @@ def _page(prefix, page, count=PER_PAGE, tag=""):
 
 
 class FakePhimapi:
-    """Thay httpx.AsyncClient của app: trả dữ liệu phimapi cố định, không gọi mạng."""
+    """Replaces the app's httpx.AsyncClient: returns fixed phimapi data, no network calls."""
 
     def __init__(self, fail=(), content=None, names=None, counts=None, categories=None):
         self.categories = categories

@@ -1,4 +1,4 @@
-"""Sổ kênh: nhập một playlist đã phân tích vào channels + streams (một transaction mỗi lượt)."""
+"""Channel registry: ingest a parsed playlist into channels + streams (one transaction per run)."""
 import hashlib
 import json
 from dataclasses import dataclass
@@ -12,8 +12,8 @@ MAX_HEADER_VALUE = 1024
 
 @dataclass
 class IngestStats:
-    channels: int  # số kênh có stream active của nguồn sau lượt nhập
-    streams: int  # số stream active của nguồn
+    channels: int  # number of channels with active streams from the source after ingest
+    streams: int  # number of active streams from the source
     new_streams: int
     deactivated: int
 
@@ -33,9 +33,9 @@ def _protocol(url: str) -> str:
 
 
 def _find_channel(c, tvg, norm, bc, disp, tvg_map, name_map):
-    """Thứ tự: tvg-id (không gộp nếu hai đài khác rỗng và khác nhau); tên chuẩn hóa + đài;
-    tên gốc do chính nguồn này tạo (khi không rõ đài hoặc tên chuẩn hóa rỗng).
-    tvg_map/name_map: tra cứu trong lượt nhập (tvg -> [(kênh, đài)], tên gốc của nguồn -> kênh)."""
+    """Order: tvg-id (no merge if both broadcasters are non-empty and differ); normalized name + broadcaster;
+    original name created by this same source (when the broadcaster is unknown or the normalized name is empty).
+    tvg_map/name_map: lookups within the ingest run (tvg -> [(channel, broadcaster)], source original name -> channel)."""
     if tvg:
         cands = list(tvg_map.get(tvg, ()))
         cands += [(r[0], r[1]) for r in c.execute(
@@ -54,9 +54,9 @@ def _find_channel(c, tvg, norm, bc, disp, tvg_map, name_map):
 
 
 def _still_matches(ch, old_disp, tvg, norm, bc, disp) -> bool:
-    """Quy tắc không chuyển kênh: stream đã có chỉ đổi kênh khi khóa gộp của chính nó đổi.
-    Khóa vẫn còn: cùng tên gốc, hoặc cùng tvg-id, hoặc cùng tên chuẩn hóa + đài.
-    Kênh mang tvg-id khác (tvg_id chỉ điền khi trống) KHÔNG phải là khóa đổi."""
+    """No-move rule: an existing stream changes channel only when its own merge key changes.
+    Key still holds: same original name, or same tvg-id, or same normalized name + broadcaster.
+    A channel carrying a different tvg-id (tvg_id is only filled when empty) is NOT a key change."""
     if old_disp == disp:
         return True
     if tvg and ch["tvg_id"] == tvg:
@@ -65,13 +65,15 @@ def _still_matches(ch, old_disp, tvg, norm, bc, disp) -> bool:
 
 
 def _refresh_channel(c, cid, now):
-    """display_name theo stream active của nguồn ưu tiên cao nhất (priority nhỏ = cao)."""
+    """display_name from the active stream of the highest-priority source (lower priority = higher).
+    Returns the winning source id (None if the channel has no active stream)."""
     r = c.execute(
-        "SELECT st.display_name FROM streams st JOIN sources so ON so.id=st.source_id "
+        "SELECT st.display_name, st.source_id FROM streams st JOIN sources so ON so.id=st.source_id "
         "WHERE st.channel_id=? AND st.active=1 ORDER BY so.priority, so.id, st.id LIMIT 1", (cid,)).fetchone()
     if r and r[0]:
         c.execute("UPDATE channels SET display_name=?, updated_at=? WHERE id=? AND display_name IS NOT ?",
                   (r[0], now, cid, r[0]))
+    return r[1] if r else None
 
 
 def ingest(source_id: str, playlist: Playlist, now: float) -> IngestStats:
@@ -115,7 +117,7 @@ def ingest(source_id: str, playlist: Playlist, now: float) -> IngestStats:
                     "logo_url, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
                     (tvg or None, norm, bc, disp, cat, e.tvg_logo or None, now, now)).lastrowid
             else:
-                # điền chỗ trống của kênh; không đè giá trị đã có
+                # fill empty channel fields; do not overwrite existing values
                 c.execute("UPDATE channels SET tvg_id=COALESCE(NULLIF(tvg_id,''), ?), "
                           "normalized_name=COALESCE(NULLIF(normalized_name,''), ?), "
                           "broadcaster=COALESCE(NULLIF(broadcaster,''), ?), "
@@ -140,7 +142,7 @@ def ingest(source_id: str, playlist: Playlist, now: float) -> IngestStats:
             if not old:
                 new_streams += 1
 
-        # stream nguồn không còn liệt kê: active=0 (không xoá)
+        # streams the source no longer lists: active=0 (not deleted)
         deactivated = 0
         for r in c.execute("SELECT id, channel_id, url_hash FROM streams WHERE source_id=? AND active=1",
                            (source_id,)).fetchall():
@@ -150,17 +152,12 @@ def ingest(source_id: str, playlist: Playlist, now: float) -> IngestStats:
                 deactivated += 1
 
         for cid in touched:
-            _refresh_channel(c, cid, now)
-            # category tự động: theo mục của nguồn đang thắng ở kênh này
-            if cid in cats:
-                win = c.execute(
-                    "SELECT st.source_id FROM streams st JOIN sources so ON so.id=st.source_id "
-                    "WHERE st.channel_id=? AND st.active=1 ORDER BY so.priority, so.id, st.id LIMIT 1",
-                    (cid,)).fetchone()
-                if win and win[0] == source_id:
-                    c.execute("UPDATE channels SET category=? WHERE id=? AND category_source='auto'",
-                              (cats[cid], cid))
-        # kênh vừa mất hết stream do chuyển kênh thì xoá
+            winner = _refresh_channel(c, cid, now)
+            # automatic category: from the group of the source winning this channel
+            if cid in cats and winner == source_id:
+                c.execute("UPDATE channels SET category=? WHERE id=? AND category_source='auto'",
+                          (cats[cid], cid))
+        # delete channels that just lost all streams due to moves
         if touched:
             c.execute("DELETE FROM channels WHERE id IN (%s) AND NOT EXISTS "
                       "(SELECT 1 FROM streams WHERE channel_id=channels.id)" % ",".join("?" * len(touched)),
@@ -172,6 +169,6 @@ def ingest(source_id: str, playlist: Playlist, now: float) -> IngestStats:
 
 
 def prune_orphan_channels(conn) -> int:
-    """Xoá kênh không còn stream nào; gọi khi đang giữ db.lock. Trả số kênh đã xoá."""
+    """Delete channels with no streams left; call while holding db.lock. Returns the number deleted."""
     return conn.execute("DELETE FROM channels WHERE NOT EXISTS "
                         "(SELECT 1 FROM streams WHERE channel_id=channels.id)").rowcount

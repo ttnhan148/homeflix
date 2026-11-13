@@ -1,24 +1,26 @@
-"""Đọc sổ kênh cho người xem: chỉ kênh có stream hợp lệ; yêu thích và kênh xem gần đây."""
+"""Read the channel registry for viewers: only channels with valid streams; favorites and recently watched."""
 import json
 from urllib.parse import quote
 
 from hometv import db, scoring
 
 MAX_RECENT = 20
-FAIL_HIDE = 3  # số lần kiểm chết liên tiếp thì ẩn kênh
 NAME_MAX = 120
 
-# Stream xem được: còn hiện diện, không DRM, nguồn đã duyệt và đang bật, kênh đang bật
+# Watchable stream: still present, no DRM, source approved and enabled, channel enabled
 _VALID = ("s.active = 1 AND s.drm_hint = 0 AND src.enabled = 1 "
           "AND src.rights_status = 'approved' AND ch.enabled = 1")
 _HEALTH = " LEFT JOIN stream_health h ON h.stream_id = s.id"
 _FROM = "streams s JOIN sources src ON src.id = s.source_id JOIN channels ch ON ch.id = s.channel_id"
 
 
-def _read(sql: str, params: tuple = ()) -> list:
-    """Đọc có khóa: nhiều thread (API, bộ kiểm) dùng chung một kết nối SQLite, đọc không khóa sẽ InterfaceError."""
-    with db.lock:
-        return db.conn().execute(sql, params).fetchall()
+def parse_headers(raw) -> dict:
+    """Decode a stream's http_headers JSON column; anything invalid or not an object yields {}."""
+    try:
+        headers = json.loads(raw) if raw else {}
+    except ValueError:
+        return {}
+    return headers if isinstance(headers, dict) else {}
 
 
 def _is_valid_channel(c, channel_id: int) -> bool:
@@ -34,13 +36,13 @@ def _status(ok_max, use_health: bool) -> str | None:
 
 
 def list_channels(now: float, use_health: bool = False) -> list[dict]:
-    """use_health: ẩn kênh mà mọi stream hợp lệ đều chết liên tiếp từ FAIL_HIDE lần kiểm trở lên."""
-    alive = f" AND (h.stream_id IS NULL OR h.fail_streak < {FAIL_HIDE})" if use_health else ""
+    """use_health: only channels with at least one valid stream that passed its last check (dead/unchecked hidden)."""
+    alive = " AND h.ok = 1" if use_health else ""
     join = _HEALTH if use_health else ""
-    # MAX(h.ok): 1 = có stream vừa kiểm thành công, 0 = đã kiểm mà chết hết, NULL = chưa kiểm
+    # MAX(h.ok): 1 = some stream passed its last check, 0 = checked and all dead, NULL = not checked
     ok_max = (f"(SELECT MAX(h.ok) FROM {_FROM}{_HEALTH} WHERE s.channel_id = oc.id AND {_VALID}) AS ok_max"
               if use_health else "NULL AS ok_max")
-    rows = _read(f"""
+    rows = db.read(f"""
         SELECT oc.id, oc.category, oc.logo_url, oc.display_name, oc.normalized_name,
                (SELECT s.display_name FROM {_FROM} WHERE s.channel_id = oc.id AND {_VALID}
                 ORDER BY src.priority, s.id LIMIT 1) AS best_name,
@@ -63,10 +65,10 @@ def list_channels(now: float, use_health: bool = False) -> list[dict]:
 
 
 def channel_streams(channel_id: int, use_health: bool = False) -> list[dict]:
-    """Thứ tự thử; use_health: điểm sức khỏe giảm dần trước (chưa kiểm tính 50)."""
+    """Try order; use_health: health score descending first (unchecked counts as 50)."""
     join = _HEALTH if use_health else ""
     by_score = f"COALESCE(h.score, {scoring.UNKNOWN}) DESC, " if use_health else ""
-    rows = _read(f"""
+    rows = db.read(f"""
         SELECT s.id, s.url, s.quality_hint FROM {_FROM}{join}
         WHERE s.channel_id = ? AND {_VALID}
         ORDER BY {by_score}src.priority, (s.url LIKE 'https:%') DESC, s.id""", (channel_id,))
@@ -74,15 +76,11 @@ def channel_streams(channel_id: int, use_health: bool = False) -> list[dict]:
 
 
 def valid_stream(stream_id: int) -> dict | None:
-    found = _read(f"SELECT s.id, s.url, s.http_headers FROM {_FROM} WHERE s.id = ? AND {_VALID}", (stream_id,))
+    found = db.read(f"SELECT s.id, s.url, s.http_headers FROM {_FROM} WHERE s.id = ? AND {_VALID}", (stream_id,))
     if not found:
         return None
     r = found[0]
-    try:
-        headers = json.loads(r["http_headers"]) if r["http_headers"] else {}
-    except ValueError:
-        headers = {}
-    return {"id": r["id"], "url": r["url"], "http_headers": headers if isinstance(headers, dict) else {}}
+    return {"id": r["id"], "url": r["url"], "http_headers": parse_headers(r["http_headers"])}
 
 
 def set_favorite(channel_id: int, on: bool, now: float) -> bool:

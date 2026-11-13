@@ -1,4 +1,4 @@
-"""Thẻ kênh HomeTV dùng đúng ngôn ngữ thiết kế của lưới phim."""
+"""HomeTV channel cards use the same design language as the movie grid."""
 from tests.ui.test_hometv_ui import enter, seed
 
 

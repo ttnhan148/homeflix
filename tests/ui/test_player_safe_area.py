@@ -1,7 +1,7 @@
 from tests.ui.test_three_taps import _open
 
 W, H = 932, 430
-SAFE = (0, 59, 21, 59)  # top, right, bottom, left khi xoay ngang trên iPhone có Dynamic Island
+SAFE = (0, 59, 21, 59)  # top, right, bottom, left in landscape on an iPhone with Dynamic Island
 
 
 def _player(open_app):

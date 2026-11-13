@@ -1,4 +1,4 @@
-"""HomeTV: player, stream dự phòng, điều khiển bằng remote TV."""
+"""HomeTV: player, fallback streams, TV remote control."""
 import hometv
 from tests.hometv.test_hometv_catalog import seed_channel, seed_stream
 from tests.ui.conftest import tap
@@ -254,15 +254,14 @@ def test_click_playlist_row_switches_channel_debounced(app_module, open_app):
 
 
 def test_playlist_uses_all_channels_when_current_not_in_filter(app_module, open_app, monkeypatch):
-    from tests.ui.test_hometv_ui import seed as seed_ui, set_geo
-    seed_ui(3, health={1: True})
+    from tests.ui.test_hometv_ui import seed as seed_ui
+    seed_ui(3)   # groups: 1 News, 2 Sports, 3 National TV
     hometv.db.conn().execute("INSERT INTO recents(channel_id, viewed_at) VALUES (2, 5.0)")
-    set_geo(monkeypatch, True)
     page = open_app()
     page.goto(URL)
     tap(page, "#hometvToggle")
     page.wait_for_selector("#tvGrid .tv-card")
-    tap(page, '[data-tvfilter="alive"]')
+    tap(page, '#tvGroupTabs .grid-tab-btn:has-text("Tin tức")')
     assert page.locator("#tvGrid .tv-card").count() == 1
     tap(page, '#tvRecentList .home-cont[data-id="2"]')
     page.wait_for_function("window.__hlsSource === '/api/hometv/play/2/index.m3u8'")
@@ -281,7 +280,7 @@ def test_player_hides_header_and_tabs_and_restores_on_close(app_module, open_app
     assert page.evaluate("document.activeElement.dataset.id") == "1"
 
 
-def test_tv_remote_moves_from_recent_row_to_filter_row_to_grid(app_module, open_app):
+def test_tv_remote_moves_from_recent_row_to_group_tabs_to_grid(app_module, open_app):
     from tests.ui.test_hometv_ui import seed as seed_ui
     seed_ui(6)
     for cid, at in ((1, 10.0), (2, 20.0), (3, 30.0)):
@@ -290,14 +289,31 @@ def test_tv_remote_moves_from_recent_row_to_filter_row_to_grid(app_module, open_
     page.focus("#tvRecentList .home-cont >> nth=0")
     page.keyboard.press("ArrowRight")
     assert page.evaluate("document.activeElement.dataset.id") == "2"
-    page.keyboard.press("ArrowDown")
-    assert page.evaluate("document.activeElement.dataset.tvfilter") == "all"
-    page.keyboard.press("ArrowDown")
-    assert page.evaluate("document.activeElement.id") == "filterBtn-group"
+    page.keyboard.press("ArrowDown")   # same column: the second tab
+    assert page.evaluate("document.activeElement.textContent") == "Quốc gia"
+    page.keyboard.press("ArrowLeft")
+    assert page.evaluate("document.activeElement.dataset.tvgroup") == ""
     page.keyboard.press("ArrowDown")
     assert page.evaluate("document.activeElement.classList.contains('tv-card')") is True
     page.keyboard.press("ArrowUp")
-    assert page.evaluate("document.activeElement.id") == "filterBtn-group"
+    assert page.evaluate("document.activeElement.closest('#tvGroupTabs') !== null") is True
+
+
+def test_tv_remote_moves_through_hero_row(app_module, open_app):
+    from tests.ui.test_hometv_ui import seed as seed_ui
+    seed_ui(3, logo="https://l/a.png")
+    hometv.db.conn().execute("INSERT INTO recents(channel_id, viewed_at) VALUES (1, 10.0)")
+    page = open_tv(open_app, tv=True)
+    page.wait_for_selector("#tvHero .hero-slide")
+    page.focus("#tvRecentList .home-cont >> nth=0")
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.classList.contains('hero-btn-play')") is True
+    page.keyboard.press("ArrowRight")
+    assert page.evaluate("document.activeElement.classList.contains('hero-btn-save')") is True
+    page.keyboard.press("ArrowRight")
+    assert page.evaluate("document.activeElement.closest('.hero-slide').querySelector('.hero-title').textContent") == "Kênh 002"
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.closest('#tvGroupTabs') !== null") is True
 
 
 def test_tv_up_down_in_playlist_moves_between_rows_without_switching(app_module, open_app):
@@ -307,7 +323,7 @@ def test_tv_up_down_in_playlist_moves_between_rows_without_switching(app_module,
     page.keyboard.press("Enter")
     page.wait_for_function("window.__hlsSource === '/api/hometv/play/1/index.m3u8'")
     n = len([r for r in page.requests if "/streams" in r])
-    page.keyboard.press("ArrowRight")  # từ video sang dòng đang phát trong danh sách
+    page.keyboard.press("ArrowRight")  # from the video to the now-playing row in the list
     focused = "document.activeElement.classList.contains('ep-item') && document.activeElement.querySelector('.ep-name').textContent"
     assert page.evaluate(focused) == "Kênh 001"
     page.keyboard.press("ArrowDown")
@@ -316,30 +332,10 @@ def test_tv_up_down_in_playlist_moves_between_rows_without_switching(app_module,
     page.wait_for_timeout(600)
     assert source(page) == "/api/hometv/play/1/index.m3u8"
     assert len([r for r in page.requests if "/streams" in r]) == n
-    page.keyboard.press("Enter")  # Enter trên dòng chọn kênh đó
+    page.keyboard.press("Enter")  # Enter on a row selects that channel
     page.wait_for_function("window.__hlsSource === '/api/hometv/play/3/index.m3u8'")
-    page.keyboard.press("ArrowLeft")  # về khung player: Lên/Xuống lại đổi kênh
+    page.keyboard.press("ArrowLeft")  # back to the player: Up/Down switch channels again
     assert page.evaluate("document.activeElement.id") == "tvPlayer"
-
-
-def test_tv_remote_can_pick_group_option(app_module, open_app):
-    from tests.ui.test_hometv_ui import CATS, seed as seed_ui
-    seed_ui(6)
-    page = open_tv(open_app, tv=True)
-    page.focus("#filterBtn-group")
-    page.keyboard.press("Enter")
-    assert page.evaluate("document.getElementById('filterMenu-group').classList.contains('open')") is True
-    page.keyboard.press("ArrowDown")
-    focus_text = "document.activeElement.classList.contains('filter-option') && document.activeElement.textContent"
-    assert page.evaluate(focus_text) == "Tất cả"
-    page.keyboard.press("ArrowDown")
-    page.keyboard.press("ArrowDown")
-    page.keyboard.press("ArrowDown")
-    assert page.evaluate(focus_text) == "Thể thao"
-    page.keyboard.press("Enter")
-    page.wait_for_function("document.querySelectorAll('#tvGrid .tv-card').length === 2")
-    assert page.evaluate("document.activeElement.id") == "filterBtn-group"
-    assert page.evaluate("document.getElementById('filterMenu-group').classList.contains('open')") is False
 
 
 def in_view(page):

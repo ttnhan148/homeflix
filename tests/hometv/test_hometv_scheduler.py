@@ -13,7 +13,7 @@ def run(coro):
 
 
 def _resp(status, content=b""):
-    # response dạng stream như transport thật
+    # streaming response like the real transport
     return httpx.Response(status, headers={"content-length": str(len(content))},
                           stream=httpx.ByteStream(content))
 
@@ -186,7 +186,7 @@ def test_refresher_survives_errors(db, monkeypatch):
 
 
 def test_event_loop_not_blocked_by_sibling_ingest(db, public_dns):
-    # ingest lớn giữ db.lock trong luồng; nguồn kia lỗi giữa chừng không được làm đứng event loop
+    # a large ingest holds db.lock in a thread; another source failing midway must not stall the event loop
     import time
     big = ("#EXTM3U\n" + "".join(
         f'#EXTINF:-1 tvg-id="id{i}",Kênh {i}\nhttps://s.example/{i}.m3u8\n' for i in range(20000))).encode()
@@ -256,7 +256,7 @@ def test_manual_refresh_bypasses_drop_check(db, public_dns):
 
 
 def test_cancel_run_due_closes_jobs_first(db, public_dns, monkeypatch):
-    # hủy run_due giữa lúc đang tải: khi nó trả về, job phải đã đóng (không còn running)
+    # cancel run_due mid-download: once it returns, the job must already be closed (no longer running)
     import time
     sources.create("A", "https://a.example/a.m3u", 1.0)
     sources.create("B", "https://b.example/b.m3u", 1.0)
@@ -265,7 +265,7 @@ def test_cancel_run_due_closes_jobs_first(db, public_dns, monkeypatch):
 
     def slow(*a, **k):
         calls.append(1)
-        if len(calls) == 1:  # job đầu đóng chậm, job sau đóng ngay
+        if len(calls) == 1:  # first job closes slowly, the next closes immediately
             time.sleep(0.3)
         real(*a, **k)
     monkeypatch.setattr(scheduler, "finish_job", slow)

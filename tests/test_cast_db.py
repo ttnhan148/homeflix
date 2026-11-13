@@ -27,8 +27,8 @@ def test_pruning_a_device_removes_its_cast_rows_and_setting(app_module):
     now = time.time()
     for dev_id, seen in (("old-tv", now - 200 * 86400), ("old-phone", now - 200 * 86400), ("new-tv", now)):
         m._db_touch_device(dev_id, "h", "tv", "ua", seen, adopt_legacy=False)
-    m._db_cast_allow("old-tv", "new-phone")      # old-tv là target
-    m._db_cast_allow("new-tv", "old-phone")      # old-phone là controller
+    m._db_cast_allow("old-tv", "new-phone")      # old-tv is the target
+    m._db_cast_allow("new-tv", "old-phone")      # old-phone is the controller
     m._db_cast_allow("new-tv", "new-phone")
     m._db_cast_set_allow_control("old-tv", False)
     m._db_cast_set_allow_control("new-tv", False)
@@ -36,7 +36,7 @@ def test_pruning_a_device_removes_its_cast_rows_and_setting(app_module):
     assert not m._db_cast_is_allowed("old-tv", "new-phone")
     assert not m._db_cast_is_allowed("new-tv", "old-phone")
     assert m._db_cast_is_allowed("new-tv", "new-phone")
-    assert m._db_cast_allow_control("old-tv") is True   # khóa đã bị xóa
+    assert m._db_cast_allow_control("old-tv") is True   # the lock has been deleted
     assert m._db_cast_allow_control("new-tv") is False
 
 

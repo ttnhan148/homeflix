@@ -14,7 +14,7 @@ URL = "http://example.com/a.m3u"
 
 
 def _resp(status, content=None, headers=None, stream=None):
-    # Dựng response dạng stream như transport thật (content= thì httpx đã đọc sẵn, aiter_raw lỗi)
+    # Build a streaming response like the real transport (with content= httpx has already read it, so aiter_raw fails)
     h = dict(headers or {})
     if content is not None:
         h.setdefault("content-length", str(len(content)))
@@ -51,7 +51,7 @@ def test_too_large(public_dns):
 
 
 def test_too_large_without_content_length(public_dns):
-    # Không có Content-Length: phải dừng khi đếm vượt giới hạn
+    # No Content-Length: must stop once the count exceeds the limit
     def handler(r):
         return _resp(200, stream=httpx.ByteStream(b"x" * (3 * MB)),
                               headers={"transfer-encoding": "chunked"})
@@ -182,7 +182,7 @@ def test_invalid_initial_url_no_request(public_dns):
 
 
 def test_client_ignores_proxy_env(monkeypatch):
-    # Không truyền transport: nếu trust_env=True thì httpx dựng mount proxy từ biến môi trường
+    # No transport passed: if trust_env=True, httpx builds proxy mounts from environment variables
     for k in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"):
         monkeypatch.setenv(k, "http://proxy.invalid:3128")
     client = fetcher.make_client()
@@ -222,7 +222,7 @@ def test_deflate_playlist_decoded(public_dns):
 
 
 def test_gzip_bomb_memory_bounded(public_dns):
-    # 50 MB giải nén từ ~50 KB: bộ nhớ đỉnh phải ~ max_bytes, không phải 50 MB
+    # 50 MB decompressed from ~50 KB: peak memory must be ~ max_bytes, not 50 MB
     bomb = _gz(b"\0" * (50 * MB))
     assert len(bomb) < 100_000
     tracemalloc.start()
@@ -237,7 +237,7 @@ def test_gzip_bomb_memory_bounded(public_dns):
 
 
 def test_trailing_garbage_counts_raw_bytes(public_dns):
-    # sau luồng gzip hợp lệ là rác: phải đếm byte thô để dừng
+    # garbage after a valid gzip stream: must count raw bytes to stop
     body = _gz(b"#EXTM3U\n") + os.urandom(2 * MB)
     e = fail(lambda r: _resp(200, stream=httpx.ByteStream(body),
                              headers={"content-encoding": "gzip"}), max_bytes=1 * MB)

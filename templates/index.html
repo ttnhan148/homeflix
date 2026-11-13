@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>HomeFlix</title>
-    <!-- Inter: một họ chữ, đủ dấu tiếng Việt, có số đều cột -->
+    <!-- Inter: one typeface, full Vietnamese diacritics, tabular figures -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -19,7 +19,7 @@
     <link class="favicon" rel="apple-touch-icon" href="/static/logo.png">
     <meta name="theme-color" content="#000000">
 
-    <!-- HLS.js cho thiết bị không Apple -->
+    <!-- HLS.js for non-Apple devices -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="{{ asset('home-utils.js') }}"></script>
     <script src="{{ asset('settings-utils.js') }}"></script>
@@ -155,19 +155,6 @@
 
         .tab-content.active {
             display: flex;
-        }
-
-        /* --- SMOOTH MANUAL INPUT --- */
-        .input-card-wrapper {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease, opacity 0.2s ease;
-            opacity: 0;
-        }
-
-        .input-card-wrapper.expanded {
-            max-height: 400px;
-            opacity: 1;
         }
 
         /* --- INPUT SECTION --- */
@@ -314,6 +301,9 @@
         /* --- EPISODES DRAWER --- */
         .episodes-drawer {
             width: 100%;
+            /* Column so the episode grid (not the drawer) scrolls once the drawer hits its max-height */
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
             transition: max-height 0.35s ease;
             border-radius: var(--radius-xl);
@@ -341,6 +331,7 @@
             cursor: pointer;
             transition: var(--transition);
             border-bottom: 1px solid var(--glass-border);
+            flex-shrink: 0;
         }
         .episodes-drawer-toggle:hover {
             background: rgba(255, 255, 255, 0.06);
@@ -356,9 +347,14 @@
             flex-direction: column;
             gap: 0.6rem;
             padding: 0.75rem 1rem;
+            /* Long series: scroll inside the drawer instead of being clipped by overflow: hidden */
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
         }
 
-        /* --- EPISODE LIST (dùng chung detail + drawer + saved) --- */
+        /* --- EPISODE LIST (shared by detail + drawer + saved) --- */
         .ep-list {
             display: flex;
             flex-direction: column;
@@ -1125,7 +1121,7 @@
             font-size: 1.1rem;
         }
 
-        /* Hộp viền tập trung (focus ring) cực kỳ nổi bật khi duyệt remote trên TV/Projector */
+        /* Highly visible focus ring for remote navigation on TV/Projector */
         .device-tv input:focus, 
         .device-tv textarea:focus, 
         .device-tv button:focus, 
@@ -1139,7 +1135,7 @@
         }
 
         .device-tv .movie-card:hover {
-            transform: none; /* Bỏ hover máy chiếu tránh lag */
+            transform: none; /* Disable hover on projectors to avoid lag */
         }
 
 
@@ -1162,7 +1158,7 @@
             font-size: 0.8rem;
         }
 
-        /* Cuộn ngang các tab menu mượt mà trên màn hình nhỏ */
+        /* Smooth horizontal scrolling of menu tabs on small screens */
         .device-mobile .tabs-nav {
             flex-wrap: nowrap;
             overflow-x: auto;
@@ -1224,13 +1220,13 @@
             font-size: 14px;
         }
 
-        /* Tắt viền focus màu vàng xấu xí trên thiết bị di động chạm tay */
+        /* Disable the ugly yellow focus outline on touch mobile devices */
         .device-mobile *:focus {
             outline: none !important;
             transform: none !important;
         }
 
-        /* Tắt backdrop-filter trên mobile — gây mất touch event + hao pin */
+        /* Disable backdrop-filter on mobile — causes lost touch events + battery drain */
         .device-mobile .btn-overlay-back,
         .device-mobile .tab-btn,
         .device-mobile .grid-tab-btn,
@@ -1914,6 +1910,13 @@
                 {{ wrapper_html }}
             </div>
 {%- endmacro -%}
+{%- macro hero_section(id, title, extra_class='') -%}
+                    <section id="{{ id }}" class="hero home-section{{ ' ' + extra_class if extra_class }}" hidden aria-labelledby="{{ id }}Heading">
+                        <div class="sec-head"><h2 id="{{ id }}Heading">{{ title }}</h2></div>
+                        <div id="{{ id }}Track" class="hero-track"></div>
+                        <div id="{{ id }}Dots" class="hero-dots" hidden></div>
+                    </section>
+{%- endmacro -%}
 {%- macro filter_dropdown(type, label) -%}
                                     <div class="filter-dropdown">
                                         <button class="filter-btn" id="filterBtn-{{ type }}" onclick="toggleFilterDropdown('{{ type }}')">{{ label }}</button>
@@ -1925,13 +1928,12 @@
         <div id="stickyHeader" class="sticky-header">
             <header id="appHeader" class="app-header">
                 <div class="brand">
-                    <svg class="brand-mark" width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path d="M4.5 14.5 16 5l11.5 9.5V26a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 26Z" fill="none" stroke="#e50914" stroke-width="2.5" stroke-linejoin="round"/><path d="M13 13.2 21 18l-8 4.8Z" fill="#e50914"/></svg>
-                    <h1>HomeFlix</h1>
+                    <h1 id="brandName">HomeFlix</h1>
+                    <button type="button" id="hometvToggle" class="hometv-toggle" aria-label="Chuyển HomeFlix / HomeTV" aria-pressed="false">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>
+                    </button>
                 </div>
-                <button type="button" id="hometvToggle" class="hometv-toggle" aria-label="Chuyển HomeFlix / HomeTV" aria-pressed="false">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="m8 3 4 3 4-3M9 21h6"/></svg>
-                </button>
-                <!-- TV, máy tính: điều hướng nằm cùng hàng với logo -->
+                <!-- TV, desktop: navigation sits on the same row as the logo -->
                 <nav class="tabs-nav" id="appTabsNav" aria-label="Điều hướng chính">
                     <button class="tab-btn active" id="tabBtnSearch" onclick="switchTab('search-tab')">Home</button>
                     <button class="tab-btn" id="tabBtnSaved" onclick="switchTab('saved-tab')" data-tv-label="Tủ kênh">Tủ phim</button>
@@ -1949,23 +1951,18 @@
             </header>
         </div>
 
-        <!-- HOMETV: ba tab (hiện khi body có mode-hometv), dựng bằng cùng macro và class với HomeFlix -->
+        <!-- HOMETV: three tabs (shown when body has mode-hometv), built with the same macros and classes as HomeFlix -->
         <div id="hometv-root" class="hometv-root" hidden>
             <div id="tv-home-tab" class="tab-content tv-tab">
                 <div class="search-container">
                     <div id="tvHomeContent" style="display: flex;">
                     {{ continue_section('tvRecent', 'Kênh xem gần đây', 'Tủ kênh', 'tv-saved-tab') }}
+                    {{ hero_section('tvHero', 'Kênh nổi bật', 'tv-hero') }}
                     <div class="grid-tabs-section">
                         <div id="tvFilterBar" class="filter-bar-wrap">
-                            <div class="grid-tabs-nav type-row">
-                                <button type="button" class="grid-tab-btn active" data-tvfilter="all">Tất cả</button>
-                                <button type="button" class="grid-tab-btn" data-tvfilter="alive">Alive</button>
-                            </div>
+                            <!-- Channel groups as tabs, like HomeFlix's movie type tabs; buttons are built by hometv.js -->
+                            <div id="tvGroupTabs" class="grid-tabs-nav type-row"></div>
                             <div class="chip-row">
-                                <div class="filter-bar">
-                                    {{ filter_dropdown('group', 'Nhóm') }}
-                                    <button type="button" class="filter-clear-btn" id="tvClearBtn" style="display:none;">Xóa lọc</button>
-                                </div>
                                 <span id="tvResultCount" class="result-count"></span>
                             </div>
                         </div>
@@ -2005,7 +2002,7 @@
                 </div>
             </div>
         </div>
-        <!-- HOMETV: trang play kiểu theatre của HomeFlix + danh sách phát -->
+        <!-- HOMETV: HomeFlix theatre-style play page + playlist -->
         <div id="tvPlayer" class="tv-player" tabindex="-1" hidden>
             {% set tv_wrapper %}<div id="tvToast" class="tv-toast" role="status" hidden></div>{% endset %}
             {% set tv_error %}<span id="tvPlayerMsg"></span> <button type="button" id="tvPlayerRetry" class="filter-option">Thử lại</button>{% endset %}
@@ -2069,15 +2066,11 @@
 
                 <!-- Homepage content -->
                 <div id="homepageContent" style="display: flex;">
-                    <!-- Xem tiếp: việc hay làm nhất, một chạm là phát -->
+                    <!-- Continue watching: the most common action, one tap to play -->
                     {{ continue_section('homeContinue', 'Xem tiếp', 'Tủ phim', 'saved-tab') }}
 
-                    <!-- Phim hot chiếu rạp: hàng thẻ cuộn ngang -->
-                    <section id="hero" class="hero home-section" hidden aria-labelledby="heroHeading">
-                        <div class="sec-head"><h2 id="heroHeading">Đang chiếu rạp</h2></div>
-                        <div id="heroTrack" class="hero-track"></div>
-                        <div id="heroDots" class="hero-dots" hidden></div>
-                    </section>
+                    <!-- Hot movies in theaters: horizontally scrolling card row -->
+                    {{ hero_section('hero', 'Đang chiếu rạp') }}
 
                     <!-- Grid tabs section -->
                     <div class="grid-tabs-section">
@@ -2125,7 +2118,7 @@
             </div>
         </div>
 
-        <!-- TAB CONTENT 4: CÀI ĐẶT (static/settings.js dựng các nhóm vào #settingsBody) -->
+        <!-- TAB CONTENT 4: SETTINGS (static/settings.js builds the groups into #settingsBody) -->
         <div id="settings-tab" class="tab-content">
             <div class="settings-page">
                 <div class="settings-head">
@@ -2176,7 +2169,7 @@
         </div>
     </div>
 
-    <!-- CAST (TV/desktop nhận lệnh): nhãn, xác nhận kết nối, nhắc bấm phát -->
+    <!-- CAST (TV/desktop receiving commands): label, connection confirmation, press-to-play prompt -->
     <div id="castLabel" class="cast-label glass" hidden></div>
     <div id="castConfirm" class="cast-dialog glass" role="dialog" aria-modal="true" hidden>
         <p id="castConfirmText"></p>
@@ -2195,7 +2188,7 @@
         <label class="cast-switch"><span>Mở đầu kết thúc ở giây</span><input type="number" id="prefIntroSeconds" min="10" max="300" step="1" inputmode="numeric" class="pref-number"></label>
     </div>
 
-    <!-- CAST (iPhone điều khiển): tờ "Phát lên" và thông báo -->
+    <!-- CAST (iPhone controller): "Phát lên" sheet and notifications -->
     <div id="castScrim" class="cast-scrim" hidden></div>
     <div id="castSheet" class="cast-sheet glass" role="dialog" aria-label="Phát lên" hidden>
         <div class="cast-sheet-head">
@@ -2246,7 +2239,7 @@
         </div>
     </div>
 
-    <!-- TAB BAR (iPhone): thanh kính sát đáy, nút nằm trên thanh Home -->
+    <!-- TAB BAR (iPhone): glass bar at the bottom, buttons sit above the Home indicator -->
     <nav id="floatTabBar" class="float-tabbar glass" aria-label="Điều hướng chính">
         <div class="fab-capsule">
             <button type="button" class="fab-tab active" id="fabTabExplore" onclick="switchTab('search-tab')">
@@ -2263,7 +2256,7 @@
             </button>
         </div>
     </nav>
-    <!-- Dải kính sau thanh trạng thái (PWA iPhone): nội dung cuộn không lộ dưới giờ và Dynamic Island -->
+    <!-- Glass strip behind the status bar (iPhone PWA): scrolling content does not show under the clock and Dynamic Island -->
     <div id="statusBarShield" class="status-shield glass" aria-hidden="true"></div>
 
     <script>
@@ -2288,7 +2281,7 @@
         const stickyHeader = document.getElementById('stickyHeader');
         let hlsObj = null;
 
-        // --- Native Fullscreen flag (chỉ gọi 1 lần mỗi session phát) ---
+        // --- Native Fullscreen flag (called only once per playback session) ---
         let hasEnteredFullscreen = false;
 
         // --- Player header controls ---
@@ -2309,9 +2302,13 @@ function buildEpisodesDrawer() {
     const drawer = document.createElement('div');
     drawer.id = 'episodesDrawerEl';
     drawer.className = 'episodes-drawer expanded';
+    episodesDrawerExpanded = true;  // a rebuilt drawer starts expanded; keep the flag in sync or the first tap does nothing
     
     const toggle = document.createElement('button');
     toggle.className = 'episodes-drawer-toggle';
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-controls', 'drawerEpGrid');
     toggle.innerHTML = `<span><span id="epCount">0</span> tập</span><svg class="drawer-arrow" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
     toggle.onclick = toggleEpisodesDrawer;
     
@@ -2330,6 +2327,7 @@ function toggleEpisodesDrawer() {
     if (!drawer) return;
     episodesDrawerExpanded = !episodesDrawerExpanded;
     drawer.className = 'episodes-drawer ' + (episodesDrawerExpanded ? 'expanded' : 'collapsed');
+    drawer.querySelector('.episodes-drawer-toggle').setAttribute('aria-expanded', String(episodesDrawerExpanded));
 }
 
         function buildEpisodesGridInDrawer(episodesArray, playIdx) {
@@ -2375,7 +2373,7 @@ function toggleEpisodesDrawer() {
             }
         }
 
-        // --- Unified Episode List (dùng chung detail + drawer + saved) ---
+        // --- Unified Episode List (shared by detail + drawer + saved) ---
         const EP_CHUNK = 100;
 
         function el(tag, className, text) {
@@ -2389,7 +2387,7 @@ function toggleEpisodesDrawer() {
             if (!containerEl) return;
             const { episodes, movieSlug, watchStates, onPlay, autoFocusWatching, showTitle, showMeta, watchingPct } = opts;
             const unit = opts.unit || 'tập';
-            const rows = opts.rows > 0 ? opts.rows : 0; // có rows: một cột cao đúng số dòng, cuộn bên trong, không phân trang
+            const rows = opts.rows > 0 ? opts.rows : 0; // with rows: a single column exactly that many rows tall, scrolling internally, no paging
             const nameOf = opts.nameOf || (ep => HFUtils.epShort(ep.name));
             if (!episodes || episodes.length === 0) {
                 containerEl.innerHTML = '';
@@ -2540,14 +2538,14 @@ video.addEventListener('play', () => {
     }
 });
 
-// --- Gửi vị trí xem (giây) về server, theo từng thiết bị ---
+// --- Report watch position (seconds) to the server, per device ---
 const POSITION_REPORT_INTERVAL_MS = 10000;
-// Chỉ báo vị trí sau khi media của tập mới tải xong metadata, tránh gửi giây của tập cũ
+// Only report position after the new episode's media has loaded metadata, to avoid sending the previous episode's seconds
 let positionTrackReady = false;
 video.addEventListener('loadedmetadata', () => { positionTrackReady = true; });
 
-// Listener đặt lại vị trí khi tập sắp phát có vị trí xem dở. Phải gỡ khi đổi tập hoặc thoát,
-// nếu không nó sẽ tua nhầm tập kế tiếp tới giây của tập trước.
+// Listener that restores position when the upcoming episode has a partial watch position. Must be removed on episode change or exit,
+// otherwise it would wrongly seek the next episode to the previous episode's position.
 let resumeHandler = null;
 function clearResumeHandler() {
     if (resumeHandler) {
@@ -2598,7 +2596,7 @@ document.addEventListener('visibilitychange', () => {
         let airplaySeekInterval = null;
         let isAirplayAvailable = false;
 
-        // Phát hiện AirPlay khả dụng
+        // Detect AirPlay availability
         if (typeof video.webkitSupportsAirPlay === 'function') {
             video.webkitShowPlaybackTargetPicker = video.webkitShowPlaybackTargetPicker || function(){};
         }
@@ -2612,7 +2610,7 @@ document.addEventListener('visibilitychange', () => {
             toggleRemoteMode(isWireless);
         });
 
-        // Thêm AirPlay btn vào player header
+        // Add AirPlay btn to the player header
         function toggleAirplayBtn() {
             let btn = document.getElementById('airplayHeaderBtn');
             if (isAirplayAvailable && !isAirplayActive) {
@@ -2637,14 +2635,14 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function disconnectAirPlay() {
-            // Ngắt AirPlay bằng cách clear source — force disconnect
+            // Disconnect AirPlay by clearing the source — force disconnect
             video.pause();
             const wasSrc = video.src;
             video.removeAttribute('src');
             video.load();
             toggleRemoteMode(false);
             isAirplayActive = false;
-            // Khôi phục lại video về local sau 200ms
+            // Restore video to local playback after 200ms
             setTimeout(() => {
                 if (wasSrc && !isAirplayActive) {
                     video.src = wasSrc;
@@ -2658,10 +2656,10 @@ document.addEventListener('visibilitychange', () => {
             isAirplayActive = isWireless;
 
             if (isWireless) {
-                // Giữ video alive (không display:none) — set opacity 0 để AirPlay ổn định
+                // Keep video alive (no display:none) — set opacity 0 so AirPlay stays stable
                 video.classList.add('airplay-hidden');
                 overlay.style.display = 'flex';
-                // Gán poster nếu có
+                // Set poster if available
                 const posterImg = document.getElementById('airplayBgPoster');
                 const currentPoster = video.getAttribute('data-poster');
                 if (currentPoster && posterImg) posterImg.src = currentPoster;
@@ -2673,7 +2671,7 @@ document.addEventListener('visibilitychange', () => {
                 overlay.style.display = 'none';
                 stopAirplaySeekSync();
                 toggleAirplayBtn();
-                // Resume local playback nếu video đang phát mà bị ngắt AirPlay
+                // Resume local playback if video was playing when AirPlay disconnected
                 if (!video.paused) {
                     video.play().catch(() => {});
                 }
@@ -2733,15 +2731,15 @@ document.addEventListener('visibilitychange', () => {
             }
         }
 
-        // Trạng thái phim đang phát hiện tại (dùng để lưu tiến độ xem)
+        // State of the currently playing movie (used to save watch progress)
         let currentMovie = null;
-        let castStartAt = null; // giây bắt đầu do lệnh cast chỉ định (null: dùng tiến độ đã lưu)
-        // Danh sách phim lưu trên server
+        let castStartAt = null; // start second specified by a cast command (null: use saved progress)
+        // Movies saved on the server
         let savedMoviesList = [];
-        // Danh sách tập phim đang xem ở phần chi tiết
+        // Episode list being viewed in the detail section
         let currentDetailEpisodes = [];
-        let currentDetailMeta = null; // movie của trang chi tiết đang mở
-        // Theo dõi danh sách tập đang phát và vị trí hiện tại
+        let currentDetailMeta = null; // movie of the currently open detail page
+        // Track the playing episode list and current position
         let playbackEpisodes = [];
         let currentPlaybackIndex = -1;
 
@@ -2758,7 +2756,7 @@ document.addEventListener('visibilitychange', () => {
             activeGridTab: 'all'
         };
 
-        // cast.js đăng ký window.__castRoute; nếu nó không nạp được thì mọi nút Phát vẫn phát cục bộ
+        // cast.js registers window.__castRoute; if it fails to load, all Play buttons still play locally
         function maybeCast(slug, episodeUrl) {
             return typeof window.__castRoute === 'function' ? window.__castRoute(slug, episodeUrl) : false;
         }
@@ -2774,7 +2772,7 @@ document.addEventListener('visibilitychange', () => {
             'phim-bo': '/api/home/phim-bo',
             'tv-shows': '/api/home/tv-shows'
         };
-        // "Tất cả" có bộ lọc: /api/home/latest không lọc được nên hỏi song song ba loại rồi gộp
+        // "Tất cả" with filters: /api/home/latest cannot filter, so query the three types in parallel and merge
         const FANOUT_TYPES = ['phim-le', 'phim-bo', 'tv-shows'];
 
         function hasActiveFilter(f) {
@@ -2833,7 +2831,7 @@ document.addEventListener('visibilitychange', () => {
 
                 state.fetchError = failed;
                 if (failed) {
-                    state.hasMore = false; // không thử lại vô hạn khi cuộn
+                    state.hasMore = false; // do not retry endlessly on scroll
                     return;
                 }
                 state.hasMore = hasMore;
@@ -2850,61 +2848,241 @@ document.addEventListener('visibilitychange', () => {
             Object.assign(state, { items: [], page: 1, loading: false, hasMore: true, total: null, fetchError: false, deadTypes: new Set() });
             updateFilterUI();
             const pending = fetchHomeSection(tab, 1);
-            renderGridCards(false); // hiện skeleton ngay
+            renderGridCards(false); // show skeleton immediately
             pending.then(() => {
                 renderGridCards(false);
                 setupHomeInfiniteScroll();
             });
         }
 
-        // --- HERO (phim hot chiếu rạp) ---
-        const HERO_IMAGE_FIELD = 'thumb_url'; // đổi sang 'poster_url' nếu hướng ảnh không hợp
+        // --- HERO (hot movies in theaters) ---
+        const HERO_IMAGE_FIELD = 'thumb_url'; // switch to 'poster_url' if the image orientation doesn't fit
         const HERO_COUNT = 10;
         const HERO_AUTO_MS = 4500;
         const heroState = { items: [], details: {}, pending: {}, index: 0, loaded: false };
-        // Tự trượt: chỉ khi hàng đang hiện trên màn hình và không ai chạm, trỏ chuột hay focus vào nó
-        const heroAuto = { timer: 0, running: false, onScreen: false, holds: new Set() };
+        // Shared card row ("hero"): HomeFlix's movies in theaters and HomeTV's channels.
+        // Auto-slide only while the row is on screen and nobody is touching, hovering or focusing it.
+        // The slide is animated frame by frame with scroll snapping switched off: the browser's own smooth scroll
+        // fights mandatory snapping (stutters on iOS). Wrapping back to the first card fades instead of
+        // scrolling back through the whole row.
         const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+        const HERO_SLIDE_MS = 650;
+        const HERO_FADE_MS = 200;
+        const HERO_DECODE_WAIT_MS = 250;
 
-        // Đếm lại từ đầu sau mỗi lần dừng: thẻ không nhảy ngay lúc vừa buông tay
-        function heroAutoRestart() {
-            clearTimeout(heroAuto.timer);
-            heroAuto.running = heroState.items.length > 1 && heroAuto.onScreen && !heroAuto.holds.size
-                && !document.hidden && !reducedMotion.matches;
-            if (!heroAuto.running) return;
-            heroAuto.timer = setTimeout(() => {
-                // Đang mở trình phát (phủ lên trang chủ): giữ nguyên thẻ, chờ lượt sau
-                if (!document.body.classList.contains('player-active')) {
-                    const track = document.getElementById('heroTrack');
-                    const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
-                    showHeroSlide(HFUtils.heroNext(heroState.index, heroState.items.length, atEnd), { scroll: true });
+        function createHeroRail(id, opts) {
+            const hero = document.getElementById(id);
+            const track = document.getElementById(id + 'Track');
+            const dots = document.getElementById(id + 'Dots');
+            const rail = { index: 0, slides: [], timer: 0, onScreen: false, holds: new Set(), io: null,
+                frame: 0, fadeTimer: 0, animating: false, token: 0 };
+
+            function covered() { // a player covers the page: keep the card, wait for the next tick
+                const b = document.body.classList;
+                return b.contains('player-active') || b.contains('tv-player-active');
+            }
+
+            // Restart the countdown after every pause: cards don't jump right after release
+            function restart() {
+                clearTimeout(rail.timer);
+                const running = rail.slides.length > 1 && rail.onScreen && !rail.holds.size
+                    && !document.hidden && !reducedMotion.matches;
+                if (!running) return;
+                rail.timer = setTimeout(() => {
+                    if (!covered()) {
+                        const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+                        show(HFUtils.heroNext(rail.index, rail.slides.length, atEnd), { scroll: true });
+                    }
+                    restart();
+                }, HERO_AUTO_MS);
+            }
+
+            function hold(reason, on) {
+                rail.holds[on ? 'add' : 'delete'](reason);
+                restart();
+            }
+
+            function stopAnim() {
+                rail.token += 1;
+                cancelAnimationFrame(rail.frame);
+                clearTimeout(rail.fadeTimer);
+                rail.animating = false;
+                track.classList.remove('is-animating', 'is-fading');
+            }
+
+            function leftOf(i) {
+                const max = Math.max(0, track.scrollWidth - track.clientWidth);
+                return Math.min(max, rail.slides[i].offsetLeft - rail.slides[0].offsetLeft);
+            }
+
+            // Decode the incoming card's image first so the frames during the slide don't wait on it
+            function ready(i) {
+                const img = rail.slides[i].querySelector('img');
+                if (!img || !img.decode) return Promise.resolve();
+                const wait = new Promise(res => setTimeout(res, HERO_DECODE_WAIT_MS));
+                return Promise.race([img.decode().catch(() => {}), wait]);
+            }
+
+            function animateTo(i) {
+                stopAnim();
+                const from = track.scrollLeft;
+                const to = leftOf(i);
+                if (Math.abs(to - from) < 1) return;
+                const token = rail.token;
+                rail.animating = true;
+                track.classList.add('is-animating');
+                const done = () => {
+                    if (token !== rail.token) return;
+                    track.scrollLeft = to;
+                    stopAnim();
+                };
+                if (i === 0 && to < from) { // wrap: fade out, jump to the start, fade back in
+                    track.classList.add('is-fading');
+                    rail.fadeTimer = setTimeout(() => {
+                        if (token !== rail.token) return;
+                        track.scrollLeft = to;
+                        track.classList.remove('is-fading');
+                        rail.fadeTimer = setTimeout(done, HERO_FADE_MS);
+                    }, HERO_FADE_MS);
+                    return;
                 }
-                heroAutoRestart();
-            }, HERO_AUTO_MS);
+                ready(i).then(() => {
+                    if (token !== rail.token) return;
+                    const start = performance.now();
+                    const step = (now) => {
+                        if (token !== rail.token) return;
+                        const t = Math.min(1, (now - start) / HERO_SLIDE_MS);
+                        track.scrollLeft = from + (to - from) * HFUtils.heroEase(t);
+                        if (t < 1) rail.frame = requestAnimationFrame(step);
+                        else done();
+                    };
+                    rail.frame = requestAnimationFrame(step);
+                });
+            }
+
+            function show(i, o) {
+                const n = rail.slides.length;
+                if (!n) return;
+                i = Math.max(0, Math.min(n - 1, i));
+                rail.index = i;
+                dots.querySelectorAll('.hero-dot').forEach((d, k) => d.classList.toggle('active', k === i));
+                if (o && o.scroll) animateTo(i);
+                if (opts.onShow) opts.onShow(i);
+            }
+
+            function render(items) {
+                stopAnim();
+                if (rail.io) rail.io.disconnect();
+                track.replaceChildren();
+                dots.replaceChildren();
+                rail.slides = items.map(opts.buildSlide);
+                rail.index = 0;
+                hero.hidden = rail.slides.length === 0;
+                track.scrollLeft = 0;
+                if (!rail.slides.length) { restart(); return; }
+                rail.slides.forEach((slide, k) => {
+                    track.appendChild(slide);
+                    dots.appendChild(el('span', 'hero-dot' + (k === 0 ? ' active' : '')));
+                });
+                dots.hidden = rail.slides.length < 2;
+                // Several cards visible at once: the "current" card is the leftmost visible one.
+                // Ignored while an auto-slide is running: the target card is already current.
+                const visible = new Set();
+                rail.io = new IntersectionObserver(entries => {
+                    entries.forEach(e => {
+                        const k = rail.slides.indexOf(e.target);
+                        if (e.isIntersecting) visible.add(k); else visible.delete(k);
+                    });
+                    if (!visible.size || rail.animating) return;
+                    if (opts.onVisible) visible.forEach(k => opts.onVisible(k));
+                    show(Math.min(...visible));
+                }, { root: track, threshold: 0.6 });
+                rail.slides.forEach(sl => rail.io.observe(sl));
+                show(0);
+                restart();
+            }
+
+            hero.addEventListener('keydown', (e) => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                const slide = e.target.closest('.hero-slide');
+                if (!slide) return;
+                e.preventDefault();
+                const at = rail.slides.indexOf(slide);
+                const play = slide.querySelector('.hero-btn-play');
+                const save = slide.querySelector('.hero-btn-save');
+                // Play and Save sit side by side: arrows move between the two buttons first, then switch cards
+                if (e.key === 'ArrowRight' && e.target === play) return save.focus();
+                if (e.key === 'ArrowLeft' && e.target === save) return play.focus();
+                const next = at + (e.key === 'ArrowRight' ? 1 : -1);
+                if (next < 0 || next >= rail.slides.length) return;
+                show(next, { scroll: true });
+                rail.slides[next].querySelector('.hero-btn-play').focus({ preventScroll: true });
+            });
+            // A finger on the row takes over from the auto-slide right away
+            track.addEventListener('touchstart', () => { if (rail.animating) stopAnim(); hold('touch', true); }, { passive: true });
+            track.addEventListener('touchend', () => hold('touch', false));
+            track.addEventListener('touchcancel', () => hold('touch', false));
+            track.addEventListener('wheel', () => { if (rail.animating) stopAnim(); restart(); }, { passive: true });
+            hero.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') hold('hover', true); });
+            hero.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hold('hover', false); });
+            hero.addEventListener('focusin', () => hold('focus', true));
+            hero.addEventListener('focusout', e => { if (!hero.contains(e.relatedTarget)) hold('focus', false); });
+            new IntersectionObserver(([e]) => {
+                rail.onScreen = e.isIntersecting;
+                restart();
+            }, { threshold: 0.5 }).observe(hero);
+            document.addEventListener('visibilitychange', restart);
+            reducedMotion.addEventListener('change', restart);
+            return { render, show, restart, get index() { return rail.index; }, get length() { return rail.slides.length; },
+                slide: (i) => rail.slides[i] || null };
         }
 
-        function heroHold(reason, on) {
-            heroAuto.holds[on ? 'add' : 'delete'](reason);
-            heroAutoRestart();
+        // Shared big card: image, title, meta, Play + a second button (Save / Favorite)
+        function buildHeroCard({ title, meta, imgSrc, onImgError, onOpen, onPlay, saveLabel, onSave }) {
+            const slide = el('article', 'hero-slide');
+            const media = el('div', 'hero-media');
+            const img = el('img', 'hero-bg');
+            img.alt = '';
+            img.loading = 'eager';   // decoded ahead of the slide, not while it moves into view
+            img.decoding = 'async';
+            media.appendChild(img);
+            if (imgSrc) {
+                img.onerror = () => { img.onerror = null; if (onImgError) onImgError(img); };
+                img.src = imgSrc;
+            } else if (onImgError) {
+                onImgError(img);
+            }
+            media.addEventListener('click', onOpen);
+            slide.appendChild(media);
+            const content = el('div', 'hero-content');
+            content.appendChild(el('h3', 'hero-title', title));
+            content.appendChild(el('div', 'hero-meta', meta || ''));
+            const actions = el('div', 'hero-actions');
+            const play = el('button', 'hero-btn-play', 'Phát');
+            play.type = 'button';
+            play.addEventListener('click', onPlay);
+            const save = el('button', 'hero-btn-save', saveLabel);
+            save.type = 'button';
+            save.addEventListener('click', onSave);
+            actions.append(play, save);
+            content.appendChild(actions);
+            slide.appendChild(content);
+            return slide;
         }
+
+        // --- HERO (hot movies in theaters) ---
+        let heroRail = null;
 
         function setupHeroAuto() {
-            const hero = document.getElementById('hero');
-            const track = document.getElementById('heroTrack');
-            track.addEventListener('touchstart', () => heroHold('touch', true), { passive: true });
-            track.addEventListener('touchend', () => heroHold('touch', false));
-            track.addEventListener('touchcancel', () => heroHold('touch', false));
-            track.addEventListener('wheel', heroAutoRestart, { passive: true });
-            hero.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') heroHold('hover', true); });
-            hero.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') heroHold('hover', false); });
-            hero.addEventListener('focusin', () => heroHold('focus', true));
-            hero.addEventListener('focusout', e => { if (!hero.contains(e.relatedTarget)) heroHold('focus', false); });
-            new IntersectionObserver(([e]) => {
-                heroAuto.onScreen = e.isIntersecting;
-                heroAutoRestart();
-            }, { threshold: 0.5 }).observe(hero);
-            document.addEventListener('visibilitychange', heroAutoRestart);
-            reducedMotion.addEventListener('change', heroAutoRestart);
+            heroRail = createHeroRail('hero', {
+                buildSlide: buildHeroSlide,
+                onShow: (i) => {
+                    heroState.index = i;
+                    loadHeroDetail(heroState.items[i].slug);
+                    if (i + 1 < heroState.items.length) loadHeroDetail(heroState.items[i + 1].slug);
+                },
+                onVisible: (k) => loadHeroDetail(heroState.items[k].slug),
+            });
         }
 
         async function loadHeroItems() {
@@ -2927,7 +3105,7 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function heroSlideEl(slug) {
-            return [...document.querySelectorAll('.hero-slide')].find(s => s.dataset.slug === slug) || null;
+            return [...document.querySelectorAll('#hero .hero-slide')].find(s => s.dataset.slug === slug) || null;
         }
 
         function fillHeroSlide(slug) {
@@ -2955,7 +3133,7 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function updateHeroSaveLabels() {
-            document.querySelectorAll('.hero-slide').forEach(slide => {
+            document.querySelectorAll('#hero .hero-slide').forEach(slide => {
                 slide.querySelector('.hero-btn-save').textContent = checkIsSaved(slide.dataset.slug) ? 'Đã lưu' : 'Lưu';
             });
         }
@@ -2968,19 +3146,19 @@ document.addEventListener('visibilitychange', () => {
             updateHeroSaveLabels();
         }
 
-        // Phát ngay trong cú chạm: chi tiết đã tải trước nên không có await nào chen giữa.
+        // Play within the tap itself: details are preloaded so no await gets in between.
         function heroPlay(slug) {
             if (maybeCast(slug, null)) return;
             const d = heroState.details[slug];
             if (!d) {
-                // Chưa tải xong: báo đang tải, người dùng chạm lại khi xong (không phát bất đồng bộ, iOS sẽ chặn)
+                // Not loaded yet: show loading, user taps again when done (no async play, iOS would block it)
                 const btn = heroSlideEl(slug).querySelector('.hero-btn-play');
                 btn.classList.add('is-loading');
                 btn.disabled = true;
                 loadHeroDetail(slug).then(detail => {
                     btn.classList.remove('is-loading');
                     btn.disabled = false;
-                    if (!detail) showMovieDetailBySlug(slug); // tải lỗi: mở trang chi tiết để thử tiếp
+                    if (!detail) showMovieDetailBySlug(slug); // load failed: open the detail page to keep trying
                 });
                 return;
             }
@@ -2992,95 +3170,24 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function buildHeroSlide(m) {
-            const slide = el('article', 'hero-slide');
+            const slide = buildHeroCard({
+                title: m.name,
+                meta: HFUtils.heroMeta({ year: m.year }),
+                imgSrc: heroImage(m),
+                onImgError: (img) => { img.src = m.poster_url || POSTER_PLACEHOLDER; },
+                onOpen: () => showMovieDetailBySlug(m.slug),
+                onPlay: () => heroPlay(m.slug),
+                saveLabel: 'Lưu',
+                onSave: () => heroToggleSave(m.slug),
+            });
             slide.dataset.slug = m.slug;
-            const media = el('div', 'hero-media');
-            const img = el('img', 'hero-bg');
-            img.alt = '';
-            img.loading = 'lazy';
-            img.src = heroImage(m);
-            img.onerror = () => { img.onerror = null; img.src = m.poster_url || POSTER_PLACEHOLDER; };
-            media.appendChild(img);
-            media.addEventListener('click', () => showMovieDetailBySlug(m.slug));
-            slide.appendChild(media);
-            const content = el('div', 'hero-content');
-            content.appendChild(el('h3', 'hero-title', m.name));
-            content.appendChild(el('div', 'hero-meta', HFUtils.heroMeta({ year: m.year })));
-            const actions = el('div', 'hero-actions');
-            const play = el('button', 'hero-btn-play', 'Phát');
-            play.type = 'button';
-            play.addEventListener('click', () => heroPlay(m.slug));
-            const save = el('button', 'hero-btn-save', 'Lưu');
-            save.type = 'button';
-            save.addEventListener('click', () => heroToggleSave(m.slug));
-            actions.append(play, save);
-            content.appendChild(actions);
-            slide.appendChild(content);
             return slide;
         }
 
-        function showHeroSlide(i, opts) {
-            const n = heroState.items.length;
-            if (!n) return;
-            i = Math.max(0, Math.min(n - 1, i));
-            heroState.index = i;
-            document.querySelectorAll('.hero-dot').forEach((d, k) => d.classList.toggle('active', k === i));
-            if (opts && opts.scroll) {
-                const track = document.getElementById('heroTrack');
-                const slides = track.querySelectorAll('.hero-slide');
-                track.scrollTo({ left: slides[i].offsetLeft - slides[0].offsetLeft, behavior: 'smooth' });
-            }
-            loadHeroDetail(heroState.items[i].slug);
-            if (i + 1 < n) loadHeroDetail(heroState.items[i + 1].slug);
-        }
-
         function renderHero() {
-            const hero = document.getElementById('hero');
-            const track = document.getElementById('heroTrack');
-            const dots = document.getElementById('heroDots');
-            track.innerHTML = '';
-            dots.innerHTML = '';
-            const n = heroState.items.length;
-            hero.hidden = n === 0;
-            if (!n) return;
-            const slides = heroState.items.map(buildHeroSlide);
-            slides.forEach((slide, k) => {
-                track.appendChild(slide);
-                dots.appendChild(el('span', 'hero-dot' + (k === 0 ? ' active' : '')));
-            });
-            dots.hidden = n < 2;
-            // Nhiều thẻ hiện cùng lúc: thẻ "hiện tại" là thẻ trái nhất đang hiện; tải trước nó, các thẻ đang hiện và thẻ kế
-            const visible = new Set();
-            const io = new IntersectionObserver(entries => {
-                entries.forEach(e => {
-                    const k = slides.indexOf(e.target);
-                    if (e.isIntersecting) visible.add(k); else visible.delete(k);
-                });
-                if (!visible.size) return;
-                visible.forEach(k => loadHeroDetail(heroState.items[k].slug));
-                showHeroSlide(Math.min(...visible));
-            }, { root: track, threshold: 0.6 });
-            slides.forEach(sl => io.observe(sl));
-            hero.onkeydown = (e) => {
-                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-                const slide = e.target.closest('.hero-slide');
-                if (!slide) return;
-                e.preventDefault();
-                const at = slides.indexOf(slide);
-                const play = slide.querySelector('.hero-btn-play');
-                const save = slide.querySelector('.hero-btn-save');
-                // Phát và Lưu nằm cạnh nhau: mũi tên chuyển giữa hai nút trước, hết nút mới đổi thẻ
-                if (e.key === 'ArrowRight' && e.target === play) return save.focus();
-                if (e.key === 'ArrowLeft' && e.target === save) return play.focus();
-                const next = at + (e.key === 'ArrowRight' ? 1 : -1);
-                if (next < 0 || next >= n) return;
-                showHeroSlide(next, { scroll: true });
-                slides[next].querySelector('.hero-btn-play').focus({ preventScroll: true });
-            };
+            heroRail.render(heroState.items);
             updateHeroSaveLabels();
             if (window.refreshPlayLabels) refreshPlayLabels();
-            showHeroSlide(0);
-            heroAutoRestart();
         }
 
         const POSTER_PLACEHOLDER = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22300%22><rect fill=%22%23222%22 width=%22200%22 height=%22300%22/></svg>';
@@ -3093,7 +3200,7 @@ document.addEventListener('visibilitychange', () => {
             else node.textContent = Number.isFinite(state.total) ? `${state.total.toLocaleString('vi-VN')} phim` : `${state.items.length}+ phim`;
         }
 
-        // Thẻ poster dùng chung: lưới phim (buildMovieCard) và lưới kênh HomeTV
+        // Shared poster card: movie grid (buildMovieCard) and HomeTV channel grid
         function buildPosterCard({ title, meta, imgSrc, onClick, focusable }) {
             const card = el('div', 'movie-card');
             if (focusable !== false) card.setAttribute('tabindex', '0');
@@ -3191,7 +3298,7 @@ document.addEventListener('visibilitychange', () => {
                             setupHomeInfiniteScroll();
                         });
                     }
-                }, { rootMargin: '900px 900px' }); // tải trang kế khi còn khoảng một màn hình
+                }, { rootMargin: '900px 900px' }); // load the next page when about one screen remains
                 homeObservers.grid.observe(loader);
             }
         }
@@ -3206,7 +3313,7 @@ document.addEventListener('visibilitychange', () => {
 
             const key = homeKey(tab);
             const state = homeState[key];
-            // Trang 1 đã lỗi: cho thử lại khi người dùng quay lại tab (cuộn tải thêm thì không thử lại)
+            // Page 1 failed: allow a retry when the user returns to the tab (load-more on scroll does not retry)
             if (state.fetchError && state.items.length === 0) {
                 Object.assign(state, { hasMore: true, fetchError: false, deadTypes: new Set() });
             }
@@ -3242,7 +3349,6 @@ document.addEventListener('visibilitychange', () => {
         }
 
         // Monkey-patch backToSearchResults to handle home context
-        const originalBackToSearch = window.backToSearchResults;
         window.backToSearchResults = function() {
             const detailDiv = document.getElementById('movieDetailContainer');
             detailDiv.style.display = 'none';
@@ -3264,15 +3370,8 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function handleOverlaySearchInput(e) {
-            const mainInput = document.getElementById('searchInput');
-            mainInput.value = e.target.value;
-            // trigger same debounce logic
-            clearTimeout(searchTimeout);
-            const q = e.target.value.trim();
-            if (!q) return;
-            searchTimeout = setTimeout(() => {
-                searchMovies();
-            }, 300);
+            document.getElementById('searchInput').value = e.target.value;
+            handleSearchInput(e);  // same debounce logic
         }
 
         async function searchMovies() {
@@ -3473,7 +3572,7 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function openSearchOverlay() {
-            if (window.HFTV && HFTV.active && HFTV.active()) { // HomeTV: tab Tìm kiếm riêng, không mở lớp tìm phim
+            if (window.HFTV && HFTV.active && HFTV.active()) { // HomeTV: separate Search tab, don't open the movie search overlay
                 switchTab('tv-search-tab');
                 const box = document.getElementById('tvSearch');
                 if (box) box.focus();
@@ -3485,8 +3584,8 @@ document.addEventListener('visibilitychange', () => {
         }
 
         function switchTab(tabId) {
-            if (window.HFTV && HFTV.active && HFTV.active()) tabId = HFTV.tab(tabId); // mode HomeTV: nút tab dẫn sang tab kênh
-            else if (tabId.startsWith('tv-')) tabId = { 'tv-saved-tab': 'saved-tab', 'tv-search-tab': 'player-tab' }[tabId] || 'search-tab'; // ngoài mode HomeTV (vd. Cài đặt → quay lại) tab kênh về tab phim tương ứng
+            if (window.HFTV && HFTV.active && HFTV.active()) tabId = HFTV.tab(tabId); // HomeTV mode: tab buttons lead to the channel tabs
+            else if (tabId.startsWith('tv-')) tabId = { 'tv-saved-tab': 'saved-tab', 'tv-search-tab': 'player-tab' }[tabId] || 'search-tab'; // outside HomeTV mode (e.g. Settings → back) channel tabs map to the matching movie tab
             const prevTab = document.querySelector('.tab-content.active');
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
@@ -3508,13 +3607,13 @@ document.addEventListener('visibilitychange', () => {
                     document.getElementById('homepageContent').style.display = 'flex';
                     document.getElementById('searchOverlay').classList.remove('active');
                 }
-                fetchSavedMovies(); // tiến độ vừa xem cập nhật vào "Xem tiếp"
+                fetchSavedMovies(); // fresh watch progress updates "Xem tiếp"
             }
             if (tabId === 'saved-tab') {
                 document.getElementById('tabBtnSaved').classList.add('active');
                 renderSavedMovies();
             }
-            // Cài đặt: không tô nút nào ở thanh tab; nút ‹ quay về tab trước. Rời trang thì dừng các bộ đếm của nó
+            // Settings: no tab bar button is highlighted; the ‹ button returns to the previous tab. Leaving the page stops its timers
             if (tabId === 'settings-tab' && window.HFSettings) HFSettings.open(prevTab && prevTab.id);
             else if (prevTab && prevTab.id === 'settings-tab' && window.HFSettings) HFSettings.close();
             if (tabId.startsWith('tv-') && window.HFTV && HFTV.onTab) HFTV.onTab(tabId);
@@ -3561,7 +3660,7 @@ document.addEventListener('visibilitychange', () => {
 
         // --- MAIN PLAYER CONTROLS ---
         btnPlay.onclick = () => {
-            currentMovie = null; // Phát thủ công không lưu tiến độ
+            currentMovie = null; // Manual playback does not save progress
             execute(inputArea.value);
         };
 
@@ -3590,7 +3689,7 @@ document.addEventListener('visibilitychange', () => {
             }
         }
 
-        // Tải tập phim với tuỳ chọn vị trí phát bằng mảng tập phim đã chuẩn hóa
+        // Load an episode with an optional start position from the normalized episode array
         function playEpisodesListDirect(episodesArray, targetUrlOrIdx) {
             if (!episodesArray || episodesArray.length === 0) {
                 alert('KHÔNG TÌM THẤY VIDEO');
@@ -3598,7 +3697,7 @@ document.addEventListener('visibilitychange', () => {
             }
             
             playbackEpisodes = episodesArray;
-            if (window.HFTV) HFTV.leave(true); // phim (kể cả từ cast) phát thì rời mode HomeTV, không để lớp phủ che
+            if (window.HFTV) HFTV.leave(true); // playing a movie (including from cast) leaves HomeTV mode so its overlay doesn't cover it
             
             if (stickyHeader) stickyHeader.style.display = 'none';
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
@@ -3631,7 +3730,7 @@ document.addEventListener('visibilitychange', () => {
             HFPlayerAuto.onEpisodeStart();
             syncDrawerToPlaying(url);
 
-            // Vị trí xem dở của thiết bị này (đọc trước khi POST tiến độ làm đổi last_watched_url)
+            // This device's partial watch position (read before the progress POST changes last_watched_url)
             positionTrackReady = false;
             clearResumeHandler();
             let resumeAt = 0;
@@ -3647,7 +3746,7 @@ document.addEventListener('visibilitychange', () => {
                 castStartAt = null;
             }
 
-            // Gửi báo cáo tiến trình xem phim về Server (nếu phim đã được lưu)
+            // Report watch progress to the server (if the movie is saved)
             if (currentMovie && currentMovie.slug) {
                 console.log("[Play] Gửi tiến trình xem cho:", currentMovie.slug);
                 fetch('/api/saved/progress', {
@@ -3657,7 +3756,7 @@ document.addEventListener('visibilitychange', () => {
                         slug: currentMovie.slug,
                         last_watched_episode: title,
                         last_watched_url: url,
-                        // Thông tin để server tạo hàng lịch sử cho phim chưa lưu
+                        // Info for the server to create a history row for unsaved movies
                         name: currentMovie.name,
                         poster_url: currentMovie.poster_url,
                         year: currentMovie.year,
@@ -3674,7 +3773,7 @@ document.addEventListener('visibilitychange', () => {
                                 savedMoviesList[sIdx].position = data.movie.position;
                                 savedMoviesList[sIdx].duration = data.movie.duration;
                             }
-                            // Cập nhật state trực tiếp để render màu sắc động tức thời
+                            // Update state directly so dynamic colors render instantly
                             if (!savedMoviesList[sIdx].episode_states) {
                                 savedMoviesList[sIdx].episode_states = {};
                             }
@@ -3699,8 +3798,8 @@ document.addEventListener('visibilitychange', () => {
                 hlsObj = null;
             }
 
-            // Tập đã tải về đĩa MP4 chưa? Đọc từ trạng thái đã poll sẵn: không await mạng ở đây,
-            // để việc gắn nguồn và phát chạy ngay trong cú chạm (iOS cần thao tác người dùng).
+            // Is the episode downloaded to disk as MP4? Read from already-polled state: no network await here,
+            // so attaching the source and playing run within the tap (iOS requires a user gesture).
             let useMp4 = false;
             let mp4Url = "";
             const dl = currentMovie && currentMovie.slug ? downloadStatuses[currentMovie.slug] : null;
@@ -3712,7 +3811,7 @@ document.addEventListener('visibilitychange', () => {
             hidePlayerError();
             const store = safeStorage();
             let source = useMp4 ? mp4Url : HFPlayerUtils.streamSource(store, url, Date.now());
-            // Proxy không lấy được nguồn (CDN chặn IP máy chủ): phát thẳng link gốc từ thiết bị này
+            // Proxy can't fetch the source (CDN blocks the server IP): play the original link directly from this device
             const fallbackDirect = () => {
                 if (!HFPlayerUtils.isProxied(source)) return false;
                 console.warn("[Play] Proxy lỗi, chuyển sang phát thẳng:", url);
@@ -3789,7 +3888,7 @@ document.addEventListener('visibilitychange', () => {
             attachSource(source);
         }
 
-        // Safari chế độ riêng tư hoặc trình duyệt chặn dữ liệu: chỉ đọc localStorage cũng ném lỗi
+        // Safari private mode or browsers blocking storage: even reading localStorage throws
         function safeStorage() {
             try { return window.localStorage; } catch (e) { return null; }
         }
@@ -3850,13 +3949,13 @@ document.addEventListener('visibilitychange', () => {
         function iconButton(className, svg, label, onClick) {
             const btn = el('button', className);
             btn.type = 'button';
-            btn.innerHTML = svg; // chỉ SVG tĩnh
+            btn.innerHTML = svg; // static SVG only
             btn.appendChild(el('span', 'btn-label', label));
             btn.addEventListener('click', onClick);
             return btn;
         }
 
-        // Dữ liệu phim (tên, mô tả HTML, slug) chỉ đi vào DOM qua textContent/thuộc tính, không qua innerHTML hay onclick
+        // Movie data (name, HTML description, slug) only enters the DOM via textContent/attributes, never innerHTML or onclick
         function buildDetailView(m, episodesList, isSaved) {
             const frag = document.createDocumentFragment();
             const back = iconButton('detail-back-btn', SVG_BACK, '', () => backToSearchResults());
@@ -4090,8 +4189,8 @@ document.addEventListener('visibilitychange', () => {
             }
         }
 
-        // Một dòng "đang xem": poster, tên, tập và thời gian còn lại, thanh tiến độ. Chạm là phát tiếp.
-        // h (tuỳ chọn) đổi nguồn dữ liệu và hành động của thẻ; thiếu thì là thẻ phim đang xem dở
+        // A "watching" row: poster, title, episode and time remaining, progress bar. Tap to resume.
+        // h (optional) changes the card's data source and actions; if omitted it is a partially watched movie card
         const MOVIE_CONTINUE = {
             poster: (m) => m.poster_url,
             meta: (m) => HFUtils.continueMeta(m),
@@ -4116,7 +4215,7 @@ document.addEventListener('visibilitychange', () => {
             body.appendChild(el('span', 'continue-title', m.name));
             body.appendChild(el('span', 'continue-ep', h.meta(m)));
             const pct = h.pct(m);
-            if (isMovie || pct > 0) { // thẻ phim luôn có thanh; thẻ kênh (không có tiến độ) thì ẩn
+            if (isMovie || pct > 0) { // movie cards always have the bar; channel cards (no progress) hide it
                 const bar = el('span', 'continue-progress');
                 const fill = el('span', 'continue-progress-fill');
                 fill.style.width = pct + '%';
@@ -4143,8 +4242,8 @@ document.addEventListener('visibilitychange', () => {
             return row;
         }
 
-        // Vuốt ngang thẻ "Xem tiếp" (điện thoại): sang phải phát tiếp, sang trái bỏ khỏi danh sách (có hoàn tác).
-        // Hướng chốt ở 8px đầu: dọc thì để trang cuộn, ngang thì thẻ chạy theo ngón tay.
+        // Horizontal swipe on "Xem tiếp" cards (phone): right resumes playback, left removes from the list (with undo).
+        // Direction locks within the first 8px: vertical lets the page scroll, horizontal makes the card follow the finger.
         function attachContinueSwipe(row, card, slug) {
             let x0 = 0, y0 = 0, dx = 0, axis = null, lastX = 0, lastT = 0, v = 0;
             const settle = () => {
@@ -4179,21 +4278,21 @@ document.addEventListener('visibilitychange', () => {
             const end = (e) => {
                 if (axis !== 'x') return;
                 axis = null;
-                if (e.timeStamp - lastT > 100) v = 0; // dừng tay rồi mới nhấc: không tính là hất
+                if (e.timeStamp - lastT > 100) v = 0; // finger paused before lifting: not counted as a fling
                 const action = e.type === 'touchend' ? HFUtils.swipeAction(dx, card.offsetWidth, v) : null;
-                card.dataset.swiped = '1'; // nuốt click trình duyệt có thể bắn ngay sau cú vuốt
+                card.dataset.swiped = '1'; // swallow the click the browser may fire right after the swipe
                 setTimeout(() => { delete card.dataset.swiped; }, 400);
                 if (action === 'remove') return removeFromContinue(slug, row);
                 settle();
-                // Phát ngay trong touchend (cử chỉ người dùng): iOS mới cho video có tiếng chạy
+                // Play right in touchend (user gesture): only then does iOS allow video with sound
                 if (action === 'play') playResumeSavedMovie(slug);
             };
             card.addEventListener('touchend', end);
             card.addEventListener('touchcancel', end);
         }
 
-        // Bỏ khỏi Xem tiếp: ẩn ngay, chờ CONTINUE_UNDO_MS mới gọi server để còn kịp hoàn tác.
-        // Chỉ thẻ bỏ gần nhất hoàn tác được; bỏ thẻ khác thì thẻ trước được gửi đi luôn.
+        // Remove from Continue watching: hide immediately, wait CONTINUE_UNDO_MS before calling the server to allow undo.
+        // Only the most recently removed card can be undone; removing another sends the previous one right away.
         const CONTINUE_UNDO_MS = 5000;
         const continueHidden = new Set();
         let continueRemoval = null;
@@ -4204,7 +4303,7 @@ document.addEventListener('visibilitychange', () => {
             continueRemoval = { slug, timer: setTimeout(commitContinueRemoval, CONTINUE_UNDO_MS) };
             document.getElementById('undoToast').classList.add('is-open');
             document.querySelector('#undoToast .undo-btn').tabIndex = 0;
-            // Thẻ trượt hẳn sang trái, hàng thu lại, rồi vẽ lại danh sách (thẻ thứ tư lên thay)
+            // Card slides fully left, the row collapses, then the list re-renders (the fourth card moves up)
             row.style.height = row.offsetHeight + 'px';
             row.classList.remove('is-dragging');
             row.classList.add('is-leaving');
@@ -4247,7 +4346,7 @@ document.addEventListener('visibilitychange', () => {
             renderContinueLists();
         }
 
-        // Rời trang khi đang chờ hoàn tác: gửi luôn (keepalive giữ request sống qua lúc đóng)
+        // Leaving the page while undo is pending: send now (keepalive keeps the request alive through unload)
         window.addEventListener('pagehide', commitContinueRemoval);
 
         function libraryParts() {
@@ -4296,7 +4395,7 @@ document.addEventListener('visibilitychange', () => {
             grid.innerHTML = '';
             if (saved.length === 0) return;
 
-            // Đã lưu: lưới poster gọn; tập phim xem ở trang chi tiết
+            // Saved: compact poster grid; episodes are viewed on the detail page
             saved.forEach(m => {
                 const card = document.createElement('div');
                 card.className = 'saved-movie-row';
@@ -4328,15 +4427,6 @@ document.addEventListener('visibilitychange', () => {
             setTimeout(initTabbing, 100);
         }
 
-        function playEpisodeFromSaved(slug, epIdx) {
-            const savedMovie = savedMoviesList.find(item => item.slug === slug);
-            if (!savedMovie || !savedMovie.episodes || savedMovie.episodes.length === 0) return;
-            if (maybeCast(slug, savedMovie.episodes[epIdx] ? savedMovie.episodes[epIdx].link_m3u8 : null)) return;
-            
-            currentMovie = { slug: savedMovie.slug, name: savedMovie.name, poster_url: savedMovie.poster_url };
-            playEpisodesListDirect(savedMovie.episodes, epIdx);
-        }
-
         async function playResumeSavedMovie(slug) {
             if (maybeCast(slug, null)) return;
             const savedMovie = savedMoviesList.find(item => item.slug === slug);
@@ -4356,22 +4446,6 @@ document.addEventListener('visibilitychange', () => {
         }
 
 
-        async function loadAndPlayMovie(slug) {
-            try {
-                const res = await fetch(`/api/movie/${slug}`);
-                const data = await res.json();
-                if (data.status === 'success' && data.movie) {
-                    const savedMovie = savedMoviesList.find(item => item.slug === slug);
-                    currentMovie = { slug: data.movie.slug, name: data.movie.name, poster_url: data.movie.poster_url };
-                    playEpisodesListDirect(data.episodes, savedMovie ? savedMovie.last_watched_url : null);
-                } else {
-                    alert("Không thể tải thông tin phim.");
-                }
-            } catch (err) {
-                alert("Lỗi kết nối: " + err.message);
-            }
-        }
-
         function playNextEpisode() {
             if (playbackEpisodes.length > 1 && currentPlaybackIndex < playbackEpisodes.length - 1) {
                 const nextIdx = currentPlaybackIndex + 1;
@@ -4380,7 +4454,7 @@ document.addEventListener('visibilitychange', () => {
             }
         }
 
-        // Hết tập: đếm ngược rồi tự qua tập kế (có nút Hủy), theo cài đặt của thiết bị
+        // Episode ended: count down then auto-advance to the next one (with a Cancel button), per device settings
         HFPlayerAuto.init({
             video,
             getEpisodes: () => ({ list: playbackEpisodes, index: currentPlaybackIndex }),
@@ -4424,7 +4498,7 @@ document.addEventListener('visibilitychange', () => {
             return found ? found.name : value;
         }
 
-        // Loại lọc ngoài category/country/year (vd. nhóm kênh HomeTV) đăng ký ở đây: () => ({ options, current, onPick })
+        // Filter types beyond category/country/year (e.g. HomeTV channel groups) register here: () => ({ options, current, onPick })
         const filterProviders = {};
 
         function toggleFilterDropdown(type) {
@@ -4503,7 +4577,7 @@ document.addEventListener('visibilitychange', () => {
             if (clearBtn) clearBtn.style.display = activeCount > 0 ? 'inline-block' : 'none';
         }
 
-        // Đóng dropdown khi click ngoài hoặc nhấn ESC
+        // Close dropdown on outside click or ESC
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.filter-dropdown')) closeAllFilterDropdowns();
         });

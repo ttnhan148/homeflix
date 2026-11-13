@@ -8,7 +8,7 @@ services:
     ports:
       - "6969:6969"
     volumes:
-      # Mount thư mục mã nguồn để hot-reload khi chỉnh sửa code
+      # Mount the source directory to hot-reload on code edits
       - .:/app
       - homeflix_cache_dev:/app/cache
       - homeflix_downloads_dev:/app/downloads
@@ -16,7 +16,7 @@ services:
     environment:
       - TZ=Asia/Ho_Chi_Minh
       - ENV=development
-    # Bật reload cho FastAPI uvicorn trong môi trường dev
+    # Enable reload for FastAPI uvicorn in the dev environment
     command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6969", "--reload"]
     networks:
       - docker-dev

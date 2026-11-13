@@ -1,13 +1,13 @@
-// Trang Cài đặt: dựng các nhóm từ dữ liệu, gọi API, tự lưu (không có nút Lưu).
-// Cài đặt phát của máy vẫn nằm ở localStorage qua HFPlayerAuto; panel #playerPrefs và trang này cùng nghe 'hf-prefs'.
+// Settings page: builds groups from data, calls the API, auto-saves (no Save button).
+// This device's playback settings still live in localStorage via HFPlayerAuto; the #playerPrefs panel and this page both listen for 'hf-prefs'.
 (function (root) {
   const U = root.HFSettingsUtils;
-  const SAVE_DELAY_MS = 400; // bước số: lưu sau lần bấm cuối
+  const SAVE_DELAY_MS = 400; // number stepper: save after the last press
   const INTRO_ITEM = { key: 'player.introSeconds', label: 'Mở đầu kết thúc', min: 10, max: 300, step: 5, unit: 'giây' };
   const SVG = 'http://www.w3.org/2000/svg';
-  const REQUESTS_POLL_MS = 5000; // máy admin: tải lại yêu cầu chờ duyệt
-  const MINE_POLL_MS = 3000;     // máy đang xin duyệt: hỏi kết quả
-  const TICK_MS = 1000;          // đếm ngược
+  const REQUESTS_POLL_MS = 5000; // admin device: reload pending requests
+  const MINE_POLL_MS = 3000;     // device awaiting approval: poll for the result
+  const TICK_MS = 1000;          // countdown
   const NAME_ERROR = 'Tên cần 1–40 ký tự';
   const KIND_LABELS = { tv: 'TV', phone: 'Điện thoại', desktop: 'Máy tính' };
   const FOCUSABLE = 'button, input, [tabindex]';
@@ -15,9 +15,9 @@
   let returnTo = 'search-tab';
   let returnScroll = 0;
   let renderSeq = 0;
-  let isOpen = false;      // trang đang mở: chỉ khi đó mới dựng lại và chạy bộ đếm
-  let clockSkew = 0;       // giây: giờ server trừ giờ máy (TV hay lệch giờ)
-  let openDevice = null;   // id công khai của máy đang mở thao tác, giữ qua lượt tải lại
+  let isOpen = false;      // page is open: only then rebuild and run timers
+  let clockSkew = 0;       // seconds: server time minus device time (TVs often have clock drift)
+  let openDevice = null;   // public id of the device whose actions are open, kept across reloads
   const timers = new Set();
 
   const $ = (id) => document.getElementById(id);
@@ -49,7 +49,7 @@
 
   const chevron = () => icon('M9 5l7 7-7 7', 'set-chevron');
 
-  // Ghi luôn gửi JSON có thân (route /api/settings, /api/admin trả 415 nếu thiếu). Lỗi HTTP ném Error có .status
+  // Writes always send a JSON body (/api/settings, /api/admin routes return 415 without one). HTTP errors throw an Error with .status
   async function api(method, path, body) {
     const opts = { method };
     if (method !== 'GET') {
@@ -60,10 +60,10 @@
     const date = Date.parse(res.headers.get('Date') || '');
     if (!isNaN(date)) {
       const skew = (date - Date.now()) / 1000;
-      clockSkew = Math.abs(skew) > 2 ? skew : 0;   // Date chỉ chính xác tới giây: lệch nhỏ thì bỏ qua
+      clockSkew = Math.abs(skew) > 2 ? skew : 0;   // Date is only accurate to the second: ignore small drift
     }
     let data = null;
-    try { data = await res.json(); } catch (e) { /* thân rỗng */ }
+    try { data = await res.json(); } catch (e) { /* empty body */ }
     if (!res.ok) {
       const err = new Error('HTTP ' + res.status);
       err.status = res.status;
@@ -76,7 +76,7 @@
   const soft = (p) => p.catch(() => null);
   const serverNow = () => Date.now() / 1000 + clockSkew;
 
-  // Bộ đếm của trang: close() và mỗi lượt dựng lại dừng hết
+  // Page timers: close() and every rebuild stop them all
   function every(ms, fn) {
     const id = setInterval(fn, ms);
     timers.add(id);
@@ -93,7 +93,7 @@
     timers.clear();
   }
 
-  // --- Dòng và nhóm (Task 10 dùng lại) ---
+  // --- Rows and groups (reused by Task 10) ---
   function groupShell(id, title) {
     const section = el('section', 'set-group');
     section.dataset.group = id;
@@ -120,7 +120,7 @@
     return row;
   }
 
-  // Lỗi và chữ phụ của chính dòng, không đụng dòng con (khối Sửa của nguồn IPTV nằm trong dòng nguồn)
+  // The row's own error and subtext, not touching child rows (the IPTV source Edit block lives inside the source row)
   function clearError(row) {
     const old = row.querySelector(':scope > .set-error');
     if (old) old.remove();
@@ -131,7 +131,7 @@
     row.appendChild(el('div', 'set-error', text));
   }
 
-  // Dòng chữ phụ dưới dòng (màu --muted), vd. "Đã xoá cache"
+  // Subtext line under the row (--muted color), e.g. "Đã xoá cache"
   function clearNote(row) {
     const old = row.querySelector(':scope > .set-note');
     if (old) old.remove();
@@ -148,15 +148,15 @@
     else row.removeAttribute('aria-busy');
   }
 
-  // Lưu lỗi: 403 nghĩa là vừa mất quyền admin, dựng lại cả trang; còn lại báo ngay dưới dòng.
-  // `text` là chữ hoặc hàm (err) => chữ
+  // Save error: 403 means admin rights were just lost, rebuild the whole page; otherwise show it right under the row.
+  // `text` is a string or a function (err) => string
   function saveFailed(row, err, text) {
     if (err && err.status === 403) { render(); return; }
     const msg = typeof text === 'function' ? text(err) : text;
     showError(row, msg || 'Không lưu được');
   }
 
-  // Một thao tác ghi trên dòng: bỏ qua khi đang chạy, hiện trạng thái đang lưu, lỗi thì báo dưới dòng
+  // A write action on a row: skipped while running, shows saving state, errors shown under the row
   async function act(row, work, failText) {
     if (row.classList.contains('is-saving')) return;
     clearError(row);
@@ -171,7 +171,7 @@
     }
   }
 
-  // Công tắc lưu ngay khi bấm; lỗi thì trả về như cũ. row.hfSet(v) cập nhật từ bên ngoài (vd. sự kiện hf-prefs)
+  // Toggle saves immediately on press; reverts on error. row.hfSet(v) updates it externally (e.g. hf-prefs event)
   function switchRow(key, label, value, onChange) {
     const row = baseRow(key, label);
     const sw = el('button', 'set-switch');
@@ -201,7 +201,7 @@
         setSaving(row, false);
       }
     });
-    // chạm vào chữ của dòng cũng bật/tắt (trừ dòng lỗi)
+    // tapping the row's text also toggles it (except error rows)
     row.addEventListener('click', (e) => { if (!e.target.closest('button, input, .set-error')) sw.click(); });
     row.hfSet = (v) => { if (!busy) { current = !!v; paint(); } };
     row.appendChild(sw);
@@ -217,8 +217,8 @@
     return b;
   }
 
-  // Bước số (−)(+): hiện giá trị mới ngay, lưu một lần sau SAVE_DELAY_MS kể từ lần bấm cuối;
-  // lỗi thì trả về giá trị đã lưu và hiện .set-error
+  // Number stepper (−)(+): shows the new value immediately, saves once SAVE_DELAY_MS after the last press;
+  // on error reverts to the saved value and shows .set-error
   function stepperRow(item, onSave) {
     const row = baseRow(item.key, item.label);
     const box = el('div', 'set-stepper');
@@ -276,7 +276,7 @@
     return row;
   }
 
-  // Dòng thao tác: cả dòng là một nút (Task 10 gắn hành vi)
+  // Action row: the whole row is a button (behavior attached by Task 10)
   function actionRow(key, label, onClick, danger) {
     const row = baseRow(key);
     row.classList.add('set-row-action');
@@ -291,8 +291,8 @@
 
   const validName = (s) => s.length >= 1 && s.length <= 40;
 
-  // Sửa chữ ngay trong dòng: `anchor` nhường chỗ cho ô nhập. Enter hoặc rời ô thì onDone(chữ đã bỏ
-  // khoảng trắng hai đầu), Esc thì thôi. `focusBack()` chọn chỗ đặt lại focus (mặc định là anchor)
+  // Inline text edit: `anchor` gives way to an input. Enter or blur calls onDone(text with leading/
+  // trailing whitespace trimmed), Esc cancels. `focusBack()` picks where focus returns (defaults to anchor)
   function editInline(anchor, value, label, onDone, focusBack, maxLength = 40) {
     const input = el('input', 'set-input');
     input.type = 'text';
@@ -317,13 +317,17 @@
       if (save) onDone(next);
     };
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); finish(true, true); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.isComposing || e.keyCode === 229) return;   // Enter confirming an IME word, not "save" (Safari: keyCode 229)
+        finish(true, true);
+      }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false, true); }
     });
     input.addEventListener('blur', () => finish(true, false));
   }
 
-  // Tên máy: chạm để sửa ngay trong dòng; Enter hoặc rời ô thì lưu, Esc thì thôi
+  // Device name: tap to edit inline; Enter or blur saves, Esc cancels
   function nameRow(name) {
     const row = baseRow('device.name', 'Tên');
     const btn = el('button', 'set-text');
@@ -361,7 +365,7 @@
     return row;
   }
 
-  // --- Các nhóm ---
+  // --- Groups ---
   function deviceGroup(device, cast) {
     const P = root.HFPlayerAuto;
     const prefs = P.getPrefs();
@@ -375,7 +379,7 @@
     ]);
   }
 
-  // --- Quản trị: máy chưa là admin ---
+  // --- Admin: device is not admin yet ---
   function loginErrorText(err) {
     if (err && err.status === 401) return 'Sai mật khẩu';
     if (err && err.status === 429) {
@@ -385,7 +389,7 @@
     return 'Không đăng nhập được';
   }
 
-  // "Đăng nhập admin": chạm mở ô mật khẩu ngay trong dòng, Enter để gửi, Esc để đóng
+  // "Đăng nhập admin": tap opens an inline password field, Enter submits, Esc closes
   function loginRow() {
     const row = actionRow('admin.login', 'Đăng nhập admin', () => openForm());
     const btn = row.querySelector('.set-action');
@@ -410,21 +414,21 @@
       let closed = false;
       const closeForm = (refocus) => {
         if (closed) return;
-        closed = true;   // gỡ ô đang focus sẽ bắn focusout ngay giữa chừng: không đóng lần hai
+        closed = true;   // removing the focused input fires focusout midway: don't close twice
         form.replaceWith(btn);
         if (refocus) btn.focus();
       };
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (busy || !input.value) return;   // TV: OK nhầm lúc ô trống không được tốn một lượt trong 5 lượt khoá
+        if (busy || !input.value) return;   // TV: a stray OK on an empty field must not use up one of the 5 lockout attempts
         busy = true;
         clearError(row);
         setSaving(row, true);
         try {
           await api('POST', '/api/admin/login', { password: input.value });
-          render();   // máy này giờ là admin
+          render();   // this device is now admin
         } catch (err) {
-          if (err && err.status === 404) { render(); return; }   // admin vừa bị tắt
+          if (err && err.status === 404) { render(); return; }   // admin was just disabled
           showError(row, loginErrorText(err));
           input.select();
         } finally {
@@ -435,7 +439,7 @@
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeForm(true); }
       });
-      // rời ô khi chưa gõ gì: thu lại thành nút
+      // blur before typing anything: collapse back into the button
       form.addEventListener('focusout', (e) => {
         if (!busy && !input.value && !form.contains(e.relatedTarget)) closeForm(false);
       });
@@ -443,8 +447,8 @@
     return row;
   }
 
-  // "Xin duyệt từ máy admin": hiện mã 6 số và đếm ngược, hỏi kết quả mỗi MINE_POLL_MS.
-  // Nút giữ nguyên trong suốt lúc chờ nên focus trên TV không mất
+  // "Xin duyệt từ máy admin": shows a 6-digit code and countdown, polls the result every MINE_POLL_MS.
+  // The button stays in place while waiting so focus on TV isn't lost
   function requestRow(mine) {
     const row = actionRow('admin.request', 'Xin duyệt từ máy admin', () => { if (!waiting) ask(); });
     const btn = row.querySelector('.set-action');
@@ -495,7 +499,7 @@
       }
     }
 
-    // Chỉ tin is_admin của GET /api/settings: "approved" thì dựng lại trang, không tự coi là admin
+    // Only trust is_admin from GET /api/settings: "approved" rebuilds the page, doesn't assume admin
     async function check() {
       if (busy) return;
       busy = true;
@@ -508,13 +512,13 @@
         else if (r.status === 'expired') idle('Hết hạn, thử lại');
         else idle();
       } catch (err) {
-        if (err && err.status === 404) render();   // admin vừa bị tắt; lỗi mạng thì thử lại lượt sau
+        if (err && err.status === 404) render();   // admin was just disabled; on network error retry next round
       } finally {
         busy = false;
       }
     }
 
-    if (mine && mine.status === 'pending') wait(mine.code, mine.expires_at);   // mở lại trang khi đang chờ
+    if (mine && mine.status === 'pending') wait(mine.code, mine.expires_at);   // page reopened while waiting
     return row;
   }
 
@@ -522,9 +526,94 @@
     return renderGroup('admin', 'Quản trị', [loginRow(), requestRow(mine)]);
   }
 
-  // --- Quản trị: máy đã là admin ---
-  function adminGroup() {
+  // --- Admin: device is already admin ---
+  // "Đổi mật khẩu admin": inline form (current, new, again); errors show under the right field
+  function passwordRow() {
+    const row = actionRow('admin.password', 'Đổi mật khẩu admin', () => openForm());
+    const btn = row.querySelector('.set-action');
+    let busy = false;
+
+    function field(id, label, autocomplete) {
+      const box = el('div', 'hometv-field');
+      const input = el('input', 'set-input');
+      input.id = id;
+      input.type = 'password';
+      input.autocomplete = autocomplete;
+      input.placeholder = label;
+      input.maxLength = 128;
+      input.setAttribute('aria-label', label);
+      box.appendChild(input);
+      return { box, input };
+    }
+
+    function openForm() {
+      clearError(row);
+      clearNote(row);
+      const form = el('form', 'set-form hometv-form');
+      form.noValidate = true;
+      const current = field('adminPwCurrent', 'Mật khẩu hiện tại', 'current-password');
+      const next = field('adminPwNew', 'Mật khẩu mới (từ 8 ký tự)', 'new-password');
+      const again = field('adminPwAgain', 'Nhập lại mật khẩu mới', 'new-password');
+      again.input.enterKeyHint = 'go';
+      const save = el('button', 'set-pill is-primary', 'Đổi');
+      save.type = 'submit';
+      form.append(current.box, next.box, again.box, save);
+      btn.replaceWith(form);
+      current.input.focus();
+      const fields = { current, new: next, again };
+
+      const fieldError = (key, text) => {
+        fields[key].box.appendChild(el('div', 'set-error', text));
+        fields[key].input.focus();
+      };
+      let closed = false;
+      const closeForm = (refocus) => {
+        if (closed) return;
+        closed = true;   // removing the focused input fires focusout midway: don't close twice
+        form.replaceWith(btn);
+        if (refocus) btn.focus();
+      };
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (busy) return;
+        clearError(row);
+        form.querySelectorAll('.set-error').forEach((n) => n.remove());
+        const empty = Object.keys(fields).find((k) => !fields[k].input.value);
+        if (empty) { fields[empty].input.focus(); return; }   // Enter in an early field: go fill the rest first
+        if (next.input.value !== again.input.value) { fieldError('again', 'Mật khẩu nhập lại không khớp'); return; }
+        busy = true;
+        setSaving(row, true);
+        try {
+          await api('POST', '/api/admin/password', { current: current.input.value, new: next.input.value });
+          closeForm(true);
+          showNote(row, 'Đã đổi mật khẩu');
+        } catch (err) {
+          if (err && (err.status === 403 || err.status === 404 || err.status === 409)) { render(); return; }
+          const errors = (err && err.data && err.data.errors) || {};
+          if (typeof errors.current === 'string') fieldError('current', errors.current);
+          else if (typeof errors.new === 'string') fieldError('new', errors.new);
+          else showError(row, err && err.status === 429 ? loginErrorText(err) : 'Không đổi được mật khẩu');
+        } finally {
+          busy = false;
+          setSaving(row, false);
+        }
+      });
+      form.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeForm(true); }
+      });
+      // leaving the form before typing anything: collapse back into the button
+      form.addEventListener('focusout', (e) => {
+        const typed = Object.values(fields).some((f) => f.input.value);
+        if (!busy && !typed && !form.contains(e.relatedTarget)) closeForm(false);
+      });
+    }
+    return row;
+  }
+
+  function adminGroup(conf) {
     return renderGroup('admin', 'Quản trị', [
+      ...(conf && conf.password_env ? [] : [passwordRow()]),   // env var sets the password: nothing to change here
       actionRow('admin.logout', 'Đăng xuất admin', (row) => act(row, async () => {
         await api('POST', '/api/admin/logout', {});
         render();
@@ -540,7 +629,7 @@
     ]);
   }
 
-  // --- Thiết bị trong nhà ---
+  // --- Devices in the home ---
   function pill(text, cls) {
     const b = el('button', 'set-pill' + (cls ? ' ' + cls : ''), text);
     b.type = 'button';
@@ -553,7 +642,7 @@
     return span;
   }
 
-  // Yêu cầu chờ duyệt: tên máy, mã và thời gian còn lại, nút Từ chối và Cho phép
+  // Pending request: device name, code and time remaining, Deny and Allow buttons
   function requestItem(it) {
     const row = el('div', 'set-row set-request');
     row.dataset.id = it.id;
@@ -575,13 +664,13 @@
       try {
         await api('POST', '/api/admin/requests/' + encodeURIComponent(id) + (approve ? '/approve' : '/deny'), {});
       } catch (err) {
-        if (!err || err.status !== 409) throw err;   // 409: đã hết hạn hoặc máy admin khác đã xử lý
+        if (!err || err.status !== 409) throw err;   // 409: already expired or handled by another admin device
       }
       await Promise.all([refreshRequests(), approve ? refreshDevices() : null]);
     }, 'Không gửi được');
   }
 
-  // Cập nhật danh sách yêu cầu theo id: dòng cũ giữ nguyên (không mất focus), dòng mới thêm vào
+  // Update the request list by id: existing rows stay (focus kept), new rows are appended
   function fillRequests(list, items) {
     const ids = items.map((it) => it.id);
     const old = new Map([...list.children].map((r) => [r.dataset.id, r]));
@@ -609,7 +698,7 @@
       const items = await api('GET', '/api/admin/requests');
       if (list.isConnected && Array.isArray(items)) fillRequests(list, items);
     } catch (err) {
-      if (err && (err.status === 403 || err.status === 404)) render();   // vừa mất quyền hoặc admin bị tắt
+      if (err && (err.status === 403 || err.status === 404)) render();   // rights just lost or admin disabled
     }
   }
 
@@ -625,11 +714,11 @@
   function deviceMeta(d) {
     const parts = [KIND_LABELS[d.kind] || 'Thiết bị'];
     if (d.is_self) parts.push('máy này');
-    else if (d.last_seen) parts.push(U.lastSeenText(d.last_seen, serverNow()));   // chưa từng thấy: không ghi gì
+    else if (d.last_seen) parts.push(U.lastSeenText(d.last_seen, serverNow()));   // never seen: show nothing
     return parts.join(' · ');
   }
 
-  // Một máy: chạm để mở thao tác (đổi tên, cấp/thu quyền admin, xoá). Tên do người dùng đặt: chỉ textContent
+  // A device: tap to open actions (rename, grant/revoke admin, delete). Name is user-set: textContent only
   function deviceRow(d) {
     const row = el('div', 'set-row set-row-action set-device');
     row.dataset.id = d.id;
@@ -660,7 +749,7 @@
     return row;
   }
 
-  // Thao tác với một máy: danh sách dọc, mỗi thao tác một dòng (vừa mọi bề ngang)
+  // Actions for a device: vertical list, one action per row (fits any width)
   function subAction(act, text, danger) {
     const b = el('button', 'set-subaction' + (danger ? ' set-danger' : ''), text);
     b.type = 'button';
@@ -678,7 +767,7 @@
         () => items.querySelector('[data-act="rename"]'));
     });
     items.appendChild(rename);
-    if (!d.is_self) {   // máy mình: đăng xuất ở nhóm Quản trị, không tự xoá được
+    if (!d.is_self) {   // own device: log out is in the Admin group, can't delete itself
       const admin = subAction('admin', d.is_admin ? 'Thu quyền admin' : 'Cấp quyền admin', d.is_admin);
       admin.addEventListener('click', () => act(row, async () => {
         await api('PATCH', devicePath(d.id), { is_admin: !d.is_admin });
@@ -691,7 +780,7 @@
           try {
             await api('DELETE', devicePath(d.id), {});
           } catch (err) {
-            if (!err || err.status !== 404) throw err;   // đã bị xoá ở máy khác
+            if (!err || err.status !== 404) throw err;   // already deleted on another device
           }
           if (openDevice === d.id) openDevice = null;
           await refreshDevices();
@@ -708,16 +797,16 @@
     if (!validName(next)) { showError(row, NAME_ERROR); return; }
     act(row, async () => {
       await api('PATCH', devicePath(d.id), { name: next });
-      if (d.is_self) render();   // tên ở "Thiết bị này" cũng đổi
+      if (d.is_self) render();   // the name under "Thiết bị này" changes too
       else await refreshDevices();
     }, (err) => (err && err.status === 422 ? NAME_ERROR : 'Không lưu được'));
   }
 
-  // Gom theo nhà (nhà mình trước, máy mình đứng đầu); chỉ ghi "Nhà này"/"Nhà khác" khi có hơn một nhà
+  // Group by home (own home first, own device at top); only label "Nhà này"/"Nhà khác" when there's more than one home
   function fillDevices(box, devices) {
     if (!Array.isArray(devices)) {
       const row = baseRow('devices.error', 'Không tải được danh sách');
-      row.tabIndex = 0;   // dòng chỉ-đọc vẫn phải với tới được bằng điều khiển từ xa
+      row.tabIndex = 0;   // read-only rows must still be reachable by remote control
       box.replaceChildren(listOf([row]));
       return;
     }
@@ -758,10 +847,10 @@
     return section;
   }
 
-  // --- Hệ thống: dựng từ groups của GET /api/settings ---
+  // --- System: built from groups of GET /api/settings ---
   function cacheRow(cache) {
     const row = baseRow('cache.usage', 'Cache đang dùng');
-    row.tabIndex = 0;   // chỉ-đọc nhưng điều khiển từ xa phải tới được
+    row.tabIndex = 0;   // read-only but must be reachable by remote control
     const text = el('span', 'set-meter-text');
     const bar = el('div', 'set-meter');
     const fill = el('div', 'set-meter-fill');
@@ -792,11 +881,11 @@
   function settingRow(item) {
     const save = async (v) => {
       await api('PATCH', '/api/settings', { [item.key]: v });
-      if (item.key === 'cache.max_gb') refreshCache();   // phần trăm đã dùng đổi theo
+      if (item.key === 'cache.max_gb') refreshCache();   // used percentage updates accordingly
     };
     if (item.type === 'bool') return switchRow(item.key, item.label, item.value, save);
     if (item.type === 'int') return stepperRow(item, save);
-    return null;   // kiểu chưa biết: bỏ qua
+    return null;   // unknown type: skip
   }
 
   function clearCache(row) {
@@ -819,7 +908,7 @@
     ]);
   }
 
-  // --- HomeTV: nguồn IPTV (static/settings-hometv.js) dùng chung các hàm dựng dòng ở trên ---
+  // --- HomeTV: IPTV sources (static/settings-hometv.js) share the row builders above ---
   const ui = {
     el, chevron, api, every, stopTimer, render, groupShell, baseRow, clearError, showError, setSaving,
     saveFailed, act, stepperRow, actionRow, editInline, subAction,
@@ -831,8 +920,8 @@
     return root.HFSettingsHometv ? root.HFSettingsHometv.renderGroup(ui) : null;
   }
 
-  // --- Dựng trang, giữ focus ---
-  // Chỗ đang focus: dòng (data-key hoặc data-id) và thứ tự của phần tử trong dòng
+  // --- Page build, focus preservation ---
+  // Current focus: the row (data-key or data-id) and the element's index within the row
   function focusSpot() {
     const a = document.activeElement;
     if (!a || !$('settingsBody').contains(a)) return null;
@@ -854,8 +943,8 @@
     const seq = ++renderSeq;
     const [device, cast, conf] = await Promise.all(
       [api('GET', '/api/device'), api('GET', '/api/cast/settings'), api('GET', '/api/settings')]
-        .map((p) => p.catch(() => null)));   // /api/settings lỗi: vẫn có nhóm "Thiết bị này"
-    if (seq !== renderSeq) return;   // đã có lượt dựng mới hơn
+        .map(soft));   // /api/settings failed: still show the "Thiết bị này" group
+    if (seq !== renderSeq) return;   // a newer build has started
     const enabled = !!(conf && conf.admin_enabled);
     const isAdmin = enabled && !!conf.is_admin;
     let extra = [];
@@ -866,18 +955,18 @@
       extra = [await soft(api('GET', '/api/admin/requests/mine'))];
     }
     if (seq !== renderSeq) return;
-    stopTimers();   // nhóm mới tự bật bộ đếm của mình
+    stopTimers();   // new groups start their own timers
     const groups = [deviceGroup(device, cast)];
-    if (isAdmin) groups.push(adminGroup(), devicesGroup(extra[0], extra[1]), systemGroup(conf, extra[2]), hometvGroup());
+    if (isAdmin) groups.push(adminGroup(conf), devicesGroup(extra[0], extra[1]), systemGroup(conf, extra[2]), hometvGroup());
     else if (enabled) groups.push(guestAdminGroup(extra[0]));
-    const shown = groups.filter(Boolean);   // settings-hometv.js không tải được: bỏ nhóm HomeTV
+    const shown = groups.filter(Boolean);   // settings-hometv.js failed to load: drop the HomeTV group
     const body = $('settingsBody');
     const spot = focusSpot();
     body.replaceChildren(...shown);
     if (spot) {
-      restoreFocus(spot, $('settingsBtn'));   // dòng không còn (vd. vừa mất quyền admin): về bánh răng
+      restoreFocus(spot, $('settingsBtn'));   // row is gone (e.g. admin rights just lost): back to the gear
     } else if (document.body.classList.contains('device-tv') && $('settings-tab').classList.contains('active')) {
-      // TV: đặt focus vào dòng đầu để remote dùng được ngay
+      // TV: focus the first row so the remote works right away
       const first = body.querySelector('.set-row button');
       if (first && (document.activeElement === document.body || document.activeElement === $('settingsBtn'))) first.focus();
     }
@@ -892,7 +981,7 @@
     });
   }
 
-  // Gọi từ switchTab('settings-tab'); `from` là tab đang mở trước đó
+  // Called from switchTab('settings-tab'); `from` is the previously open tab
   function open(from) {
     if (from && from !== 'settings-tab') {
       returnTo = from;
@@ -903,7 +992,7 @@
     return render();
   }
 
-  // Gọi từ switchTab khi rời settings-tab: dừng mọi bộ đếm, bỏ lượt dựng đang chạy dở
+  // Called from switchTab when leaving settings-tab: stop all timers, abandon any in-flight build
   function close() {
     isOpen = false;
     renderSeq++;
@@ -921,17 +1010,17 @@
     if (row && row.hfSet) row.hfSet(v);
   }
 
-  // --- Điều khiển từ xa (TV): phím mũi tên đi trong lưới dòng x phần tử ---
+  // --- Remote control (TV): arrow keys move through a grid of rows x elements ---
   const NAV_FOCUSABLE = 'button, input, [tabindex="0"]';
   const visible = (n) => !n.disabled && n.getClientRects().length > 0;
 
-  // Khối xếp dọc trong một dòng: thao tác của máy hoặc nguồn đang mở, form thêm nguồn
+  // Vertically stacked blocks inside a row: open device or source actions, add-source form
   const STACKED = '.set-device-actions, .set-source-actions, .hometv-form';
 
-  // Lưới: mỗi .set-row có phần tử focus được là một dòng (chính dòng đó tính nếu có tabindex),
-  // cột là các phần tử ấy theo thứ tự DOM; phần tử thuộc dòng gần nhất bao nó (dòng con trong
-  // khối Sửa của nguồn là dòng riêng). Mọi phần tử nằm thẳng trong khối xếp dọc (STACKED) tự thành
-  // một dòng riêng, nên Xuống đi qua từng thao tác
+  // Grid: each .set-row with focusable elements is a row (the row itself counts if it has tabindex),
+  // columns are those elements in DOM order; an element belongs to the nearest enclosing row (child rows in
+  // a source's Edit block are separate rows). Every element directly inside a stacked block (STACKED) forms
+  // its own row, so Down steps through each action
   function navGrid() {
     const grid = [];
     let last = null;
@@ -955,7 +1044,7 @@
     const tab = $('settings-tab');
     const target = e.target;
     if (!tab || !target || !tab.contains(target) || !tab.classList.contains('active')) return;
-    // trong ô nhập chữ, trái/phải thuộc về con trỏ; chỉ Lên/Xuống mới rời ô
+    // in a text input, left/right belong to the caret; only Up/Down leave the field
     if (target.tagName === 'INPUT' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
     const grid = navGrid();
     let row = -1;
@@ -971,7 +1060,7 @@
   }
   document.addEventListener('keydown', onNavKey);
 
-  // Panel #playerPrefs hoặc lệnh cast đổi cài đặt phát: trang Cài đặt hiện đúng
+  // #playerPrefs panel or a cast command changed playback settings: keep the Settings page in sync
   document.addEventListener('hf-prefs', (e) => {
     const p = e.detail || root.HFPlayerAuto.getPrefs();
     update('player.autoNext', p.autoNext);
